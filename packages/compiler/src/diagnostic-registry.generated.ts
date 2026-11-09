@@ -1091,6 +1091,15 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
         }
     },
     {
+        "id": "gitignored-sz",
+        "position": "none",
+        "args": "form count files sources? stylesheet?",
+        "joiners": {
+            "files": "\n    ",
+            "sources": "`, `"
+        }
+    },
+    {
         "id": "css-source-unstable",
         "position": "file",
         "args": ""

@@ -10,6 +10,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { sortStrings } from '@csszyx/compiler';
 import {
     createDiagnosticLimiter,
     diagnosticPolicyInputsCurrent,
@@ -30,6 +31,7 @@ import {
 } from '@csszyx/unplugin/next-watcher';
 import { type ChokidarOptions, watch } from 'chokidar';
 import fg from 'fast-glob';
+import { keptByGit, namedSourcesToAdd } from '../scanner/named-sources.js';
 import { withPosixSeparators } from '../utils/posix-path.js';
 import { registryError, registryMessage } from '../utils/registry-words.js';
 import { colors, icons } from '../utils/terminal-ui.js';
@@ -37,7 +39,11 @@ import { type NextFileWatcher, watchRecursively } from './native-recursive-watch
 import { nextDeadClassLines, writeNextDiagnosticPolicy } from './next-diagnostic-policy.js';
 import { tryWriteMergeRegistration } from './next-merge-registration.js';
 import { nextParserMode } from './next-options.js';
-import { DEFAULT_NEXT_SOURCE_IGNORE, DEFAULT_NEXT_SOURCE_PATTERN } from './next-patterns.js';
+import {
+    DEFAULT_NEXT_SOURCE_IGNORE,
+    DEFAULT_NEXT_SOURCE_PATTERN,
+    NEXT_SOURCE_EXTENSIONS,
+} from './next-patterns.js';
 
 const SOURCE_EXTENSION = /\.[cm]?[jt]sx?$/i;
 
@@ -258,26 +264,36 @@ export async function startNextWatch(
     const ignore = [...DEFAULT_NEXT_SOURCE_IGNORE, ...(options.extraIgnore ?? [])];
     const parserMode = nextParserMode(options.parserMode);
     const debounceMs = normalizeDebounceMs(options.debounceMs);
-    const files = await fg(pattern, {
+    const globbed = await fg(pattern, {
         cwd: root,
         absolute: true,
         ignore,
         dot: false,
         onlyFiles: true,
     });
+    // The default glob leaves out what `.gitignore` covers and takes back what
+    // a stylesheet's `@source` names, as the bundler lanes' prescan does
+    // (ADR 0033); a `--pattern` names its files.
+    const byDefault = options.pattern === undefined;
+    const listed = byDefault ? keptByGit(root, globbed) : globbed;
 
-    if (files.length === 0) {
+    if (listed.length === 0) {
         throw registryError('no-source-files', { pattern, root });
     }
 
     let model: Awaited<ReturnType<typeof prepareNextStylesheetFacts>>['model'] | null = null;
+    // What the stylesheets' `@source` rules name beyond the glob, for the
+    // first prebuild. Later, the loader lowers such a file when the app
+    // imports it, as a bundler lane does at transform time.
+    let named: readonly string[] = [];
+    let namedListed = false;
     const recordStylesheetFacts = async (): Promise<void> => {
         const facts = await prepareNextStylesheetFacts({
             explicitRoot: root,
             cwd,
             cacheDir: options.cacheDir,
             tailwindStylesheet: options.tailwindStylesheet,
-            files,
+            files: listed,
             // Only the user's patterns: the built-in ones cover `node_modules`,
             // where a package stylesheet that a source file imports lives.
             ignore: options.extraIgnore ?? [],
@@ -285,11 +301,24 @@ export async function startNextWatch(
             ignoreSetting: 'the `--ignore` flag',
         });
         model = facts.model;
+        // Once: only the first prebuild reads it, and a session with a rule
+        // into a large tree would list that tree on every stylesheet edit.
+        if (byDefault && !namedListed) {
+            namedListed = true;
+            named =
+                namedSourcesToAdd(root, facts.model.sourceRules, {
+                    root,
+                    have: new Set(listed),
+                    ignore,
+                    extensions: NEXT_SOURCE_EXTENSIONS,
+                }) ?? [];
+        }
         if (facts.warning !== null) printWatcherNotice(facts.warning);
     };
     // The loader lowers with the prefix these record, so they are read before
     // the first cycle, the way a bundler build reads them.
     await recordStylesheetFacts();
+    const files = sortStrings([...listed, ...named]);
     // The loader reads the policy this writes; an edit to the config writes it
     // again (see `refreshDiagnosticPolicy`).
     let diagnostics = await writeNextDiagnosticPolicy(root);

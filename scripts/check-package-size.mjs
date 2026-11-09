@@ -828,9 +828,14 @@ export const SIZE_BUDGETS = [
         kind: 'node-entry',
         target: 'packages/unplugin',
         subpath: '.',
-        // Measured 115,603. `./vite` and `./webpack` re-export it from the
-        // same chunk, 76 gzip bytes each of their own.
-        maxGzipBytes: 117_950,
+        // Measured 119,372: +1,608 over 117,764 on main `02b6b2da`, for the
+        // walk that follows `.gitignore`, the files `@source` takes back
+        // (read as Tailwind reads a gitignored folder a rule opens, in the
+        // caller's spelling of a linked root) and the `gitignored-sz`
+        // warning with one `@source` per folder or file (ADR 0033). `./vite`
+        // and `./webpack` re-export it from the same chunk, 76 gzip bytes
+        // each of their own.
+        maxGzipBytes: 119_500,
         wrappers: ['./vite', './webpack'],
     },
     {
@@ -886,8 +891,9 @@ export const SIZE_BUDGETS = [
         kind: 'node-entry',
         target: 'packages/unplugin',
         subpath: './next-watcher',
-        // Measured 16,122.
-        maxGzipBytes: 16_450,
+        // Measured 16,454: `createGitignoreQuery` asks about a folder too
+        // (ADR 0033).
+        maxGzipBytes: 16_500,
     },
     {
         name: '@csszyx/unplugin `./jest`, loaded by Node',

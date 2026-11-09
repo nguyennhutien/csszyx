@@ -2834,9 +2834,9 @@ export const DIAGNOSTICS = [
         },
         help: {
             classes:
-                'move the file that uses them under the project root or a `compileSources` directory, which the prescan walks; otherwise, set `production.mangle: false` for this build.',
+                'let the prescan read the file that uses them: keep it under the project root or a `compileSources` directory, and if `.gitignore` covers it, name it or its folder in the Tailwind stylesheet with `@source`; otherwise, set `production.mangle: false` for this build.',
             'census-changed':
-                'move every file that uses csszyx under the project root or a `compileSources` directory, which the prescan walks; otherwise, set `production.mangle: false` for this build.',
+                'let the prescan read every file that uses csszyx: keep it under the project root or a `compileSources` directory, and if `.gitignore` covers it, name it or its folder in the Tailwind stylesheet with `@source`; otherwise, set `production.mangle: false` for this build.',
         },
         sources: [UNPLUGIN],
     },
@@ -3051,6 +3051,40 @@ export const DIAGNOSTICS = [
         sources: [UNPLUGIN],
     },
     {
+        id: 'gitignored-sz',
+        summary:
+            'Files with `sz` that the bundler lowers, which `.gitignore` covers and no stylesheet names with `@source`.',
+        // ADR 0033: the safelist scan leaves out what `.gitignore` covers, as
+        // Tailwind's automatic detection does, and reads a gitignored folder
+        // a stylesheet names. A file the bundler still lowers from such a
+        // folder reaches the CSS only through the transform, on the lanes
+        // that add a class found that late.
+        surfaces: { runtime: { production: false, host: 'node' } },
+        position: 'none',
+        // `stylesheet` and `project-root`: where the `@source` paths are
+        // written from. `no-scanner`: the stylesheets have explicit rules,
+        // and the Tailwind Scanner that lists what they name did not load.
+        forms: ['stylesheet', 'project-root', 'no-scanner'],
+        args: {
+            form: formArg(['stylesheet', 'project-root', 'no-scanner']),
+            count: NUMBER,
+            files: { type: 'string[]', joiner: '\n    ' },
+            sources: { type: 'string[]', joiner: '`, `', optional: true },
+            stylesheet: OPTIONAL_STRING,
+        },
+        text: 'The build lowered {count} file(s) with `sz` that `.gitignore` covers and the safelist scan did not read, so Tailwind may generate no CSS for their classes.',
+        help: {
+            stylesheet:
+                'name them in `{stylesheet}`, with paths from its folder: `{sources}`; or move them where git keeps them.',
+            'project-root':
+                'name them in the Tailwind stylesheet, with paths from its folder, which from the project root are `{sources}`; or move them where git keeps them.',
+            'no-scanner':
+                "csszyx could not load Tailwind's Scanner to read the stylesheets' `@source` rules: add the Tailwind integration the build runs, such as `@tailwindcss/vite` or `@tailwindcss/postcss`, to the project's dependencies; or move them where git keeps them.",
+        },
+        note: 'the files:\n    {files}',
+        sources: [UNPLUGIN],
+    },
+    {
         id: 'css-source-unstable',
         summary: 'A CSS source that kept changing while csszyx read it.',
         surfaces: { error: { host: 'node' } },
@@ -3184,7 +3218,7 @@ export const DIAGNOSTICS = [
         position: 'none',
         args: { pattern: STRING, root: STRING },
         text: 'No source file under `{root}` matches `{pattern}`, so there is nothing to scan for classes.',
-        help: 'pass a glob, relative to `{root}`, that matches your sources as the `[pattern]` argument, or point `--root` at the Next app; files under an `--ignore` pattern do not count.',
+        help: 'pass a glob, relative to `{root}`, that matches your sources as the `[pattern]` argument, or point `--root` at the Next app; files under an `--ignore` pattern do not count, and with the default glob neither do files `.gitignore` covers.',
         sources: [
             'packages/cli/src/commands/next-watch.ts',
             'packages/cli/src/commands/next-prebuild.ts',

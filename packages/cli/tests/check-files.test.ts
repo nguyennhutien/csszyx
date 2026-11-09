@@ -487,3 +487,76 @@ export const button = szv({ base: { outlineOffset: 0.5 } });
         expect(findings.map(entry => entry.file)).toContain('src/button.styles.ts');
     });
 });
+
+/**
+ * What `.gitignore` covers (ADR 0033).
+ *
+ * A default run reads the files the build's prescan reads: what git keeps,
+ * plus what a stylesheet's `@source` names, as the project's own Scanner
+ * lists it. A build output or coverage report holding a copy of the app is
+ * not audited a second time.
+ */
+describe('csszyx check — what `.gitignore` covers', () => {
+    const IGNORED = {
+        '.gitignore': 'out/\ncoverage/\nsrc/generated/\n',
+        'out/a.js': BAD,
+        'coverage/lcov/b.js': BAD,
+        'src/generated/Gen.tsx': OTHER_BAD,
+    };
+
+    it('leaves out a gitignored file no `@source` names', async () => {
+        const cwd = tailwindProject(
+            { 'src/app.css': '@import "tailwindcss";', 'src/Real.tsx': BAD, ...IGNORED },
+            { integration: true },
+        );
+
+        const files = new Set((await findingsWith({ cwd })).map(entry => entry.file));
+
+        expect(files).toEqual(new Set(['src/Real.tsx']));
+    });
+
+    it('reads a gitignored folder a stylesheet names with `@source`', async () => {
+        const cwd = tailwindProject(
+            {
+                'src/app.css': '@import "tailwindcss";\n@source "./generated";\n',
+                'src/Real.tsx': BAD,
+                ...IGNORED,
+            },
+            { integration: true },
+        );
+
+        const files = new Set((await findingsWith({ cwd })).map(entry => entry.file));
+
+        expect(files).toEqual(new Set(['src/Real.tsx', 'src/generated/Gen.tsx']));
+    });
+
+    it('reads it when every other file is free of sz', async () => {
+        // The stylesheets are read for their `@source` rules even when the
+        // files git keeps give the run no class to ask them about.
+        const cwd = tailwindProject(
+            {
+                'src/app.css': '@import "tailwindcss";\n@source "./generated";\n',
+                'src/Plain.tsx': 'export const P = () => <p />;\n',
+                ...IGNORED,
+            },
+            { integration: true },
+        );
+
+        const files = new Set((await findingsWith({ cwd })).map(entry => entry.file));
+
+        expect(files).toEqual(new Set(['src/generated/Gen.tsx']));
+    });
+
+    it('still reads what an explicit `--pattern` names', async () => {
+        const cwd = tailwindProject(
+            { 'src/app.css': '@import "tailwindcss";', ...IGNORED },
+            { integration: true },
+        );
+
+        const files = new Set(
+            (await findingsWith({ cwd, pattern: 'out/**/*.js' })).map(entry => entry.file),
+        );
+
+        expect(files).toEqual(new Set(['out/a.js']));
+    });
+});

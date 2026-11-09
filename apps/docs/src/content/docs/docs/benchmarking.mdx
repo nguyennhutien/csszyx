@@ -128,7 +128,9 @@ that app.
 - Use `--trace` only when the app supports `CSSZYX_BENCH_TRACE=1`; trace output
   may help explain a result but does not replace end-to-end wall time. The
   plugin prints one `[csszyx:bench]` line per stage: `prescan` (the total) and
-  its parts `prescan:walk files=N sz=M`, `prescan:demand providers=N`,
+  its parts `prescan:walk files=N sz=M`, `prescan:model` (reading the
+  stylesheets), `prescan:named files=N` (the gitignored files a stylesheet's
+  `@source` names), `prescan:demand providers=N`,
   `prescan:batch files=N misses=M` (the files the transform cache did not
   answer) and `prescan:safelist classes=N`, then `transform-hook` per module
   and `handle-hot-update` in a dev server. A stage whose time grows while its

@@ -2,22 +2,35 @@
  * Which project walks follow `.gitignore`, and which read every source on
  * purpose.
  *
- * The sz prescan, the Next prebuild and watch, and `csszyx check` read a
- * gitignored source like any other: Tailwind cannot read an sz object, so a
- * generated component the walk skipped would ship without its CSS. The walks
- * that read stylesheets and markup for theme tokens and merge hooks follow
- * `.gitignore`, the way Tailwind's own scanner does, except for a stylesheet
- * another file imports.
+ * Every walk follows `.gitignore` the way Tailwind's automatic detection
+ * does (ADR 0033). The sz prescan takes back what a stylesheet's `@source`
+ * names, as the project's own Scanner lists it, so a gitignored folder
+ * Tailwind is pointed at reaches the safelist too. The stylesheet walk keeps
+ * a gitignored stylesheet another file imports.
  */
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import {
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    realpathSync,
+    rmSync,
+    symlinkSync,
+    writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, isAbsolute, join } from 'node:path';
 
 import { type InlineConfig, resolveConfig } from 'vite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { rollupPlugin, vitePlugin } from '../src/unplugin.js';
 import { RESOLVED_THEME_GROUPS_VIRTUAL_ID } from '../src/virtual-modules.js';
-import { callHooks, removeTailwindProjects, tailwindProject } from './tailwind-project.js';
+import {
+    callHooks,
+    linkTailwindIntegration,
+    removeTailwindProjects,
+    tailwindProject,
+} from './tailwind-project.js';
 
 afterEach(() => {
     removeTailwindProjects();
@@ -30,15 +43,25 @@ const TW = '@import "tailwindcss";\n';
  * Run a Vite build's prescan over the files.
  *
  * @param files - Project files.
+ * @param options - Fixture switches.
+ * @param options.integration - False to leave Tailwind's integration, and its
+ *        Scanner, out of the project.
+ * @param options.compileSources - The plugin's `compileSources`.
  * @returns The safelist it wrote.
  */
-async function vitePrescan(files: Record<string, string>): Promise<string> {
+async function vitePrescan(
+    files: Record<string, string>,
+    options: { integration?: boolean; compileSources?: string[] } = {},
+): Promise<string> {
     const root = tailwindProject('csszyx-gitignore-vite-', { 'src/index.css': TW, ...files });
+    // The Scanner that lists what an `@source` names comes with the integration.
+    if (options.integration !== false) linkTailwindIntegration(root);
     vi.spyOn(process, 'cwd').mockReturnValue(root);
     const call = callHooks(
         vitePlugin({
             build: { cache: false },
             production: { mangle: false },
+            ...(options.compileSources ? { compileSources: options.compileSources } : {}),
         }) as unknown as Record<string, unknown>[],
     );
     await call('configResolved', { root, command: 'build' });
@@ -62,6 +85,7 @@ async function webpackPrescan(files: Record<string, string>): Promise<string> {
         'src/index.css': TW,
         ...files,
     });
+    linkTailwindIntegration(root);
     vi.spyOn(process, 'cwd').mockReturnValue(root);
     vi.resetModules();
     const { unplugin } = await import('../src/unplugin.js');
@@ -91,23 +115,145 @@ async function webpackPrescan(files: Record<string, string>): Promise<string> {
 }
 
 describe('the sz prescan', () => {
-    it.each([
+    const lanes = [
         ['Vite', vitePrescan],
         ['webpack', webpackPrescan],
-    ])(
-        'of a %s build safelists a gitignored generated component',
+    ] as const;
+
+    it.each(lanes)(
+        'of a %s build leaves out a gitignored component no `@source` names',
         async (_lane, prescan) => {
-            // Tailwind skips the file, and cannot read an sz object anyway: the
-            // safelist is the only way its classes get CSS.
             const safelist = await prescan({
                 ...GENERATED,
                 'src/A.tsx': 'export const A = () => <div sz={{ p: 7 }} />;\n',
             });
             expect(safelist).toContain('p-7');
+            expect(safelist).not.toContain('m-9');
+        },
+        60_000,
+    );
+
+    it.each(lanes)(
+        'of a %s build safelists a gitignored folder a stylesheet names with `@source`',
+        async (_lane, prescan) => {
+            // The rules also name a note, which is no source, and a folder
+            // the walk read already, which is not read twice.
+            const safelist = await prescan({
+                ...GENERATED,
+                'src/generated/notes.md': '# p-99\n',
+                'src/index.css': `${TW}@source "./generated";\n@source "./features";\n`,
+                'src/features/F.tsx': 'export const F = () => <div sz={{ p: 8 }} />;\n',
+                'src/A.tsx': 'export const A = () => <div sz={{ p: 7 }} />;\n',
+            });
+            expect(safelist).toContain('p-8');
+            expect(safelist).toContain('p-7');
             expect(safelist).toContain('m-9');
         },
         60_000,
     );
+
+    it('leaves out a file a stylesheet names outside the project root', async () => {
+        // Outside the root, a package is opted in through `compileSources`,
+        // as `csszyx check` and the Next prebuild read it.
+        const outside = realpathSync(mkdtempSync(join(tmpdir(), 'csszyx-outside-')));
+        try {
+            writeFileSync(
+                join(outside, 'Far.tsx'),
+                'export const F = () => <div sz={{ m: 13 }} />;\n',
+            );
+            const safelist = await vitePrescan({
+                'src/index.css': `${TW}@source "${outside}";\n`,
+                'src/A.tsx': 'export const A = () => <div sz={{ p: 7 }} />;\n',
+            });
+            expect(safelist).toContain('p-7');
+            expect(safelist).not.toContain('m-13');
+        } finally {
+            rmSync(outside, { recursive: true, force: true });
+        }
+    }, 60_000);
+
+    it('safelists a file a stylesheet names in a `compileSources` folder reached through a link', async () => {
+        // The Scanner reports the real path; the folder is written as the link.
+        const outside = realpathSync(mkdtempSync(join(tmpdir(), 'csszyx-outside-')));
+        const link = `${outside}-link`;
+        symlinkSync(outside, link);
+        try {
+            mkdirSync(join(outside, 'gen'));
+            writeFileSync(join(outside, '.gitignore'), 'gen/\n');
+            writeFileSync(
+                join(outside, 'gen/Far.tsx'),
+                'export const F = () => <div sz={{ m: 13 }} />;\n',
+            );
+            const safelist = await vitePrescan(
+                {
+                    'src/index.css': `${TW}@source "${link}/gen";\n`,
+                    'src/A.tsx': 'export const A = () => <div sz={{ p: 7 }} />;\n',
+                },
+                { compileSources: [link] },
+            );
+            expect(safelist).toContain('p-7');
+            expect(safelist).toContain('m-13');
+        } finally {
+            rmSync(link, { force: true });
+            rmSync(outside, { recursive: true, force: true });
+        }
+    }, 60_000);
+
+    it('reads what git keeps when the project has no Scanner to list a rule', async () => {
+        const safelist = await vitePrescan(
+            {
+                ...GENERATED,
+                'src/index.css': `${TW}@source "./generated";\n`,
+                'src/A.tsx': 'export const A = () => <div sz={{ p: 7 }} />;\n',
+            },
+            { integration: false },
+        );
+        expect(safelist).toContain('p-7');
+        expect(safelist).not.toContain('m-9');
+    }, 60_000);
+
+    it.each([
+        // Beside automatic detection, Tailwind 4.3.3 reads the whole folder
+        // a single-file rule opens; under `source(none)`, that file alone.
+        ['the whole gitignored folder', TW, true],
+        ['only that file under `source(none)`', '@import "tailwindcss" source(none);\n', false],
+    ])(
+        'safelists, for one gitignored file a stylesheet names, %s',
+        async (_name, head, folder) => {
+            const safelist = await vitePrescan({
+                ...GENERATED,
+                'src/generated/Other.tsx': 'export const O = () => <div sz={{ m: 11 }} />;\n',
+                'src/index.css': `${head}@source "./generated/Badge.tsx";\n`,
+            });
+            expect(safelist).toContain('m-9');
+            expect(safelist.includes('m-11')).toBe(folder);
+        },
+        60_000,
+    );
+
+    it('safelists the gitignored folder a glob into it opens', async () => {
+        const safelist = await vitePrescan({
+            ...GENERATED,
+            'src/generated/deep/Other.jsx': 'export const O = () => <div sz={{ m: 11 }} />;\n',
+            'src/index.css': `${TW}@source "./generated/*.tsx";\n`,
+        });
+        expect(safelist).toContain('m-9');
+        expect(safelist).toContain('m-11');
+    }, 60_000);
+
+    it('writes the same safelist when an unrelated gitignored folder grows', async () => {
+        const base = {
+            ...GENERATED,
+            'src/index.css': `${TW}@source "./generated";\n`,
+            'src/A.tsx': 'export const A = () => <div sz={{ p: 7 }} />;\n',
+        };
+        const grown: Record<string, string> = { ...base, '.gitignore': 'src/generated/\ncache/\n' };
+        for (let index = 0; index < 50; index++) {
+            grown[`cache/${index}/C.tsx`] =
+                `export const C = () => <div sz={{ m: ${index + 20} }} />;\n`;
+        }
+        expect(await vitePrescan(grown)).toBe(await vitePrescan(base));
+    }, 60_000);
 
     it('reads a source under a folder named like a generated report', async () => {
         const safelist = await vitePrescan({
@@ -116,6 +262,195 @@ describe('the sz prescan', () => {
         });
         expect(safelist).toContain('p-7');
         expect(safelist).toContain('m-7');
+    }, 60_000);
+});
+
+/**
+ * A module the bundler lowers from a gitignored folder no stylesheet names:
+ * the safelist scan never read it, and the build says so once, at its end.
+ */
+describe('a gitignored module the build lowers', () => {
+    const BADGE = GENERATED['src/generated/Badge.tsx'] as string;
+
+    /**
+     * What a Vite build printed after lowering modules and ending.
+     *
+     * @param files - Project files beside `src/index.css`.
+     * @param css - The stylesheet.
+     * @param lowered - The modules the bundler lowers, relative to the root,
+     *        or absolute for one outside it.
+     * @param options - Fixture switches.
+     * @param options.mangle - Whether the build mangles, which freezes the
+     *        class map.
+     * @param options.integration - False to leave Tailwind's integration, and
+     *        its Scanner, out of the project.
+     * @param options.late - Files written after the prescan.
+     * @returns Everything it warned, then the error that stopped it, if any.
+     */
+    async function warnedAfter(
+        files: Record<string, string>,
+        css: string,
+        lowered: string | readonly string[],
+        options: { mangle?: boolean; integration?: boolean; late?: Record<string, string> } = {},
+    ): Promise<string> {
+        const { mangle = false } = options;
+        const root = tailwindProject('csszyx-gitignore-late-', { ...files, 'src/index.css': css });
+        if (options.integration !== false) linkTailwindIntegration(root);
+        vi.spyOn(process, 'cwd').mockReturnValue(root);
+        const warned: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation((message: unknown) => {
+            warned.push(String(message));
+        });
+        const call = callHooks(
+            vitePlugin({
+                build: { cache: false },
+                production: { mangle },
+            }) as unknown as Record<string, unknown>[],
+        );
+        await call('configResolved', { root, command: 'build' });
+        // Written after the prescan, as a generator in watch mode does.
+        for (const [file, text] of Object.entries(options.late ?? {})) {
+            mkdirSync(dirname(join(root, file)), { recursive: true });
+            writeFileSync(join(root, file), text);
+        }
+        for (const module of typeof lowered === 'string' ? [lowered] : lowered) {
+            const id = isAbsolute(module) ? module : join(root, module);
+            const code = files[module] ?? options.late?.[module] ?? BADGE;
+            // Twice, as a build with two environments resolves it: named once.
+            await call('transform', code, id);
+            await call('transform', code, `${id}?v=2`);
+        }
+        try {
+            await call('buildEnd');
+        } catch (error) {
+            warned.push((error as Error).message);
+        }
+        return warned.join('\n');
+    }
+
+    it('is named at the end of the build, with the `@source` that reads it', async () => {
+        const warned = await warnedAfter(GENERATED, TW, 'src/generated/Badge.tsx');
+        expect(warned).toContain(
+            'The build lowered 1 file(s) with `sz` that `.gitignore` covers and the safelist scan did not read',
+        );
+        expect(warned).toContain('Tailwind may generate no CSS for their classes');
+        expect(warned).toContain('name them in `src/index.css`');
+        expect(warned).toContain('`@source "./generated";`');
+        expect(warned).toContain('src/generated/Badge.tsx');
+    }, 60_000);
+
+    it('is named for a module that only declares `szv`, which the transform does not lower', async () => {
+        const module = 'src/generated/variants.ts';
+        const warned = await warnedAfter(
+            { ...GENERATED, [module]: 'export const v = szv({ base: { p: 3 } });\n' },
+            TW,
+            module,
+        );
+        expect(warned).toContain('src/generated/variants.ts');
+    }, 60_000);
+
+    it('is not named for a component the prescan reads no classes from', async () => {
+        const module = 'src/generated/Card.vue';
+        const warned = await warnedAfter(
+            { ...GENERATED, [module]: '<template><div :sz="{ m: 9 }" /></template>\n' },
+            TW,
+            module,
+        );
+        expect(warned).not.toContain('`.gitignore` covers');
+    }, 60_000);
+
+    it('writes the file, not its folder, when a pattern of `.gitignore` covers it', async () => {
+        // `@source "."` does not take back a file a pattern covers; its
+        // own path does.
+        const warned = await warnedAfter(
+            { '.gitignore': '*.gen.tsx\n', 'src/Badge.gen.tsx': BADGE },
+            TW,
+            'src/Badge.gen.tsx',
+        );
+        expect(warned).toContain('`@source "./Badge.gen.tsx";`');
+    }, 60_000);
+
+    it('writes one `@source` per gitignored folder', async () => {
+        const warned = await warnedAfter(
+            { '.gitignore': 'src/generated/\nout/\n', 'out/B.tsx': BADGE },
+            TW,
+            ['src/generated/Badge.tsx', 'out/B.tsx'],
+        );
+        expect(warned).toContain('`@source "../out";`, `@source "./generated";`');
+    }, 60_000);
+
+    it('says when the Scanner that lists what `@source` names cannot be loaded', async () => {
+        const warned = await warnedAfter(
+            GENERATED,
+            `${TW}@source "./generated";\n`,
+            'src/generated/Badge.tsx',
+            { integration: false },
+        );
+        expect(warned).toContain("could not load Tailwind's Scanner");
+        expect(warned).not.toContain('no stylesheet names');
+    }, 60_000);
+
+    it('is not named when it appeared after the prescan in a folder `@source` names', async () => {
+        const warned = await warnedAfter(
+            GENERATED,
+            `${TW}@source "./generated";\n`,
+            'src/generated/New.tsx',
+            { late: { 'src/generated/New.tsx': BADGE } },
+        );
+        expect(warned).not.toContain('`.gitignore` covers');
+    }, 60_000);
+
+    it('is named before a mangled build stops on the class it brought late', async () => {
+        const warned = await warnedAfter(GENERATED, TW, 'src/generated/Badge.tsx', {
+            mangle: true,
+        });
+        const named = warned.indexOf('`.gitignore` covers and the safelist scan');
+        const stopped = warned.indexOf('appeared after the mangle map was frozen');
+        expect(named).toBeGreaterThan(-1);
+        expect(stopped).toBeGreaterThan(named);
+        expect(warned.slice(stopped)).toContain('`@source`');
+    }, 60_000);
+
+    it('writes the `@source` path from the stylesheet, up out of its folder', async () => {
+        const warned = await warnedAfter(
+            { '.gitignore': 'generated/\n', 'generated/Badge.tsx': BADGE },
+            TW,
+            'generated/Badge.tsx',
+        );
+        expect(warned).toContain('`@source "../generated";`');
+    }, 60_000);
+
+    it('writes the `@source` path from the project root when no stylesheet is a root', async () => {
+        const warned = await warnedAfter(GENERATED, '', 'src/generated/Badge.tsx');
+        expect(warned).toContain('`@source "./src/generated";`');
+    }, 60_000);
+
+    it('is not named for a module outside the project', async () => {
+        const outside = realpathSync(mkdtempSync(join(tmpdir(), 'csszyx-outside-')));
+        try {
+            const warned = await warnedAfter({}, TW, join(outside, 'Badge.tsx'));
+            expect(warned).not.toContain('`.gitignore` covers');
+        } finally {
+            rmSync(outside, { recursive: true, force: true });
+        }
+    }, 60_000);
+
+    it('is not named once a stylesheet names its folder', async () => {
+        const warned = await warnedAfter(
+            GENERATED,
+            `${TW}@source "./generated";\n`,
+            'src/generated/Badge.tsx',
+        );
+        expect(warned).not.toContain('`.gitignore` covers');
+    }, 60_000);
+
+    it('is not named when the walk left it out for another reason', async () => {
+        const warned = await warnedAfter(
+            { 'src/build/Badge.tsx': BADGE },
+            TW,
+            'src/build/Badge.tsx',
+        );
+        expect(warned).not.toContain('`.gitignore` covers');
     }, 60_000);
 });
 

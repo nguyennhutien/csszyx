@@ -706,6 +706,22 @@ build root needs no config — it is compiled and scanned automatically;
 `compileSources` is only needed for `/packages/` or for sources **outside** the
 build root.
 
+The scan leaves out what `.gitignore` covers, as Tailwind's own detection does.
+Components generated into a gitignored folder are read once a stylesheet names
+the folder, which is also what makes Tailwind read it:
+
+```css
+@import "tailwindcss";
+@source "./generated";
+```
+
+When a pattern such as `*.gen.tsx` covers the files rather than their folder,
+name each file, since a folder rule does not take such a file back:
+`@source "./Badge.gen.tsx";`. A file named this way is read only when it is
+under the project root or a `compileSources` directory. A build that lowers a
+gitignored file no stylesheet names says so at its end (`gitignored-sz`), with
+the `@source` lines to add.
+
 #### Tailwind Stylesheets (`tailwindStylesheet`)
 
 csszyx writes your Tailwind prefix before every class it emits, so

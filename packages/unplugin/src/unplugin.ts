@@ -35,8 +35,8 @@ import {
     createWalkRootRelative,
     DEPENDENCY_OUTPUT_DIRS,
     fileMayContainSafelistableSz,
+    filesNamedBySources,
     GENERATED_REPORT_DIRS,
-    type GitignoreMode,
     loadContentScanner,
     moduleMayHoldSz,
     SOURCE_MODULE_EXTENSIONS,
@@ -226,6 +226,7 @@ import {
     openProjectStyleModel,
     originWarning,
     type ProjectStyleModel,
+    realPath,
     styleModelError,
     styleModelWarning,
     unresolvedImportWarning,
@@ -424,6 +425,12 @@ interface PluginState {
     skippedSzvExportFiles: Set<string>;
     /** Guards the skipped-sz-files warning so it fires at most once. */
     skipWarningEmitted: boolean;
+    /**
+     * Modules with `sz` the bundler lowered that `.gitignore` covers and no
+     * stylesheet names with `@source`, so the safelist scan never read them
+     * (ADR 0033). Named once, at the build's end: `gitignored-sz`.
+     */
+    gitignoredSzFiles: Set<string>;
     /**
      * Set once the safelist class set hits {@link MAX_SAFELIST_CLASSES} and extra
      * classes are dropped — bounds memory/output growth from pathological input.
@@ -1280,6 +1287,64 @@ export function shouldEmitWarning(
 function normalizeForMatch(p: string): string {
     const n = normalizePathSeparators(p);
     return n.length > 1 && n.endsWith('/') ? n.slice(0, -1) : n;
+}
+
+/** A folder the prescan reads, as it spells it and as the disk does. */
+interface FolderSpelling {
+    /** Normalized, as the walk spells it. */
+    readonly given: string;
+    /** Normalized native real path. */
+    readonly real: string;
+}
+
+/**
+ * Each folder with its native real path beside it.
+ *
+ * @param folders - Normalized folders the prescan reads.
+ * @returns The pairs, in order.
+ */
+function folderSpellings(folders: readonly string[]): FolderSpelling[] {
+    return folders.map(given => ({
+        given,
+        real: normalizeForMatch(realPath(given, fs.realpathSync.native)),
+    }));
+}
+
+/**
+ * A file under one of the folders, in the folder's spelling.
+ *
+ * The Scanner keeps the link a rule's path goes through and writes a Windows
+ * short name (`RUNNER~1`) in full, while the walk spells a `compileSources`
+ * folder by its JavaScript real path. So a file is matched as reported, or
+ * else by its native real path against each folder's, and is then written
+ * under the folder as the walk spells it, which is how `seen` holds it.
+ *
+ * @param file - The path the Scanner reports.
+ * @param folders - The folders the prescan reads.
+ * @returns The file in a folder's spelling, or null when it is under none.
+ */
+function spelledInside(file: string, folders: readonly FolderSpelling[]): string | null {
+    const reported = normalizePathSeparators(file);
+    if (folders.some(folder => reported.startsWith(`${folder.given}/`))) return file;
+    const real = normalizePathSeparators(realPath(file, fs.realpathSync.native));
+    const folder = folders.find(candidate => real.startsWith(`${candidate.real}/`));
+    return folder ? folder.given + real.slice(folder.real.length) : null;
+}
+
+/**
+ * A path as an `@source` in a stylesheet's folder writes it.
+ *
+ * @param from - The stylesheet's folder.
+ * @param target - The folder or file to name.
+ * @returns `./` or `../` and forward slashes; the absolute path when there is
+ *          no relative one, as from another drive on Windows.
+ */
+function sourcePathFrom(from: string, target: string): string {
+    const relative = path.relative(from, target);
+    const posix = normalizePathSeparators(relative);
+    // Another drive on Windows: `relative` is the target's absolute path.
+    const bare = path.isAbsolute(relative) || posix === '..' || posix.startsWith('../');
+    return bare ? posix : `./${posix}`;
 }
 
 /**
@@ -3716,6 +3781,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         skippedSzFiles: new Set<string>(),
         skippedSzvExportFiles: new Set<string>(),
         skipWarningEmitted: false,
+        gitignoredSzFiles: new Set<string>(),
         classesCapped: false,
         ownedClasses: new Set<string>(),
         mangleEligible: [],
@@ -4360,6 +4426,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // hooks from: outside generated output and not gitignored. Rebuilt with
     // each walk, so an edit to a `.gitignore` counts from the next prescan.
     let walkReadsHooksFrom: (file: string) => boolean = () => true;
+    // What the last prescan read, `@source` names included, and whether
+    // `.gitignore` covers a path under a folder it walked; null on a lane
+    // that has run none, which then reports no `gitignored-sz`.
+    let prescanScope: {
+        read: ReadonlySet<string>;
+        gitignored: (file: string, directory?: boolean) => boolean;
+    } | null = null;
 
     /**
      * What a build stops with when it removed a class a rule it read later
@@ -5195,37 +5268,144 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Note a module the bundler lowers that the prescan never read because
+     * `.gitignore` covers it and no stylesheet names it (ADR 0033). Its
+     * classes reach the CSS only through the transform, on a lane that adds a
+     * class found that late, and a module that only declares `szv` not even
+     * then, so the build names it once at its end. Only a script the prescan
+     * reads counts: a `.vue` or `.svelte` file gives the safelist nothing
+     * wherever it sits, so naming it would change nothing.
+     *
+     * @param id - The module's bundler id.
+     */
+    function recordGitignoredSz(id: string): void {
+        if (prescanScope === null) return;
+        const file = id.split('?', 1)[0] as string;
+        if (!SOURCE_EXTENSIONS.has(path.extname(file))) return;
+        if (prescanScope.read.has(normalizePathSeparators(file))) return;
+        if (state.gitignoredSzFiles.has(file) || !prescanScope.gitignored(file)) return;
+        state.gitignoredSzFiles.add(file);
+    }
+
+    /**
+     * The `gitignored-sz` warning for the modules {@link recordGitignoredSz}
+     * noted and no stylesheet names now, or null when none is left: a file a
+     * generator wrote after the prescan, into a folder a rule names, or a
+     * rule added during a watch session, is named by the time the build ends.
+     *
+     * Each module gets an `@source` for its folder when `.gitignore` covers
+     * the folder, and for itself when a pattern covers only the file, since a
+     * folder rule does not take such a file back. The paths are written from
+     * the first root stylesheet, as Tailwind reads them.
+     *
+     * Cost: a Scanner listing when a stylesheet has an explicit rule, paid
+     * only by a build that noted a module.
+     *
+     * @returns The warning, or null.
+     */
+    function gitignoredSzMessage(): string | null {
+        // Opened before the prescan that set the scope a module was noted in.
+        const model = styleModel as ProjectStyleModel;
+        const named = filesNamedBySources(state.rootDir, state.rootDir, model.sourceRules);
+        const now = new Set((named ?? []).map(normalizePathSeparators));
+        const files = sortStrings(state.gitignoredSzFiles).filter(
+            file => !now.has(normalizePathSeparators(file)),
+        );
+        if (files.length === 0) return null;
+        const listed = files.map(projectRelative);
+        if (named === null) {
+            return diagnosticMessage('gitignored-sz', {
+                form: 'no-scanner',
+                count: files.length,
+                files: listed,
+            });
+        }
+        const sheet = model.entries.find(entry => entry.role === 'root')?.file;
+        const from =
+            sheet === undefined ? state.rootDir : path.dirname(path.resolve(state.rootDir, sheet));
+        const targets = new Set(
+            files.map(file => {
+                const folder = path.dirname(file);
+                return prescanScope?.gitignored(folder, true) === true ? folder : file;
+            }),
+        );
+        const sources = sortStrings(
+            [...targets].map(target => `@source "${sourcePathFrom(from, target)}";`),
+        );
+        return diagnosticMessage('gitignored-sz', {
+            form: sheet === undefined ? 'project-root' : 'stylesheet',
+            count: files.length,
+            files: listed,
+            sources,
+            stylesheet:
+                sheet === undefined
+                    ? undefined
+                    : projectRelative(path.resolve(state.rootDir, sheet)),
+        });
+    }
+
+    /**
+     * Take back the files a stylesheet's `@source` names that the walk left
+     * out, as the project's own Scanner lists them (`filesNamedBySources`):
+     * a gitignored folder Tailwind is pointed at, so the sz it holds reaches
+     * the safelist. Read for the safelist only; what `.gitignore` covers adds
+     * no merge hooks. Called once the model is open, since the rules come
+     * from compiling the stylesheets the walk found. A named file outside
+     * the project root and its `compileSources` folders is left out, as
+     * `csszyx check` and the Next prebuild leave it out: a package elsewhere
+     * is opted in through `compileSources`.
+     *
+     * Cost: nothing when no stylesheet has an explicit rule, else the
+     * Scanner listings `filesNamedBySources` makes.
+     *
+     * @param model - The opened style model.
+     * @param seen - Paths the walk already read, separators normalized.
+     * @param collect - Reads one file into the prescan.
+     */
+    function admitNamedSources(
+        model: ProjectStyleModel,
+        seen: ReadonlySet<string>,
+        collect: (filePath: string, readsHooks: boolean) => void,
+    ): void {
+        const named = filesNamedBySources(state.rootDir, state.rootDir, model.sourceRules) ?? [];
+        const folders = folderSpellings([normalizeForMatch(state.rootDir), ...compileSourceDirs]);
+        for (const reported of named) {
+            if (!SOURCE_EXTENSIONS.has(path.extname(reported))) continue;
+            const file = spelledInside(reported, folders);
+            if (file === null || seen.has(normalizePathSeparators(file))) continue;
+            collect(file, false);
+        }
+    }
+
+    /**
      * Visit every file of the project walk: the root, and opted-in
      * compileSources directories that live OUTSIDE it (a sibling design-system
      * package), so their sz/szv classes reach the safelist. Directories inside
      * the root are already covered; `shouldProcessSource` relaxes the ignore for
      * these, since they are opted in.
      *
-     * Dependencies and framework output only are skipped: a folder named
-     * `target` or `coverage` among the sources is still read, and so is a
-     * gitignored one, or the sz it holds loses its CSS. Whether the file may
-     * add merge hooks is passed along: not when `.gitignore` covers it or it
-     * sits in generated output.
+     * Dependencies, framework output and whatever `.gitignore` covers are
+     * skipped, as Tailwind's automatic detection skips them (ADR 0033); a
+     * gitignored file a stylesheet's `@source` names is taken back after the
+     * style model opens (`admitNamedSources`). A folder named `target` or
+     * `coverage` among the sources is still read, but adds no merge hooks.
      *
-     * @param gitignore - `mark` to visit every file, `skip` to visit only
-     *        those that may add hooks.
      * @param visit - Called with each file, its extension, and whether its
      *        hooks are read.
+     * @returns Whether `.gitignore` covers a path under a walked folder, given
+     *          whether the path names a folder.
      */
     function walkProjectFiles(
-        gitignore: GitignoreMode,
         visit: (filePath: string, extension: string, readsHooks: boolean) => void,
-    ): void {
+    ): (file: string, directory?: boolean) => boolean {
         // Each walked folder, asked under either spelling of its path: a Vite
         // root given as a link names its modules by their real path.
-        const queries: Array<[(file: string) => string | null, (file: string) => boolean]> = [];
+        const queries: Array<
+            [(file: string) => string | null, (file: string, directory?: boolean) => boolean]
+        > = [];
         const scanDir = (dir: string): void => {
-            walkProject(dir, { skipDirs: DEPENDENCY_OUTPUT_DIRS, gitignore }, file => {
-                visit(
-                    file.path,
-                    file.extension,
-                    !file.gitignored && !inGeneratedOutput(file.path, dir),
-                );
+            walkProject(dir, { skipDirs: DEPENDENCY_OUTPUT_DIRS, gitignore: 'skip' }, file => {
+                visit(file.path, file.extension, !inGeneratedOutput(file.path, dir));
             });
             queries.push([createWalkRootRelative(dir), createGitignoreQuery(dir)]);
         };
@@ -5241,6 +5421,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 if (relative !== null) return !belowGeneratedOutput(relative) && !gitignored(file);
             }
             return true;
+        };
+        return (file, directory) => {
+            for (const [below, gitignored] of queries) {
+                if (below(file) !== null) return gitignored(file, directory);
+            }
+            return false;
         };
     }
 
@@ -5279,7 +5465,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     function readProjectSourceHooks(): void {
         if (options.build?.mergeCoveredClasses === false) return;
         const texts: SourceText[] = [];
-        walkProjectFiles('skip', (filePath, extension, readsHooks) => {
+        walkProjectFiles((filePath, extension, readsHooks) => {
             if (!readsHooks) return;
             let entry: SourceText | null = null;
             if (MARKUP_EXTENSIONS.has(extension)) entry = markupHookText(filePath);
@@ -5405,9 +5591,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         }
 
         const walkStarted = performance.now();
-        // Every source is read for the safelist, gitignored or not: Tailwind
-        // cannot read an sz object. Only what git keeps adds merge hooks.
-        walkProjectFiles('mark', (filePath, extension, readsHooks) => {
+        const gitignored = walkProjectFiles((filePath, extension, readsHooks) => {
             if (SOURCE_EXTENSIONS.has(extension)) collectPrescanSource(filePath, readsHooks);
             else if (readsHooks && MARKUP_EXTENSIONS.has(extension)) {
                 const hookText = markupHookText(filePath);
@@ -5415,6 +5599,30 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             }
         });
         readSourceHooksOf(hookTexts);
+
+        jsImportedCssFiles = stylesheetsImportedBy(
+            cssImportingSources,
+            specifierAliases,
+            activeParser().parser,
+        );
+        // The walk has now met every stylesheet the app reaches, and the prefix
+        // they set must be known before the first file below is lowered.
+        const modelStarted = performance.now();
+        const model = await openStyleModel();
+        // Left out of the walk's timing below: the model is not the walk.
+        const modelElapsed = performance.now() - modelStarted;
+        traceBenchTiming('prescan:model', state.rootDir, modelElapsed);
+        const walked = seenSourcePaths.size;
+        const namedStarted = performance.now();
+        admitNamedSources(model, seenSourcePaths, collectPrescanSource);
+        const namedElapsed = performance.now() - namedStarted;
+        traceBenchTiming(
+            `prescan:named files=${seenSourcePaths.size - walked}`,
+            state.rootDir,
+            namedElapsed,
+        );
+        prescanScope = { read: seenSourcePaths, gitignored };
+
         // Every walked file's szv factories and forwards, read in one engine
         // call per question. The factories are recorded even when the registry
         // is disabled for rewriting: only `transformConfiguredSource` gates on
@@ -5430,17 +5638,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         traceBenchTiming(
             `prescan:walk files=${seenSourcePaths.size} sz=${prescanSources.length}`,
             state.rootDir,
-            performance.now() - walkStarted,
+            performance.now() - walkStarted - modelElapsed - namedElapsed,
         );
-
-        jsImportedCssFiles = stylesheetsImportedBy(
-            cssImportingSources,
-            specifierAliases,
-            activeParser().parser,
-        );
-        // The walk has now met every stylesheet the app reaches, and the prefix
-        // they set must be known before the first file below is lowered.
-        await openStyleModel();
 
         const demandStarted = performance.now();
         walkedContent = new Map(
@@ -7537,6 +7736,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 }
 
                 const hasSzProp = moduleMayHoldSz(code);
+                // What the prescan would have read from it, `szv` included,
+                // which the transform does not lower.
+                if (hasSzProp || fileMayContainSafelistableSz(code)) recordGitignoredSz(id);
                 const lower = (): ReturnType<typeof collectPreTransformClasses> => {
                     // Every bundler's context has it; a caller that drives the
                     // hook by hand may not.
@@ -7599,6 +7801,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
             /** Finalizes the mangle map after all source modules have been processed. */
             buildEnd() {
+                // Before the census check: a gitignored module is the usual way
+                // a class arrives after the map froze, and the stop that follows
+                // reads as a mystery without the file named first.
+                if (state.gitignoredSzFiles.size > 0) {
+                    const message = gitignoredSzMessage();
+                    if (message !== null) emitWarning(message);
+                    state.gitignoredSzFiles.clear();
+                }
                 finalizeMangleMap();
                 // Both checks run here because this is the last moment before
                 // any output exists: the transform phase is over, so the census

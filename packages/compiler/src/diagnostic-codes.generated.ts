@@ -195,6 +195,7 @@ export interface SzDiagnosticArgs {
     'ignore-pattern-negated': { readonly pattern: string };
     'compile-sources-unresolved': { readonly paths: readonly string[]; readonly root: string };
     'compile-sources-skipped': { readonly form: 'sz' | 'szv-exports'; readonly count: number; readonly files: readonly string[]; readonly szvCount?: number };
+    'gitignored-sz': { readonly form: 'stylesheet' | 'project-root' | 'no-scanner'; readonly count: number; readonly files: readonly string[]; readonly sources?: readonly string[]; readonly stylesheet?: string };
     'css-source-unstable': Readonly<Record<string, never>>;
     'rsc-boundary-violation': { readonly symbol: string; readonly chain: readonly string[] };
     'next-prefix-unread': { readonly lane: 'prebuild' | 'turbopack-loader'; readonly root: string; readonly reason: string };
@@ -521,6 +522,7 @@ export type SzDiagnosticId =
     | 'ignore-pattern-negated'
     | 'compile-sources-unresolved'
     | 'compile-sources-skipped'
+    | 'gitignored-sz'
     | 'css-source-unstable'
     | 'rsc-boundary-violation'
     | 'next-prefix-unread'

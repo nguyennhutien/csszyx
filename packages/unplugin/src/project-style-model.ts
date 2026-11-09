@@ -132,6 +132,12 @@ export interface ProjectStyleModel {
      */
     cssPerRoot(classes: readonly string[]): Array<Array<string | null>>;
     /**
+     * Each root's Scanner sources, as Tailwind builds them: its `source(...)`
+     * path or the project root, then every `@source` rule. The sz prescan
+     * takes back the gitignored files these name (`filesNamedBySources`).
+     */
+    sourceRules: ReadonlyArray<readonly ScanSource[]>;
+    /**
      * Merge signature agreed by every compiled root.
      *
      * @param candidate - Tailwind candidate class.
@@ -454,15 +460,17 @@ export function mayReachTailwind(css: string): boolean {
 }
 
 /**
- * The path a stylesheet resolves to on disk, so one reached through a symlink
- * and one named directly compare equal.
+ * The path a file resolves to on disk, so one reached through a symlink and
+ * one named directly compare equal.
  *
- * @param file - Stylesheet path.
+ * @param file - The path.
+ * @param resolve - The realpath to use; `realpathSync.native` also expands a
+ *        Windows short name, which the JavaScript one keeps.
  * @returns The real path, or the path itself when it cannot be resolved.
  */
-function realPath(file: string): string {
+export function realPath(file: string, resolve: (file: string) => string = realpathSync): string {
     try {
-        return realpathSync(file);
+        return resolve(file);
     } catch {
         return file;
     }
@@ -881,6 +889,7 @@ export async function openProjectStyleModel(
             cssPerRoot(classes) {
                 return compiled.map(entry => entry.cssFor(classes));
             },
+            sourceRules: selectedRoots.map(root => root.scanSources),
             candidates() {
                 // Every root's sources, once each: two roots that scan one tree
                 // would otherwise read it twice for the same answer.

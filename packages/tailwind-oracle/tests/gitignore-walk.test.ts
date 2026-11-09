@@ -247,6 +247,19 @@ describe('createGitignoreQuery', () => {
         expect(query(join(root, '..', 'gen', 'g.tsx'))).toBe(false);
         expect(query(join(root, 'gen', 'g.tsx'))).toBe(true);
     });
+
+    it('answers for a folder when asked about one, as a `name/` line reads it', () => {
+        const root = tree({
+            '.gitignore': 'gen/\n*.gen.tsx\n',
+            'gen/g.tsx': '',
+            'x/a.gen.tsx': '',
+        });
+        const query = createGitignoreQuery(root);
+        expect(query(join(root, 'gen'), true)).toBe(true);
+        expect(query(join(root, 'gen'))).toBe(false);
+        expect(query(join(root, 'x'), true)).toBe(false);
+        expect(query(join(root, 'x', 'a.gen.tsx'))).toBe(true);
+    });
 });
 
 /**

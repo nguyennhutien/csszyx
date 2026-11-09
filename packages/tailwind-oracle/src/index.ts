@@ -15,6 +15,7 @@ export {
     type CandidateScanner,
     type ContentFile,
     type ContentScanner,
+    filesNamedBySources,
     loadCandidateScanner,
     loadContentScanner,
     type ScanSource,

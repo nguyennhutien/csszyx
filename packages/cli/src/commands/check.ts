@@ -11,7 +11,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -26,6 +26,7 @@ import {
     type SzDiagnosticId,
     type SzDiagnosticIssue,
     type SzTypedDiagnostic,
+    sortStrings,
     szDiagnosticPositionOf,
 } from '@csszyx/compiler';
 import { transformSource } from '@csszyx/compiler/engine';
@@ -48,6 +49,7 @@ import {
     type SzValuePair,
     skippedDirGlobs,
     szValuePairs,
+    walkProject,
 } from '@csszyx/tailwind-oracle';
 import type { SzDiagnosticLevel } from '@csszyx/types';
 import {
@@ -71,6 +73,7 @@ import {
     unsignedClass,
     variantDroppedForms,
 } from '@csszyx/unplugin/diagnostics';
+import { createRootIgnoreMatcher } from '@csszyx/unplugin/next-prebuild';
 import fg from 'fast-glob';
 import {
     type CheckRule,
@@ -87,6 +90,7 @@ import {
     type MergeAuditKind,
     reportMergeAudit,
 } from '../scanner/merge-audit-report.js';
+import { namedSourcesToAdd } from '../scanner/named-sources.js';
 import { declaredThemeTokens } from '../scanner/theme-declarations.js';
 import { relativePosix, withPosixSeparators } from '../utils/posix-path.js';
 import { registryMessage } from '../utils/registry-words.js';
@@ -206,8 +210,9 @@ function checkedIssues<T extends Pick<SzIssue, 'code'>>(issues: readonly T[]): T
 }
 
 /**
- * Dependencies and framework output only. A gitignored or report-named folder
- * among the sources is still audited: the build safelists what it holds.
+ * Dependencies and framework output. A default run also leaves out what
+ * `.gitignore` covers, as the build's prescan does (ADR 0033); a report-named
+ * folder git keeps is still audited.
  */
 const DEFAULT_IGNORE = skippedDirGlobs(DEPENDENCY_OUTPUT_DIRS, { anchored: false });
 
@@ -1565,6 +1570,72 @@ function scanRootFor(options: CheckOptions, out: Reporter, cwd: string): string 
 }
 
 /**
+ * The files a default run reads: the modules the build lowers, under the scan
+ * root, outside dependencies, framework output and whatever `.gitignore`
+ * covers. The same walk the build's prescan makes (ADR 0033), so the two read
+ * one set; `--ignore` prunes it the way it prunes a glob.
+ *
+ * @param root - Folder the scan is rooted at.
+ * @param cwd - Project root, where the config file sits.
+ * @param ignore - Ignore globs, relative to `root`.
+ * @returns Absolute paths with forward slashes, sorted.
+ * @throws {Error} When the root cannot be read as a folder, such as ENOTDIR.
+ */
+function walkedSourceFiles(root: string, cwd: string, ignore: readonly string[]): string[] {
+    // The walk reads a folder it cannot open as empty. The root is the one
+    // folder that must open, or the run would pass a project it never read.
+    readdirSync(root);
+    const matcher = createRootIgnoreMatcher(root, ignore);
+    const files: string[] = [];
+    walkProject(
+        root,
+        { skipDirs: DEPENDENCY_OUTPUT_DIRS, gitignore: 'skip', prune: matcher.coversTree },
+        file => {
+            if (!SOURCE_EXTENSIONS.has(file.extension) || matcher.ignoresFile(file.path)) return;
+            if (!isNeverLowered(cwd, file.path)) files.push(withPosixSeparators(file.path));
+        },
+    );
+    return sortStrings(files);
+}
+
+/**
+ * The files a stylesheet's `@source` names that a default run's walk left
+ * out, as the project's own Scanner lists them: the files the build's prescan
+ * adds back (ADR 0033). Each compiled Tailwind entry reports its own rules,
+ * so they are read whether or not the walked files hold any class.
+ *
+ * Cost: one compile per Tailwind entry for its rules (see
+ * `loadScanSources`), as many at once as the other stylesheet compiles of a
+ * run; no Scanner unless a stylesheet has an explicit rule.
+ *
+ * @param scan - What the run found.
+ * @param scan.files - The walked files.
+ * @param scan.root - The folder they were found under.
+ * @param cwd - Project root.
+ * @param ignore - Ignore globs, relative to the scan root.
+ * @param opened - The project's compiled Tailwind entries.
+ * @returns The files to add, sorted; empty when there are none, null when
+ *          a stylesheet has an explicit rule and no Scanner could list it.
+ */
+async function filesNamedByStylesheets(
+    scan: { files: readonly string[]; root: string },
+    cwd: string,
+    ignore: readonly string[],
+    opened: OpenedOracles,
+): Promise<string[] | null> {
+    const rules = await mapConcurrent(opened.oracles, STYLESHEET_COMPILE_CONCURRENCY, oracle =>
+        oracle.loadScanSources(),
+    );
+    return namedSourcesToAdd(cwd, rules, {
+        root: scan.root,
+        have: new Set(scan.files),
+        ignore,
+        extensions: SOURCE_EXTENSIONS,
+        keep: file => !isNeverLowered(cwd, file),
+    });
+}
+
+/**
  * Resolve the files this run will scan, or fail the run explaining why.
  *
  * Two ways to end with nothing to scan, and both are fatal rather than empty:
@@ -1577,7 +1648,8 @@ function scanRootFor(options: CheckOptions, out: Reporter, cwd: string): string 
  * @param cwd - directory the scan is rooted at.
  * @param patterns - globs used when no explicit file list is given.
  * @param ignore - globs to skip.
- * @returns Absolute paths to scan, or null when the run has already failed.
+ * @returns Absolute paths to scan and the folder they were found under, or
+ *          null when the run has already failed.
  */
 async function resolveScanFiles(
     options: CheckOptions,
@@ -1585,7 +1657,7 @@ async function resolveScanFiles(
     cwd: string,
     patterns: readonly string[],
     ignore: readonly string[],
-): Promise<string[] | null> {
+): Promise<{ files: string[]; root: string } | null> {
     const root = scanRootFor(options, out, cwd);
     if (root === null) return null;
     // ora writes straight to the tty, so it has to be skipped rather than
@@ -1598,7 +1670,11 @@ async function resolveScanFiles(
             const listed = listedSourceFiles(options.files, cwd);
             missing = listed.missing;
             files = listed.files;
+        } else if (options.pattern === undefined) {
+            files = walkedSourceFiles(root, cwd, ignore);
         } else {
+            // A pattern names its files, as an `@source` does: what it
+            // matches is read whether `.gitignore` covers it or not.
             const found = await fg([...patterns], {
                 cwd: root,
                 ignore: [...ignore],
@@ -1614,9 +1690,16 @@ async function resolveScanFiles(
         process.exitCode = 1;
         return null;
     }
-    s?.succeed(`Found ${files.length} files`);
+    // The default walk leaves out what `.gitignore` covers; said every run,
+    // so a file missing from the count has a reason on screen.
+    const walked = !options.files && options.pattern === undefined;
+    s?.succeed(
+        walked
+            ? `Found ${files.length} files (what \`.gitignore\` covers is left out; a stylesheet's \`@source\` or \`--pattern\` reads it)`
+            : `Found ${files.length} files`,
+    );
 
-    if (missing.length === 0) return files;
+    if (missing.length === 0) return { files, root };
 
     out.runWarn('Files given to `--files` that do not exist:');
     for (const file of missing) out.runInfo(`  ${file}`);
@@ -1984,6 +2067,7 @@ const UNDERSCORE_SPACE = 'underscore-space';
  * @param out - The reporter.
  * @param files - The files to lower.
  * @param cwd - Project root.
+ * @param known - The stylesheets, when the run has opened them already.
  * @returns The diagnostics, the opened stylesheets and any prefix
  *          disagreement, or null when the engine cannot run.
  */
@@ -1991,6 +2075,7 @@ async function lowerWithProjectPrefix(
     out: Reporter,
     files: string[],
     cwd: string,
+    known?: OpenedOracles,
 ): Promise<{
     lowered: SzDiagnostics;
     opened: OpenedOracles;
@@ -1998,7 +2083,7 @@ async function lowerWithProjectPrefix(
 } | null> {
     const unprefixed = await collectSzDiagnosticsOrStop(out, files, cwd, null);
     if (!unprefixed) return null;
-    const opened = await openOraclesWhenAsked(cwd, unprefixed);
+    const opened = known ?? (await openOraclesWhenAsked(cwd, unprefixed));
     const { prefix, disagreement } = agreedPrefix(
         opened,
         out.levelOf({ rule: 'dead-class', kind: PREFIX_DISAGREEMENT }) === 'off',
@@ -2006,6 +2091,42 @@ async function lowerWithProjectPrefix(
     const lowered =
         prefix === null ? unprefixed : await collectSzDiagnosticsOrStop(out, files, cwd, prefix);
     return lowered && { lowered, opened, disagreement };
+}
+
+/**
+ * The walked files plus, on a default run, those a stylesheet's `@source`
+ * names. The stylesheets are read first for those rules, and the lowering
+ * asks the same oracles afterwards. A run given `--files` or `--pattern`
+ * reads only what it was given.
+ *
+ * @param out - The run's reporter.
+ * @param scan - The walked files.
+ * @param scan.files - The walked files' paths.
+ * @param scan.root - The folder they were found under.
+ * @param cwd - The project root.
+ * @param ignore - The run's ignore globs.
+ * @param options - The run's options.
+ * @returns The files to lower and the oracles already opened, if any.
+ */
+async function withNamedSources(
+    out: Reporter,
+    scan: { files: string[]; root: string },
+    cwd: string,
+    ignore: readonly string[],
+    options: CheckOptions,
+): Promise<{ files: string[]; known: OpenedOracles | undefined }> {
+    if (options.files || options.pattern !== undefined)
+        return { files: scan.files, known: undefined };
+    const known = await openOracles(cwd);
+    const named = await filesNamedByStylesheets(scan, cwd, ignore, known);
+    if (named === null) {
+        out.runWarn(
+            "Tailwind's Scanner did not load from this project, so the gitignored files a stylesheet's `@source` names are not checked: add the Tailwind integration the build runs, such as `@tailwindcss/postcss`, to the project's dependencies.",
+        );
+    }
+    const files =
+        named !== null && named.length > 0 ? sortStrings([...scan.files, ...named]) : scan.files;
+    return { files, known };
 }
 
 /**
@@ -2046,10 +2167,11 @@ export async function check(options: CheckOptions = {}): Promise<void> {
     const wantsRule = (rule: CheckRule) => wants(rule, rule);
     const configAllow = policy.toJSON().config.allow;
 
-    const files = await resolveScanFiles(options, out, cwd, patterns, ignore);
-    if (!files) return;
+    const scan = await resolveScanFiles(options, out, cwd, patterns, ignore);
+    if (!scan) return;
+    const { files, known } = await withNamedSources(out, scan, cwd, ignore, options);
 
-    const scanned = await lowerWithProjectPrefix(out, files, cwd);
+    const scanned = await lowerWithProjectPrefix(out, files, cwd, known);
     if (!scanned) return;
     const { opened, disagreement } = scanned;
     const { issues, classOrigins, pairsByFile, unchecked, underscoreSites } = scanned.lowered;

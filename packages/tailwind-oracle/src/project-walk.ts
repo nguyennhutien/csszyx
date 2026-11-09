@@ -742,11 +742,15 @@ export function createWalkRootRelative(walkRoot: string): (target: string) => st
  *
  * @param queryRoot - The walk's root; a relative one is resolved against the
  *        working directory, as a relative target is.
- * @returns A predicate; false for the root itself and for any path outside it.
- *          A root reached through a link answers a target under either its
- *          own path or the real one, as the walk decides in the real place.
+ * @returns A predicate, given a path and whether it names a folder, which a
+ *          `name/` line matches and a file of that name does not; false for
+ *          the root itself and for any path outside it. A root reached
+ *          through a link answers a target under either its own path or the
+ *          real one, as the walk decides in the real place.
  */
-export function createGitignoreQuery(queryRoot: string): (target: string) => boolean {
+export function createGitignoreQuery(
+    queryRoot: string,
+): (target: string, directory?: boolean) => boolean {
     const { root } = canonicalRoot(queryRoot);
     const below = createWalkRootRelative(queryRoot);
     const top = parentLayers(root, []);
@@ -767,7 +771,7 @@ export function createGitignoreQuery(queryRoot: string): (target: string) => boo
         byDir.set(dir, layers);
         return layers;
     };
-    return target => {
+    return (target, directory = false) => {
         const relative = below(target);
         if (relative === null) return false;
         const parts = relative.split(path.sep);
@@ -777,7 +781,11 @@ export function createGitignoreQuery(queryRoot: string): (target: string) => boo
             if (isIgnored(layersIn(dir), next, true)) return true;
             dir = next;
         }
-        return isIgnored(layersIn(dir), path.join(dir, parts[parts.length - 1] as string), false);
+        return isIgnored(
+            layersIn(dir),
+            path.join(dir, parts[parts.length - 1] as string),
+            directory,
+        );
     };
 }
 

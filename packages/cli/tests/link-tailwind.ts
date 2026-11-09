@@ -26,3 +26,21 @@ export function linkTailwind(root: string): void {
         'junction',
     );
 }
+
+/**
+ * Link Tailwind's PostCSS integration into a fixture root, the way a Next app
+ * has it: the Scanner that lists what an `@source` names comes with it.
+ *
+ * @param root - Absolute fixture root, already given Tailwind.
+ */
+export function linkTailwindIntegration(root: string): void {
+    mkdirSync(join(root, 'node_modules/@tailwindcss'), { recursive: true });
+    symlinkSync(
+        resolve(
+            dirname(createRequire(join(REPO, 'package.json')).resolve('@tailwindcss/postcss')),
+            '..',
+        ),
+        join(root, 'node_modules/@tailwindcss/postcss'),
+        'junction',
+    );
+}

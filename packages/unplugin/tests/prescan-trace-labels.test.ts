@@ -85,6 +85,12 @@ describe('prescan trace labels', () => {
         expect(traceLine(logged, 'prescan:walk')).toMatch(
             /^\[csszyx:bench\] prescan:walk files=3 sz=1 [\d.]+ms /,
         );
+        expect(traceLine(logged, 'prescan:model')).toMatch(
+            /^\[csszyx:bench\] prescan:model [\d.]+ms /,
+        );
+        expect(traceLine(logged, 'prescan:named')).toMatch(
+            /^\[csszyx:bench\] prescan:named files=0 [\d.]+ms /,
+        );
         expect(traceLine(logged, 'prescan:demand')).toMatch(
             /^\[csszyx:bench\] prescan:demand providers=\d+ [\d.]+ms /,
         );

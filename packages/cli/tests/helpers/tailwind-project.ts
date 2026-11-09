@@ -22,17 +22,32 @@ const roots: string[] = [];
  * @param files - Project-relative paths mapped to their contents.
  * @param options - Fixture switches.
  * @param options.tailwind - False to model a project with Tailwind not installed.
+ * @param options.integration - True to install `@tailwindcss/postcss` too, which
+ *        carries the Scanner an app's `@source` rules are listed by.
  * @returns Absolute project root.
  */
 export function tailwindProject(
     files: Record<string, string>,
-    options: { tailwind?: boolean } = {},
+    options: { tailwind?: boolean; integration?: boolean } = {},
 ): string {
     const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'csszyx-project-')));
     roots.push(root);
     mkdirSync(path.join(root, 'node_modules'), { recursive: true });
     if (options.tailwind !== false) {
         symlinkSync(TAILWIND_V4, path.join(root, 'node_modules/tailwindcss'), 'junction');
+    }
+    if (options.integration === true) {
+        mkdirSync(path.join(root, 'node_modules/@tailwindcss'), { recursive: true });
+        symlinkSync(
+            path.resolve(
+                path.dirname(
+                    createRequire(path.join(REPO, 'package.json')).resolve('@tailwindcss/postcss'),
+                ),
+                '..',
+            ),
+            path.join(root, 'node_modules/@tailwindcss/postcss'),
+            'junction',
+        );
     }
     writeFileSync(path.join(root, 'package.json'), '{"name":"fixture"}\n', 'utf8');
     for (const [relative, content] of Object.entries(files)) {

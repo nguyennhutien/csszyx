@@ -200,6 +200,16 @@ export type EmittedClassOracle =
            * project defines classes of its own.
            */
           loadOriginOracle(): Promise<OriginOracle>;
+          /**
+           * Where Tailwind's Scanner looks for this stylesheet's classes
+           * ({@link scanSourcesOf}): its `source(...)` path or the project
+           * root, then every `@source` rule. Empty when the stylesheet
+           * generates no utilities, or when that compile fails: the design
+           * system above is built without the rules, so they take one more
+           * compile, on first call and cached, and a failure there is the
+           * second compile's, not the project's.
+           */
+          loadScanSources(): Promise<ScanSource[]>;
           /** What the project's Tailwind import settled for every class. */
           facts: StylesheetFacts;
           /**
@@ -860,6 +870,7 @@ export async function createEmittedClassOracle(
     // a compile would put a diagnostic's instrumentation inside another
     // diagnostic's evidence.
     let collisions: CollisionOracle | null | undefined;
+    let scanSources: Promise<ScanSource[]> | undefined;
     let origins: Promise<OriginOracle> | undefined;
 
     const facts: StylesheetFacts = {
@@ -895,6 +906,13 @@ export async function createEmittedClassOracle(
         keywords: keywordOracleFrom(design),
         facts,
         stylesheets: [...projectStylesheets].map(([file, text]) => ({ path: file, text })),
+        loadScanSources() {
+            scanSources ??= readStylesheetRole(options, loadTailwind).then(
+                role => (role.ok && role.utilities ? role.scanSources : []),
+                () => [],
+            );
+            return scanSources;
+        },
         async loadCollisionOracle() {
             if (collisions !== undefined) return collisions;
             try {

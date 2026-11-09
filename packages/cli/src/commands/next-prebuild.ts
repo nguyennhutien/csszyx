@@ -10,16 +10,22 @@
 
 import path from 'node:path';
 
+import { sortStrings } from '@csszyx/compiler';
 import { createDiagnosticLimiter } from '@csszyx/unplugin/diagnostics';
 import { prepareNextStylesheetFacts, runNextPrebuild } from '@csszyx/unplugin/next-prebuild';
 import fg from 'fast-glob';
+import { keptByGit, namedSourcesToAdd } from '../scanner/named-sources.js';
 import { withPosixSeparators } from '../utils/posix-path.js';
 import { registryError, registryMessage } from '../utils/registry-words.js';
 import { colors, icons } from '../utils/terminal-ui.js';
 import { nextDeadClassLines, writeNextDiagnosticPolicy } from './next-diagnostic-policy.js';
 import { tryWriteMergeRegistration } from './next-merge-registration.js';
 import { nextParserMode } from './next-options.js';
-import { DEFAULT_NEXT_SOURCE_IGNORE, DEFAULT_NEXT_SOURCE_PATTERN } from './next-patterns.js';
+import {
+    DEFAULT_NEXT_SOURCE_IGNORE,
+    DEFAULT_NEXT_SOURCE_PATTERN,
+    NEXT_SOURCE_EXTENSIONS,
+} from './next-patterns.js';
 
 /** Options accepted by the `next-prebuild` CLI command. */
 export interface NextPrebuildCommandOptions {
@@ -51,15 +57,19 @@ export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Pr
     try {
         const mode = normalizeMode(options.mode);
         const parserMode = nextParserMode(options.parserMode);
-        const matches = await fg(pattern, {
+        const ignore = [...DEFAULT_NEXT_SOURCE_IGNORE, ...(options.extraIgnore ?? [])];
+        const globbed = await fg(pattern, {
             cwd: root,
             absolute: true,
-            ignore: [...DEFAULT_NEXT_SOURCE_IGNORE, ...(options.extraIgnore ?? [])],
+            ignore,
             dot: false,
             onlyFiles: true,
         });
+        // The default glob leaves out what `.gitignore` covers, as the
+        // bundler lanes' prescan does (ADR 0033); a `--pattern` names its files.
+        const listed = options.pattern === undefined ? keptByGit(root, globbed) : globbed;
 
-        if (matches.length === 0) {
+        if (listed.length === 0) {
             reportNoFilesMatched(options.json, root, pattern, mode);
             return 1;
         }
@@ -71,7 +81,7 @@ export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Pr
             cwd,
             cacheDir: options.cacheDir,
             tailwindStylesheet: options.tailwindStylesheet,
-            files: matches,
+            files: listed,
             // Only the user's patterns: the built-in ones cover `node_modules`,
             // where a package stylesheet that a source file imports lives.
             ignore: options.extraIgnore ?? [],
@@ -79,6 +89,19 @@ export async function nextPrebuild(options: NextPrebuildCommandOptions = {}): Pr
             ignoreSetting: 'the `--ignore` flag',
         });
         if (facts.warning !== null) console.warn(facts.warning);
+        const matches =
+            options.pattern === undefined
+                ? sortStrings([
+                      ...listed,
+                      // No Scanner: the loader's build names what it lowers.
+                      ...(namedSourcesToAdd(root, facts.model.sourceRules, {
+                          root,
+                          have: new Set(listed),
+                          ignore,
+                          extensions: NEXT_SOURCE_EXTENSIONS,
+                      }) ?? []),
+                  ])
+                : listed;
         const diagnostics = await writeNextDiagnosticPolicy(root);
         for (const warning of diagnostics.warnings) console.warn(warning);
 
