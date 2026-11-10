@@ -359,6 +359,16 @@ export async function handleValidateInProject(
     const warnings = [...(validated.warnings ?? []), ...found];
     return reply({
         ...validated,
+        // The classes as the project serves them: the engine's, lowered under
+        // its prefix as the build lowers them, not a second copy of the rule.
+        ...(prefix === null || validated.transformResult === undefined || result === null
+            ? {}
+            : {
+                  transformResult: {
+                      className: [...result.classes].join(' '),
+                      classCount: [...result.classes].length,
+                  },
+              }),
         warnings: warnings.length > 0 ? warnings : undefined,
         ...(underscore.skipped === null
             ? {}
