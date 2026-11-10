@@ -357,7 +357,7 @@ function withNextSafelistOptions(command: Command): Command {
 withNextSafelistOptions(
     cli.command(
         'next-prebuild [pattern]',
-        'Write the safelist for a Next.js Turbopack build once; also runs as csszyx next prebuild (pattern default: {app,pages,src}/**/*.{ts,tsx,js,jsx,mjs,cjs})',
+        'Write the safelist for a Next.js Turbopack build once; also runs as csszyx next prebuild (pattern default: {app,pages,src}/**/*.{ts,tsx,js,jsx,cts,mts,cjs,mjs})',
     ),
 )
     .option('--mode <mode>', 'development | production (default: production)')
@@ -368,7 +368,7 @@ withNextSafelistOptions(
 withNextSafelistOptions(
     cli.command(
         'next-watch [pattern]',
-        'Keep the safelist of a Next.js Turbopack build up to date while files change; also runs as csszyx next watch (pattern default: {app,pages,src}/**/*.{ts,tsx,js,jsx,mjs,cjs})',
+        'Keep the safelist of a Next.js Turbopack build up to date while files change; also runs as csszyx next watch (pattern default: {app,pages,src}/**/*.{ts,tsx,js,jsx,cts,mts,cjs,mjs})',
     ),
 )
     .option(

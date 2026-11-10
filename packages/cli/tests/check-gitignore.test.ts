@@ -3,8 +3,8 @@
  *
  * Its stylesheet walk follows `.gitignore`, as the bundler plugin's does, so a
  * stale copy under a gitignored `out/` does not stop the check over a prefix no
- * build reads. Its source walk does not: the build safelists a gitignored
- * generated component like any other, so the check audits it too.
+ * build reads. Its source walk does too, and takes back what a stylesheet's
+ * `@source` names, as the build's prescan does (ADR 0033).
  */
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,7 +13,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { check } from '../src/commands/check.js';
-import { linkTailwind } from './link-tailwind.js';
+import { linkTailwind, linkTailwindIntegration } from './link-tailwind.js';
 
 const roots: string[] = [];
 
@@ -27,12 +27,15 @@ afterEach(() => {
  * A project resolving Tailwind v4, holding the given files.
  *
  * @param files - Project-relative paths mapped to their contents.
+ * @param integration - False to leave out Tailwind's integration, which
+ *        carries the Scanner.
  * @returns Absolute project root.
  */
-function projectWith(files: Record<string, string>): string {
+function projectWith(files: Record<string, string>, integration = true): string {
     const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'csszyx-check-gitignore-')));
     roots.push(root);
     linkTailwind(root);
+    if (integration) linkTailwindIntegration(root);
     writeFileSync(path.join(root, 'package.json'), '{"name":"fixture"}\n', 'utf8');
     for (const [relative, content] of Object.entries(files)) {
         const file = path.join(root, relative);
@@ -46,7 +49,7 @@ function projectWith(files: Record<string, string>): string {
  * Run the check over a project and collect everything it printed.
  *
  * @param cwd - Project root.
- * @returns Every line written to the console.
+ * @returns Every line written to the console and to stderr.
  */
 async function reportFor(cwd: string): Promise<string> {
     const lines: string[] = [];
@@ -54,6 +57,11 @@ async function reportFor(cwd: string): Promise<string> {
     vi.spyOn(console, 'log').mockImplementation(record);
     vi.spyOn(console, 'warn').mockImplementation(record);
     vi.spyOn(console, 'error').mockImplementation(record);
+    // The spinner's last line goes to stderr.
+    vi.spyOn(process.stderr, 'write').mockImplementation(chunk => {
+        record(chunk);
+        return true;
+    });
     await check({ cwd });
     return lines.join('\n');
 }
@@ -75,12 +83,48 @@ describe('csszyx check and .gitignore', () => {
         expect(process.exitCode).not.toBe(1);
     }, 60_000);
 
-    it('still audits a gitignored generated component', async () => {
+    const BADGE = 'export const Badge = () => <div sz={{ colr: "red" }} />;\n';
+
+    it('leaves out a gitignored generated component no `@source` names', async () => {
         const cwd = projectWith({
             '.gitignore': 'src/generated/\n',
             'src/app.css': '@import "tailwindcss";\n',
             'src/Card.tsx': CARD,
-            'src/generated/Badge.tsx': 'export const Badge = () => <div sz={{ colr: "red" }} />;\n',
+            'src/generated/Badge.tsx': BADGE,
+        });
+
+        const report = await reportFor(cwd);
+
+        expect(report).not.toContain('src/generated/Badge.tsx');
+        expect(report).toContain(
+            "Found 1 files (what `.gitignore` covers is left out; a stylesheet's `@source` or `--pattern` reads it)",
+        );
+        expect(process.exitCode).not.toBe(1);
+    }, 60_000);
+
+    it('says when no Scanner can list what a stylesheet names', async () => {
+        const cwd = projectWith(
+            {
+                '.gitignore': 'src/generated/\n',
+                'src/app.css': '@import "tailwindcss";\n@source "./generated";\n',
+                'src/Card.tsx': CARD,
+                'src/generated/Badge.tsx': BADGE,
+            },
+            false,
+        );
+
+        const report = await reportFor(cwd);
+
+        expect(report).toContain("Tailwind's Scanner did not load from this project");
+        expect(report).not.toContain('colr');
+    }, 60_000);
+
+    it('audits a gitignored generated component a stylesheet names', async () => {
+        const cwd = projectWith({
+            '.gitignore': 'src/generated/\n',
+            'src/app.css': '@import "tailwindcss";\n@source "./generated";\n',
+            'src/Card.tsx': CARD,
+            'src/generated/Badge.tsx': BADGE,
         });
 
         const report = await reportFor(cwd);

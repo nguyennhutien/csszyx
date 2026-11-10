@@ -336,3 +336,227 @@ describe('csszyx check [dir]', () => {
         );
     });
 });
+
+/**
+ * The files a run reads when it is not told which.
+ *
+ * The build lowers every script module, `.ts` included: a `szv` call in a
+ * `button.styles.ts` ships its classes like a component's `sz` prop does.
+ * A default that read only `.jsx`/`.tsx` passed a project whose build
+ * reported a dead class in such a file. Declaration files are not modules
+ * the build lowers, so they stay out.
+ */
+describe('csszyx check — the files a default run reads', () => {
+    // `outline-offset` takes whole pixels: Tailwind serves no `-0.5` step.
+    const STYLES = `import { szv } from 'csszyx';
+export const button = szv({ base: { outlineOffset: 0.5 } });
+`;
+
+    it('reports a dead class from a `.ts` module the build lowers', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/button.styles.ts': STYLES,
+        });
+
+        const findings = await findingsWith({ cwd });
+
+        expect(findings).toContainEqual(
+            expect.objectContaining({ rule: 'dead-class', file: 'src/button.styles.ts' }),
+        );
+    });
+
+    it('reads the module flavours the build lowers too', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/a.mjs': BAD,
+            'src/b.cts': `import { szv } from 'csszyx';\nexport const b = szv({ base: { otherNonsense: 2 } });\n`,
+        });
+
+        const files = new Set((await findingsWith({ cwd })).map(entry => entry.file));
+
+        expect(files).toEqual(new Set(['src/a.mjs', 'src/b.cts']));
+    });
+
+    it('leaves a declaration file out of a default run', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/button.d.ts': STYLES,
+        });
+
+        expect(await findingsWith({ cwd })).toEqual([]);
+    });
+
+    it('drops a listed declaration file, as it drops a README', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/button.d.ts': STYLES,
+        });
+
+        expect(await findingsFor(cwd, ['src/button.d.ts'])).toEqual([]);
+    });
+
+    it('leaves out what `--ignore` names, the way a plugin `exclude` would be mirrored', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/Button.stories.tsx': BAD,
+            'src/button.stories.ts': STYLES,
+            'src/Other.tsx': OTHER_BAD,
+        });
+
+        const findings = await findingsWith({
+            cwd,
+            ignore: ['**/*.stories.tsx', '**/*.stories.ts'],
+        });
+
+        expect(new Set(findings.map(entry => entry.file))).toEqual(new Set(['src/Other.tsx']));
+    });
+
+    it('lowers no file the build would not parse, though its text says `sz`', async () => {
+        // `size` and a variable named `sz` carry no sz marker, so the build's
+        // prescan never parses this file and never reports its syntax error.
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'public/vendor.js': 'const sz = 1; const size = sz +;\n',
+            'src/Real.jsx': BAD,
+        });
+
+        const files = new Set((await findingsWith({ cwd })).map(entry => entry.file));
+
+        expect(files).toEqual(new Set(['src/Real.jsx']));
+    });
+
+    it('checks a file the build lowers though its `sz:` key is spaced', async () => {
+        // The build's transform gate reads `sz :` followed by a value; the
+        // check has to read the same file, or it passes what the build lowers.
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/Card.tsx':
+                'export const C = () => <Card szs = {{ sz : { nonsenseKey: 4 } }} />;\n',
+        });
+
+        const files = new Set((await findingsWith({ cwd })).map(entry => entry.file));
+
+        expect(files).toEqual(new Set(['src/Card.tsx']));
+    });
+
+    it.each(['src/button.d.mts', 'src/button.d.cts'])(
+        'leaves the declaration file %s out of a default run',
+        async name => {
+            const cwd = tailwindProject({
+                'src/app.css': '@import "tailwindcss";',
+                [name]: STYLES,
+            });
+
+            expect(await findingsWith({ cwd })).toEqual([]);
+        },
+    );
+
+    it('leaves the project config out, though it holds sz text', async () => {
+        // Lowered, this text is a finding: the probe file proves it.
+        const sz =
+            'export default {};\nexport const b = () => szv({ base: { otherNonsense: 2 } });\n';
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'csszyx.config.mjs': sz,
+            'src/probe.mjs': sz,
+        });
+
+        const files = new Set((await findingsWith({ cwd })).map(entry => entry.file));
+
+        expect(files).toEqual(new Set(['src/probe.mjs']));
+    });
+
+    it('drops the project config from a file list', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'csszyx.config.mjs':
+                'export default {};\nexport const b = () => szv({ base: { otherNonsense: 2 } });\n',
+        });
+
+        expect(await findingsFor(cwd, ['csszyx.config.mjs'])).toEqual([]);
+    });
+
+    it('checks a listed `.ts` file', async () => {
+        const cwd = tailwindProject({
+            'src/app.css': '@import "tailwindcss";',
+            'src/button.styles.ts': STYLES,
+        });
+
+        const findings = await findingsFor(cwd, ['src/button.styles.ts']);
+
+        expect(findings.map(entry => entry.file)).toContain('src/button.styles.ts');
+    });
+});
+
+/**
+ * What `.gitignore` covers (ADR 0033).
+ *
+ * A default run reads the files the build's prescan reads: what git keeps,
+ * plus what a stylesheet's `@source` names, as the project's own Scanner
+ * lists it. A build output or coverage report holding a copy of the app is
+ * not audited a second time.
+ */
+describe('csszyx check — what `.gitignore` covers', () => {
+    const IGNORED = {
+        '.gitignore': 'out/\ncoverage/\nsrc/generated/\n',
+        'out/a.js': BAD,
+        'coverage/lcov/b.js': BAD,
+        'src/generated/Gen.tsx': OTHER_BAD,
+    };
+
+    it('leaves out a gitignored file no `@source` names', async () => {
+        const cwd = tailwindProject(
+            { 'src/app.css': '@import "tailwindcss";', 'src/Real.tsx': BAD, ...IGNORED },
+            { integration: true },
+        );
+
+        const files = new Set((await findingsWith({ cwd })).map(entry => entry.file));
+
+        expect(files).toEqual(new Set(['src/Real.tsx']));
+    });
+
+    it('reads a gitignored folder a stylesheet names with `@source`', async () => {
+        const cwd = tailwindProject(
+            {
+                'src/app.css': '@import "tailwindcss";\n@source "./generated";\n',
+                'src/Real.tsx': BAD,
+                ...IGNORED,
+            },
+            { integration: true },
+        );
+
+        const files = new Set((await findingsWith({ cwd })).map(entry => entry.file));
+
+        expect(files).toEqual(new Set(['src/Real.tsx', 'src/generated/Gen.tsx']));
+    });
+
+    it('reads it when every other file is free of sz', async () => {
+        // The stylesheets are read for their `@source` rules even when the
+        // files git keeps give the run no class to ask them about.
+        const cwd = tailwindProject(
+            {
+                'src/app.css': '@import "tailwindcss";\n@source "./generated";\n',
+                'src/Plain.tsx': 'export const P = () => <p />;\n',
+                ...IGNORED,
+            },
+            { integration: true },
+        );
+
+        const files = new Set((await findingsWith({ cwd })).map(entry => entry.file));
+
+        expect(files).toEqual(new Set(['src/generated/Gen.tsx']));
+    });
+
+    it('still reads what an explicit `--pattern` names', async () => {
+        const cwd = tailwindProject(
+            { 'src/app.css': '@import "tailwindcss";', ...IGNORED },
+            { integration: true },
+        );
+
+        const files = new Set(
+            (await findingsWith({ cwd, pattern: 'out/**/*.js' })).map(entry => entry.file),
+        );
+
+        expect(files).toEqual(new Set(['out/a.js']));
+    });
+});

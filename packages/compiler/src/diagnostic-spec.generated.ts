@@ -3988,6 +3988,48 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         }
     },
     {
+        "id": "gitignored-sz",
+        "summary": "Files with `sz` that the bundler lowers, which `.gitignore` covers and no stylesheet names with `@source`.",
+        "surfaces": {
+            "runtime": {
+                "production": false,
+                "host": "node"
+            }
+        },
+        "position": "none",
+        "forms": [
+            "stylesheet",
+            "project-root",
+            "no-scanner"
+        ],
+        "args": {
+            "form": {
+                "type": [
+                    "enum",
+                    "stylesheet",
+                    "project-root",
+                    "no-scanner"
+                ]
+            },
+            "count": {
+                "type": "number"
+            },
+            "files": {
+                "type": "string[]",
+                "joiner": "\n    "
+            },
+            "sources": {
+                "type": "string[]",
+                "joiner": "`, `",
+                "optional": true
+            },
+            "stylesheet": {
+                "type": "string",
+                "optional": true
+            }
+        }
+    },
+    {
         "id": "css-source-unstable",
         "summary": "A CSS source that kept changing while csszyx read it.",
         "surfaces": {

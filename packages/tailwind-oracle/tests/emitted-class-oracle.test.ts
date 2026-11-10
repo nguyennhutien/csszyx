@@ -8,6 +8,7 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
 import {
     createEmittedClassOracle,
+    defaultTailwindLoader,
     designSystemEntry,
     findTailwindCssEntries,
     findTailwindCssEntry,
@@ -1189,5 +1190,86 @@ process.stdout.write(JSON.stringify(oracle.ok ? { dead: oracle.findDead(['ts-plu
         });
         expect(run.status, run.stderr).toBe(0);
         expect(JSON.parse(run.stdout)).toEqual({ dead: ['zz-probe'] });
+    });
+});
+
+/**
+ * Where the compiled stylesheet's Scanner looks: what the sz walk takes back
+ * from a gitignored folder (ADR 0033). The design system is built without
+ * these rules, so they come from one more compile, whose failure is not the
+ * project's.
+ */
+describe('loadScanSources', () => {
+    /**
+     * An oracle over a stylesheet in a fresh folder that resolves the repo's Tailwind.
+     *
+     * @param css - The stylesheet.
+     * @returns The oracle and its folder.
+     */
+    async function oracleOver(css: string): Promise<{ oracle: unknown; base: string }> {
+        const base = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-scan-sources-'));
+        created.push(base);
+        const oracle = await createEmittedClassOracle({ resolveFrom: REPO, cssBase: base, css });
+        return { oracle, base };
+    }
+
+    const created: string[] = [];
+    afterEach(() => {
+        for (const dir of created.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    it('lists the root and every `@source` rule, once', async () => {
+        const { oracle, base } = await oracleOver(`${STOCK}\n@source "./gen";\n`);
+        if (!(oracle as { ok: boolean }).ok) throw new Error('the stylesheet did not compile');
+        const ready = oracle as { loadScanSources(): Promise<unknown[]> };
+        const first = ready.loadScanSources();
+        expect(ready.loadScanSources()).toBe(first);
+        expect(await first).toEqual([
+            { base: REPO, pattern: '**/*', negated: false },
+            { base, pattern: './gen', negated: false },
+        ]);
+    });
+
+    it('lists nothing for a stylesheet that generates no utilities', async () => {
+        const { oracle } = await oracleOver('@import "tailwindcss/theme";\n@source "./gen";\n');
+        if (!(oracle as { ok: boolean }).ok) throw new Error('the stylesheet did not compile');
+        expect(
+            await (oracle as { loadScanSources(): Promise<unknown[]> }).loadScanSources(),
+        ).toEqual([]);
+    });
+
+    it('lists nothing when the second compile fails', async () => {
+        const base = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-scan-sources-once-'));
+        created.push(base);
+        fs.writeFileSync(
+            path.join(base, 'once.cjs'),
+            "let n = 0;\nmodule.exports = function once() { if (++n > 1) throw new Error('twice'); };\n",
+        );
+        const oracle = await createEmittedClassOracle({
+            resolveFrom: REPO,
+            cssBase: base,
+            css: `${STOCK}\n@plugin "./once.cjs";\n@source "./gen";\n`,
+        });
+        if (!oracle.ok) throw new Error('the first compile failed');
+        expect(await oracle.loadScanSources()).toEqual([]);
+    });
+
+    it('lists nothing when Tailwind cannot be loaded a second time', async () => {
+        let calls = 0;
+        const loader: TailwindLoader = resolveFrom => {
+            calls += 1;
+            return calls === 1
+                ? defaultTailwindLoader(resolveFrom)
+                : Promise.reject(new Error('gone'));
+        };
+        const base = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-scan-sources-load-'));
+        created.push(base);
+        const oracle = await createEmittedClassOracle(
+            { resolveFrom: REPO, cssBase: base, css: `${STOCK}\n@source "./gen";\n` },
+            loader,
+        );
+        if (!oracle.ok) throw new Error('the first compile failed');
+        expect(await oracle.loadScanSources()).toEqual([]);
+        expect(calls).toBe(2);
     });
 });

@@ -80,7 +80,9 @@ describe('csszyx check — a scan that rejects with a non-Error', () => {
         const cwd = mkdtempSync(join(tmpdir(), 'csszyx-scan-throw-'));
         dirs.push(cwd);
 
-        await check({ cwd });
+        // A `--pattern` run lists its files through fast-glob; a default run
+        // walks the project itself (ADR 0033).
+        await check({ cwd, pattern: '**/*.tsx' });
 
         const report = log.mock.calls.map(call => call.join(' ')).join('\n');
         expect(report).toContain('a bare string, not an Error');

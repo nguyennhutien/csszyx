@@ -143,7 +143,7 @@ describe('a class discovered after the freeze fails the build', () => {
             message:
                 '[csszyx] mangle-census-late:\n' +
                 '  `gap-7`, `legacy-card` appeared after the mangle map was frozen, so the CSS emitted before then used another map, and the build stops.\n' +
-                '  help: move the file that uses them under the project root or a `compileSources` directory, which the prescan walks; otherwise, set `production.mangle: false` for this build.\n' +
+                '  help: let the prescan read the file that uses them: keep it under the project root or a `compileSources` directory, and if `.gitignore` covers it, name it or its folder in the Tailwind stylesheet with `@source`; otherwise, set `production.mangle: false` for this build.\n' +
                 '  docs: https://csszyx.com/e/mangle-census-late',
         });
         expect(lateMangleCensusError([], [])).toMatchObject({
@@ -151,7 +151,7 @@ describe('a class discovered after the freeze fails the build', () => {
             message:
                 '[csszyx] mangle-census-late:\n' +
                 '  The class census changed after the mangle map was frozen, so the CSS emitted before then used another map, and the build stops.\n' +
-                '  help: move every file that uses csszyx under the project root or a `compileSources` directory, which the prescan walks; otherwise, set `production.mangle: false` for this build.\n' +
+                '  help: let the prescan read every file that uses csszyx: keep it under the project root or a `compileSources` directory, and if `.gitignore` covers it, name it or its folder in the Tailwind stylesheet with `@source`; otherwise, set `production.mangle: false` for this build.\n' +
                 '  docs: https://csszyx.com/e/mangle-census-late',
         });
     });

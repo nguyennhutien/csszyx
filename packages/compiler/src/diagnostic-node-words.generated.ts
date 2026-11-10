@@ -513,8 +513,8 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
             "census-changed": "The class census changed after the mangle map was frozen, so the CSS emitted before then used another map, and the build stops."
         },
         "help": {
-            "classes": "move the file that uses them under the project root or a `compileSources` directory, which the prescan walks; otherwise, set `production.mangle: false` for this build.",
-            "census-changed": "move every file that uses csszyx under the project root or a `compileSources` directory, which the prescan walks; otherwise, set `production.mangle: false` for this build."
+            "classes": "let the prescan read the file that uses them: keep it under the project root or a `compileSources` directory, and if `.gitignore` covers it, name it or its folder in the Tailwind stylesheet with `@source`; otherwise, set `production.mangle: false` for this build.",
+            "census-changed": "let the prescan read every file that uses csszyx: keep it under the project root or a `compileSources` directory, and if `.gitignore` covers it, name it or its folder in the Tailwind stylesheet with `@source`; otherwise, set `production.mangle: false` for this build."
         }
     },
     "mangle-hybrid-hazard": {
@@ -605,6 +605,15 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
             "szv-exports": "of these, {szvCount} may export `szv` factories, so another module that calls one runs it at runtime instead of getting its classes compiled in; the skipped files:\n    {files}"
         }
     },
+    "gitignored-sz": {
+        "text": "The build lowered {count} file(s) with `sz` that `.gitignore` covers and the safelist scan did not read, so Tailwind may generate no CSS for their classes.",
+        "help": {
+            "stylesheet": "name them in `{stylesheet}`, with paths from its folder: `{sources}`; or move them where git keeps them.",
+            "project-root": "name them in the Tailwind stylesheet, with paths from its folder, which from the project root are `{sources}`; or move them where git keeps them.",
+            "no-scanner": "csszyx could not load Tailwind's Scanner to read the stylesheets' `@source` rules: add the Tailwind integration the build runs, such as `@tailwindcss/vite` or `@tailwindcss/postcss`, to the project's dependencies; or move them where git keeps them."
+        },
+        "note": "the files:\n    {files}"
+    },
     "css-source-unstable": {
         "text": "This CSS file changed on every read, so the build stops.",
         "help": "stop the tool that rewrites it during the build, such as a formatter or a second watcher."
@@ -658,7 +667,7 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
     },
     "no-source-files": {
         "text": "No source file under `{root}` matches `{pattern}`, so there is nothing to scan for classes.",
-        "help": "pass a glob, relative to `{root}`, that matches your sources as the `[pattern]` argument, or point `--root` at the Next app; files under an `--ignore` pattern do not count."
+        "help": "pass a glob, relative to `{root}`, that matches your sources as the `[pattern]` argument, or point `--root` at the Next app; files under an `--ignore` pattern do not count, and with the default glob neither do files `.gitignore` covers."
     },
     "cli-option-invalid": {
         "text": {
