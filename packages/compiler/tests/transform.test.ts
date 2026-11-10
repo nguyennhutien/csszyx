@@ -131,6 +131,10 @@ describe('normalizeClassName', () => {
         const result = normalizeClassName('   ');
         expect(result).toBe('');
     });
+
+    it('splits on White_Space, as the engine does, and keeps a BOM inside a class', () => {
+        expect(normalizeClassName('a\uFEFFb \u00a0c\u0085d\u3000e')).toBe('a\uFEFFb c d e');
+    });
 });
 
 describe('unknown property warnings', () => {

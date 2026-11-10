@@ -4,8 +4,10 @@ import * as path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import {
+    CLASS_LIST_SPACE,
     type CssVariableMangleValue,
     diagnosticPath,
+    HTML_CLASS_SPACE,
     type SourceTransformResult,
     type SzDiagnosticArgs,
     sortStrings,
@@ -2696,7 +2698,7 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
      */
     function mangleClassString(classString: string): string {
         return classString
-            .split(/\s+/)
+            .split(HTML_CLASS_SPACE)
             .filter(Boolean)
             .map((cls: string) => {
                 // Class names inside a double-quoted JS string may have \" (and other
@@ -2773,7 +2775,7 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
     function mangleTemplateInterpolation(inner: string): MangledTemplateFragment {
         let changed = false;
         const value = inner.replace(/"([^"]*)"/g, (quoted: string, classString: string) => {
-            const parts = classString.split(/\s+/).filter(Boolean);
+            const parts = classString.split(HTML_CLASS_SPACE).filter(Boolean);
             if (parts.length === 0) return quoted;
             const mangled = parts.map(className => mangleMap[className] || className).join(' ');
             if (mangled === classString) return quoted;
@@ -2847,7 +2849,7 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
         }
         let changed = false;
         const mangled = expr.replace(/"([^"]*)"/g, (qm: string, inner: string) => {
-            const parts = inner.split(/\s+/).filter(Boolean);
+            const parts = inner.split(HTML_CLASS_SPACE).filter(Boolean);
             if (parts.length === 0) {
                 return qm;
             }
@@ -2969,7 +2971,7 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
                 return match;
             }
         }
-        const tokens = inner.split(/\s+/).filter(Boolean);
+        const tokens = inner.split(CLASS_LIST_SPACE).filter(Boolean);
         if (tokens.length === 0) {
             return match;
         }
@@ -5740,7 +5742,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * @param value Class string.
      */
     function addSafelistClasses(value: string): void {
-        for (const className of value.split(/\s+/).filter(Boolean)) {
+        for (const className of value.split(CLASS_LIST_SPACE).filter(Boolean)) {
             addSafelistClass(className);
         }
     }
@@ -6187,7 +6189,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function mangleHtmlClassList(classes: string): string {
         const output: string[] = [];
-        for (const className of classes.split(/\s+/)) {
+        for (const className of classes.split(HTML_CLASS_SPACE)) {
             if (className) output.push(state.mangleMap[className] || className);
         }
         return output.join(' ');

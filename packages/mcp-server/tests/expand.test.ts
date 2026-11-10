@@ -52,3 +52,12 @@ describe('csszyx_expand', () => {
         expect(data.classCount).toBe(0);
     });
 });
+
+describe('a class holding a BOM', () => {
+    // The engine keeps a BOM inside a class: one class, counted once.
+    it('is counted once', () => {
+        const data = JSON.parse(handleExpand({ sz: { content: 'a﻿b', p: 4 } }).content[0].text);
+        expect(data.className).toBe('content-[a﻿b] p-4');
+        expect(data.classCount).toBe(2);
+    });
+});

@@ -49,7 +49,9 @@ class EmitExtraAssetsPlugin {
                     compilation.emitAsset(
                         'page.html',
                         new RawSource(
-                            '<div class=" m-3  author-kept "></div><aside class=\'m-3\'></aside>',
+                            '<div class=" m-3  author-kept "></div><aside class=\'m-3\'></aside>' +
+                                // A BOM is not White_Space: the class holding it is one class.
+                                '<p class="author-kept\uFEFFx m-3"></p>',
                         ),
                     );
                     compilation.emitAsset(
@@ -148,6 +150,7 @@ describe('webpack processAssets mangle pass', () => {
         expect(html).toContain(token as string);
         expect(html).not.toContain('m-3');
         expect(html).toContain('author-kept');
+        expect(html).toContain('author-kept\uFEFFx');
         const unchanged = readFileSync(join(root, 'dist/unchanged.html'), 'utf8');
         expect(unchanged).toContain('author-kept');
         expect(unchanged).toContain('author-other');

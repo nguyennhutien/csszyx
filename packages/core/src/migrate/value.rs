@@ -350,6 +350,17 @@ const JS_WHITESPACE: &[char] = &[
     '\u{202F}', '\u{205F}', '\u{3000}', '\u{FEFF}',
 ];
 
+/// Where a `class` attribute splits: ASCII whitespace (tab, line feed, form
+/// feed, carriage return, space), as a browser splits one and as the runtime's
+/// `HTML_CLASS_SPACE` reads it. Migrate reads a class list the DOM applies as
+/// written, so a NEL or an NBSP joins two names into one class that styles
+/// nothing, and migrating it into sz keys would add styling the page never
+/// had. Not [`is_js_whitespace`] either: that set holds a byte-order mark,
+/// which would cut a class holding one in two.
+pub const fn is_class_space(character: char) -> bool {
+    matches!(character, '\t' | '\n' | '\u{000C}' | '\r' | ' ')
+}
+
 pub fn is_js_whitespace(character: char) -> bool {
     JS_WHITESPACE.contains(&character) || ('\u{2000}'..='\u{200A}').contains(&character)
 }

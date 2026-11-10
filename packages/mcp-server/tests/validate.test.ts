@@ -261,3 +261,11 @@ describe('csszyx_validate', () => {
         expect(data.transformResult).toBeUndefined();
     });
 });
+
+describe('a class holding a BOM', () => {
+    // The engine keeps a BOM inside a class: one class, counted once.
+    it('is counted once in the transform result', () => {
+        const data = JSON.parse(handleValidate({ sz: { content: 'a﻿b', p: 4 } }).content[0].text);
+        expect(data.transformResult).toEqual({ className: 'content-[a﻿b] p-4', classCount: 2 });
+    });
+});

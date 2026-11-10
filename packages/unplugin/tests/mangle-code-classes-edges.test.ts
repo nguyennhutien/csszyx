@@ -169,3 +169,20 @@ describe('mangleCodeClassesSync — Pass 3 bracket separators only claim keys an
         expect(mangleCodeClassesSync('clsx(["p-4","flex"])', MAP)).toBe('clsx(["c","z"])');
     });
 });
+
+describe('mangleCodeClassesSync — a class holding a BOM', () => {
+    // The engine keeps a BOM inside a class (it is not Unicode White_Space),
+    // and a class list splits on ASCII whitespace, as the DOM splits it.
+    const bom = 'content-[a﻿b]';
+    const map = { [bom]: 'q', 'p-4': 'c' };
+
+    it.each([
+        [`className="${bom} p-4"`, 'className="q c"'],
+        [`className: \`${bom} p-4\``, 'className:`q c`'],
+        ['className: `p-4 ${on ? "' + bom + ' p-4" : ""}`', 'className:`c ${on ? "q c" : ""}`'],
+        [`className: on ? "${bom} p-4" : "p-4"`, 'className: on ? "q c" : "c"'],
+        [`_szMerge("${bom} p-4")`, '_szMerge("q c")'],
+    ])('mangles %s whole', (code, mangled) => {
+        expect(mangleCodeClassesSync(code, map)).toBe(mangled);
+    });
+});

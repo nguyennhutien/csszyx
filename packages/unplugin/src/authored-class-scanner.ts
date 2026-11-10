@@ -1,3 +1,5 @@
+import { CLASS_LIST_SPACE } from '@csszyx/compiler';
+
 /** Characters that can precede a JavaScript regular-expression literal. */
 const REGEX_PREFIXES = new Set('([{:,;=!?&|+-*%^~<>/');
 const REGEX_PREFIX_KEYWORDS = new Set([
@@ -153,7 +155,7 @@ function decodeAttributeWhitespace(value: string): string {
  * @param value Authored class string.
  */
 function collectClassTokens(target: Set<string>, value: string): void {
-    for (const className of value.split(/\s+/)) {
+    for (const className of value.split(CLASS_LIST_SPACE)) {
         if (className) target.add(className);
     }
 }
@@ -666,9 +668,12 @@ export function collectMergeCallClassNames(source: string): Set<string> {
         calls.lastIndex = bodyEnd + 1;
         const body = source.slice(bodyStart, bodyEnd);
         for (const literal of body.matchAll(/"[^"]*"|'[^']*'/g)) {
-            // The whole match minus its quotes; `match` drops the empty
-            // strings a padded literal would leave behind.
-            for (const name of literal[0].slice(1, -1).match(/\S+/g) ?? []) names.add(name);
+            // The whole match minus its quotes, split as the runtime `szcn`
+            // splits it; the filter drops the empty strings a padded literal
+            // leaves behind.
+            for (const name of literal[0].slice(1, -1).split(CLASS_LIST_SPACE)) {
+                if (name) names.add(name);
+            }
         }
     }
     return names;

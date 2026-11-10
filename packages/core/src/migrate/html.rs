@@ -11,7 +11,7 @@ use serde::{Deserialize, Deserializer};
 use super::line_endings::{detect_line_ending, with_line_ending};
 use super::source::{TransformResult, TransformStats};
 use super::sz_codegen::sz_html_value;
-use super::value::is_js_whitespace;
+use super::value::is_class_space;
 use super::variant_parser::{class_name_to_sz_object_with, Lookup};
 use super::verdict::{Judge, ServedAnswers, TableVerdicts, UnderscoreAnswers, UnderscoreQuestions};
 
@@ -217,7 +217,7 @@ fn process_class_attribute(
     quote: char,
     state: &mut HtmlState<'_>,
 ) -> String {
-    let trimmed = class_text.trim_matches(is_js_whitespace);
+    let trimmed = class_text.trim_matches(is_class_space);
     if trimmed.is_empty() {
         state.skipped += 1;
         return matched.to_string();
@@ -267,5 +267,22 @@ mod tests {
         assert_eq!(read("{}").unwrap().inject_runtime, InjectRuntime::Off);
         assert!(read(r#"{"injectRuntime":true}"#).is_err());
         assert!(read(r#"{"injectRuntime":"remote"}"#).is_err());
+    }
+
+    /// A browser splits a `class` attribute on ASCII whitespace: a NEL joins
+    /// two names into one class that styles nothing, and migrate keeps it so.
+    #[test]
+    fn keeps_a_class_a_nel_joins_as_the_browser_reads_it() {
+        let options = HtmlTransformOptions::default();
+        for html in [
+            "<div class=\"p-4\u{0085}m-2\"></div>",
+            "<div class=\"\u{0085}p-4\"></div>",
+            "<div class=\"p-4\u{0085}\"></div>",
+        ] {
+            let result = transform_html_source(html, &options);
+            assert!(!result.changed, "{html:?} became {:?}", result.code);
+        }
+        let control = transform_html_source("<div class=\"p-4 m-2\"></div>", &options);
+        assert!(control.changed);
     }
 }

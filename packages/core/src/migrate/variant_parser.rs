@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 
 use super::class_parser::{find_top_level_slash, parse_class_judged};
 use super::class_rules::wrapped;
-use super::value::{is_js_whitespace, SzObject, SzValue};
+use super::value::{is_class_space, SzObject, SzValue};
 use super::verdict::Judge;
 use crate::transform::generated::migrate_tables::reverse_variant;
 use crate::transform::generated::tables::{global_keyword_for_group, global_keyword_groups};
@@ -40,10 +40,10 @@ pub const TODO_REMOVE: &str = "sz:remove";
 /// Not decided yet; the token stays unrecognised.
 pub const TODO_PENDING: &str = "sz:todo";
 
-/// The class tokens of a `className`, split on JavaScript's whitespace.
+/// The class tokens of a `className`, split where the engine splits one.
 pub fn tokenize(class_name: &str) -> Vec<&str> {
     class_name
-        .split(is_js_whitespace)
+        .split(is_class_space)
         .filter(|token| !token.is_empty())
         .collect()
 }
@@ -676,7 +676,7 @@ mod tests {
     }
 
     #[test]
-    fn tokenize_splits_on_javascript_whitespace_and_drops_the_gaps() {
+    fn tokenize_splits_where_a_browser_splits_a_class_attribute() {
         assert_eq!(
             tokenize("p-4 bg-blue-500 flex"),
             ["p-4", "bg-blue-500", "flex"]
@@ -685,6 +685,15 @@ mod tests {
         assert_eq!(tokenize("p-4"), ["p-4"]);
         assert!(tokenize("").is_empty());
         assert!(tokenize("   ").is_empty());
+        // Where a browser splits a `class` attribute: ASCII whitespace only, so
+        // neither a NEL nor an NBSP nor a BOM splits.
+        assert_eq!(tokenize("p-4\tm-2\nflex"), ["p-4", "m-2", "flex"]);
+        assert_eq!(tokenize("p-4\u{0085}m-2"), ["p-4\u{0085}m-2"]);
+        assert_eq!(tokenize("p-4\u{00A0}m-2"), ["p-4\u{00A0}m-2"]);
+        assert_eq!(
+            tokenize("content-[a\u{FEFF}b] p-4"),
+            ["content-[a\u{FEFF}b]", "p-4"]
+        );
     }
 
     #[test]

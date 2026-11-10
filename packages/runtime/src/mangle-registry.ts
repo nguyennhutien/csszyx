@@ -23,6 +23,7 @@
  *
  * @module @csszyx/runtime/mangle-registry
  */
+import { HTML_CLASS_SPACE } from '@csszyx/compiler/sz-limits';
 
 /** Emitted name(s) for one original CSS custom property. */
 export type MangleVarValue = string | string[];
@@ -129,7 +130,7 @@ function createRegistry(input: MangleRegistryInput): MangleRegistry {
         // an SVGAnimatedString, and reading it as a string throws.
         decodeAll: element =>
             (element.getAttribute('class') ?? '')
-                .split(/\s+/)
+                .split(HTML_CLASS_SPACE)
                 .filter(Boolean)
                 .map(token => reverse[token] ?? token),
     };

@@ -938,8 +938,11 @@ export const SIZE_BUDGETS = [
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: '.',
-        // Measured 58,492.
-        maxGzipBytes: 59_700,
+        // Measured 58,492. 60,300 on 2026-11-11, measured 59,994 with the
+        // other 0.18.1 changes merged (59,923 alone): the runtime reads
+        // whitespace as the engine does (White_Space trim and strip, and the
+        // two class-list separators).
+        maxGzipBytes: 60_300,
     },
     {
         name: '@csszyx/compiler `./migrate`, loaded by Node',

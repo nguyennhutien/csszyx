@@ -4,7 +4,7 @@
  * Example: { p: 4, bg: 'blue-500' } → "p-4 bg-blue-500"
  */
 
-import { transform } from '@csszyx/compiler';
+import { CLASS_LIST_SPACE, transform } from '@csszyx/compiler';
 import { z } from 'zod';
 
 export const expandSchema = z.object({
@@ -34,7 +34,7 @@ export function handleExpand(input: ExpandInput): {
                 text: JSON.stringify(
                     {
                         className: result.className,
-                        classCount: result.className.split(/\s+/).filter(Boolean).length,
+                        classCount: result.className.split(CLASS_LIST_SPACE).filter(Boolean).length,
                     },
                     null,
                     2,
