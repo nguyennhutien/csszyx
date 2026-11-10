@@ -145,15 +145,18 @@ export interface ProjectAnswers {
         skipped: string | null;
     }>;
     /**
-     * The CSS each compiled stylesheet writes for these classes, index for
-     * index: for a question answered per stylesheet, such as whether one reads
-     * an `_` as a space.
+     * Each compiled stylesheet, with the prefix its classes carry: for a
+     * question answered per stylesheet, such as whether one reads an `_` as
+     * a space. Each is asked about a class under its own prefix, since its
+     * CSS names that class and serves no other.
      *
-     * @param classes - Class names, as emitted.
-     * @returns One array per stylesheet; and why none could be asked, or null.
+     * @returns The stylesheets; and why none could be asked, or null.
      */
-    cssPerRoot(classes: readonly string[]): Promise<{
-        css: Array<Array<string | null>>;
+    stylesheets(): Promise<{
+        roots: Array<{
+            prefix: string | null;
+            cssFor(classes: readonly string[]): Array<string | null>;
+        }>;
         skipped: string | null;
     }>;
 }
@@ -185,7 +188,7 @@ export function projectAnswers(cwd: string): ProjectAnswers {
                     unanswered: [...(questions ?? [])],
                     skipped: questions?.length ? unread : null,
                 }),
-            cssPerRoot: () => Promise.resolve({ css: [], skipped: unread }),
+            stylesheets: () => Promise.resolve({ roots: [], skipped: unread }),
         };
     }
     let opened: ReturnType<typeof openCheckOracles> | undefined;
@@ -211,11 +214,14 @@ export function projectAnswers(cwd: string): ProjectAnswers {
                 skipped: unanswered.length > 0 ? why : null,
             };
         },
-        cssPerRoot: async classes => {
+        stylesheets: async () => {
             const { oracles, skipped, hadEntries } = await open(cwd);
             const why = hadEntries ? skipped.join('; ') : 'this project has no Tailwind stylesheet';
             return {
-                css: oracles.map(oracle => oracle.cssFor(classes)),
+                roots: oracles.map(oracle => ({
+                    prefix: oracle.facts.prefix,
+                    cssFor: (classes: readonly string[]) => oracle.cssFor(classes),
+                })),
                 skipped: oracles.length === 0 ? why : null,
             };
         },

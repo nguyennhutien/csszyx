@@ -11,10 +11,11 @@
  */
 import type { ProjectAnswers } from '@csszyx/cli';
 import {
+    bareOf,
     type UnderscoreSpaceFinding,
     underscoreFactsOf,
     underscoreSpaceProbes,
-    underscoreSpaceVerdicts,
+    underscoreSpaceVerdictsPerRoot,
 } from '@csszyx/unplugin/diagnostics';
 
 /**
@@ -23,20 +24,33 @@ import {
  * @param result - The engine's transform of one module, or null when there
  *        is none; its facts are read through `underscoreFactsOf`, which keeps
  *        the positions a located fact holds in getters.
- * @param answers - The project's stylesheets.
+ * @param answers - The project's stylesheets, each asked under its own prefix,
+ *        so one whose prefix differs from the others' is still asked.
  * @param file - The file the module is named as.
+ * @param lowered - The prefix the module was lowered under, or null.
  * @returns The findings; and why the stylesheets could not be asked, or null.
  */
 export async function underscoreSpaceAnswers(
     result: Parameters<typeof underscoreFactsOf>[0],
-    answers: Pick<ProjectAnswers, 'cssPerRoot'>,
+    answers: Pick<ProjectAnswers, 'stylesheets'>,
     file: string,
+    lowered: string | null,
 ): Promise<{ found: UnderscoreSpaceFinding[]; skipped: string | null }> {
     const sites = underscoreFactsOf(result).map(fact => ({ ...fact, file }));
-    const probes = underscoreSpaceProbes(sites);
-    if (probes.probed.length === 0) return { found: [], skipped: null };
-    const { css, skipped } = await answers.cssPerRoot(probes.classes);
-    return { found: underscoreSpaceVerdicts(probes, css), skipped };
+    // Nothing to ask, so no stylesheet is compiled for it.
+    if (underscoreSpaceProbes(sites).probed.length === 0) return { found: [], skipped: null };
+    const { roots, skipped } = await answers.stylesheets();
+    const { found, unserved } = underscoreSpaceVerdictsPerRoot(sites, roots, lowered);
+    // A class no stylesheet serves has no reading: say so, never read as clean.
+    if (skipped !== null || unserved.length === 0) return { found, skipped };
+    // Named once each, as written without a prefix: each stylesheet was
+    // asked under its own.
+    const names = [...new Set(unserved.map(fact => bareOf(fact.className, lowered)))];
+    const listed = names.map(name => `\`${name}\``).join(', ');
+    return {
+        found,
+        skipped: `no stylesheet serves ${listed} under the prefix it sets, so no CSS is written for it`,
+    };
 }
 
 /**

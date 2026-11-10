@@ -23,7 +23,7 @@ import type {
     MigrateRustTableVerdict,
     MigrateRustUnderscoreQuestion,
 } from '@csszyx/compiler/migrate';
-import { underscoreSpaceProbes, underscoreSpaceReadings } from '@csszyx/unplugin/diagnostics';
+import { underscoreReadingsPerRoot } from '@csszyx/unplugin/diagnostics';
 
 import type { OpenedOracles } from '../commands/check.js';
 
@@ -120,24 +120,17 @@ export function createMigrateVerdicts(
             // CSS names the class it was asked about. A stylesheet serving
             // nothing for a class has no say; an `_` is a space only where
             // every one that serves the class reads it as one.
-            const perStylesheet = compiled.map(oracle => {
-                const prefix = oracle.facts.prefix;
-                const probes = underscoreSpaceProbes(
-                    [...unasked].map(([value, className]) => ({
-                        key: '',
-                        value,
-                        className: prefix ? `${prefix}:${className}` : className,
-                    })),
-                );
-                const readings = underscoreSpaceReadings(probes, [oracle.cssFor(probes.classes)]);
-                return new Map(readings.map(({ fact, reading }) => [fact.value, reading]));
-            });
-            for (const value of unasked.keys()) {
-                const readings = perStylesheet.flatMap(byValue => {
-                    const reading = byValue.get(value);
-                    return reading === undefined ? [] : [reading];
-                });
-                if (readings.length > 0) underscores.set(value, agreedReading(value, readings));
+            const facts = [...unasked].map(([value, className]) => ({ key: '', value, className }));
+            const readings = underscoreReadingsPerRoot(
+                facts,
+                compiled.map(oracle => ({
+                    prefix: oracle.facts.prefix,
+                    cssFor: classes => oracle.cssFor(classes),
+                })),
+            );
+            for (const [index, { value }] of facts.entries()) {
+                const reading = readings[index];
+                if (reading !== undefined) underscores.set(value, reading);
             }
         }
         return questions.some(question => {
@@ -171,21 +164,4 @@ export function createMigrateVerdicts(
     };
 
     return { answers, settle, underscores, settleUnderscores, skipped: () => skipped };
-}
-
-/**
- * One value as every stylesheet that serves its class reads it: an `_` is a
- * space only where each reading has one.
- *
- * @param value - The value as the class writes it.
- * @param readings - Each serving stylesheet's reading, one per stylesheet.
- * @returns The value with those `_` as spaces.
- */
-function agreedReading(value: string, readings: readonly string[]): string {
-    let out = '';
-    for (let index = 0; index < value.length; index++) {
-        const spaced = readings.every(reading => reading[index] === ' ');
-        out += value[index] === '_' && spaced ? ' ' : value[index];
-    }
-    return out;
 }

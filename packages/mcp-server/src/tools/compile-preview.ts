@@ -204,7 +204,12 @@ export async function handleCompilePreview(
     const { result, warnings } = compileWithDiagnostics(input.source, filename, classPrefix);
     // The build names an `_` its Tailwind reads as a space; a preview asked
     // before the code is written says so too, from the same stylesheets.
-    const underscore = await underscoreSpaceAnswers(result, answers, filename);
+    const underscore = await underscoreSpaceAnswers(
+        result,
+        answers,
+        filename,
+        classPrefix === '' ? null : classPrefix,
+    );
     return {
         content: [
             {

@@ -171,13 +171,28 @@ export function underscoreSpaceVerdicts<T extends UnderscoreFact>(
 ): Array<T & UnderscoreFinding> {
     return underscoreSpaceReadings(probes, roots)
         .filter(({ spaces }) => spaces > 0)
-        .map(({ fact, reading }) => ({
-            ...fact,
-            literal: jsStringLiteral(fact.value),
-            spaced: jsStringLiteral(reading),
-            // The `_` read as a space are exactly those the reading turned.
-            escaped: jsStringLiteral(escapeWhereSpaced(fact.value, reading)),
-        }));
+        .map(({ fact, reading }) => findingOf(fact, reading));
+}
+
+/**
+ * A fact with what to write instead, from the reading of its value.
+ *
+ * @param fact - The fact.
+ * @param reading - Its value with each `_` read as a space written as one.
+ * @returns The fact and its finding.
+ * @internal Read by `underscore-roots.ts`.
+ */
+export function findingOf<T extends UnderscoreFact>(
+    fact: T,
+    reading: string,
+): T & UnderscoreFinding {
+    return {
+        ...fact,
+        literal: jsStringLiteral(fact.value),
+        spaced: jsStringLiteral(reading),
+        // The `_` read as a space are exactly those the reading turned.
+        escaped: jsStringLiteral(escapeWhereSpaced(fact.value, reading)),
+    };
 }
 
 /**

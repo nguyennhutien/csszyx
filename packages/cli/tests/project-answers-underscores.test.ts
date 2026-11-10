@@ -61,8 +61,8 @@ describe('projectAnswers() with nothing to ask', () => {
                 unanswered: [],
                 skipped: null,
             });
-            expect(await answers.cssPerRoot(['p-4'])).toEqual({
-                css: [],
+            expect(await answers.stylesheets()).toEqual({
+                roots: [],
                 skipped: expect.stringContaining('no package.json'),
             });
         } finally {
@@ -80,20 +80,22 @@ describe('projectAnswers() with nothing to ask', () => {
     });
 });
 
-describe('projectAnswers().cssPerRoot', () => {
-    it("gives each stylesheet's CSS for the classes", async () => {
-        const cwd = tailwindProject({ 'src/app.css': '@import "tailwindcss";' });
-        const { css, skipped } = await projectAnswers(cwd).cssPerRoot(['p-4', 'not-a-utility']);
+describe('projectAnswers().stylesheets', () => {
+    it("gives each stylesheet's prefix and CSS for the classes", async () => {
+        const cwd = tailwindProject({ 'src/app.css': '@import "tailwindcss" prefix(tw);' });
+        const { roots, skipped } = await projectAnswers(cwd).stylesheets();
         expect(skipped).toBeNull();
-        expect(css).toHaveLength(1);
-        expect(css[0]?.[0]).toContain('padding');
-        expect(css[0]?.[1]).toBeNull();
+        expect(roots).toHaveLength(1);
+        expect(roots[0]?.prefix).toBe('tw');
+        const css = roots[0]?.cssFor(['tw:p-4', 'p-4']);
+        expect(css?.[0]).toContain('padding');
+        expect(css?.[1]).toBeNull();
     });
 
     it('says why when the project has no Tailwind stylesheet', async () => {
         const cwd = tailwindProject({ 'src/app.css': 'body { margin: 0; }' });
-        expect(await projectAnswers(cwd).cssPerRoot(['p-4'])).toEqual({
-            css: [],
+        expect(await projectAnswers(cwd).stylesheets()).toEqual({
+            roots: [],
             skipped: 'this project has no Tailwind stylesheet',
         });
     });
@@ -102,8 +104,8 @@ describe('projectAnswers().cssPerRoot', () => {
         const cwd = tailwindProject({
             'src/app.css': '@import "tailwindcss";\n.a { @apply not-a-real-utility; }\n',
         });
-        const { css, skipped } = await projectAnswers(cwd).cssPerRoot(['p-4']);
-        expect(css).toEqual([]);
+        const { roots, skipped } = await projectAnswers(cwd).stylesheets();
+        expect(roots).toEqual([]);
         expect(skipped).not.toBeNull();
     });
 });
