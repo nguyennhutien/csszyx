@@ -400,7 +400,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
     },
     {
         "id": "unknown-field",
-        "summary": "A field a structured value (a mask layer) does not take.",
+        "summary": "A field a structured value (a mask layer, a colour object) does not take.",
         "surfaces": {
             "engine": {},
             "runtime": {

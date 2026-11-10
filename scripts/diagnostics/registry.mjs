@@ -463,7 +463,7 @@ export const DIAGNOSTICS = [
     },
     {
         id: 'unknown-field',
-        summary: 'A field a structured value (a mask layer) does not take.',
+        summary: 'A field a structured value (a mask layer, a colour object) does not take.',
         surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
         position: 'site',
         // `allowed` travels: the mask member tables are not shared data, and

@@ -924,6 +924,7 @@ fn push_group_key_value_diagnostics<'a>(
         super::lower::collect_mask_layer_values(object, &mut found.mask_layers);
         super::lower::collect_globals_before_groups(object, &mut found.globals_before_groups);
         super::lower::collect_unknown_mask_slot_members(object, &mut found.mask_members);
+        super::lower::collect_unknown_color_object_members(object, &mut found.mask_members);
     }
     if !repeat_free {
         let seen = &mut std::collections::HashSet::new();

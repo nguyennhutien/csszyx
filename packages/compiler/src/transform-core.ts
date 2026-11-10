@@ -2279,6 +2279,9 @@ const SHADOW_COLOR_HINT_PREFIXES = new Set([
     'drop-shadow',
 ]);
 
+/** The members a colour object reads. Mirrors `COLOR_OBJECT_MEMBERS` in `lower.rs`. */
+const COLOR_OBJECT_MEMBERS: readonly string[] = ['color', 'op'];
+
 /** Builds a color utility from the `{ color, op }` object syntax. */
 function buildColorObjectClass(
     key: string,
@@ -3253,10 +3256,11 @@ const MASK_EDGE_MEMBERS: readonly string[] = ['from', 'to'];
 
 // Dev-only de-dup, browser included: mask values most often resolve at runtime
 // via `_sz` in a prop-API component, where `window` is defined.
-const warnedMaskSlotMembers = new Set<string>();
+const warnedUnknownFields = new Set<string>();
 
 /**
- * Warn that a mask slot member is not part of the slot's shape.
+ * Warn that a structured value has a member it does not read: a mask slot, or
+ * a colour object (`{ color, op }`).
  *
  * A member the builders do not recognise emits NOTHING — worse than an unknown
  * top-level key, which at least leaves a dead class in the DOM to find. The
@@ -3268,11 +3272,11 @@ const warnedMaskSlotMembers = new Set<string>();
  * @param member - The unrecognised member key.
  * @param allowed - The members the owner accepts, for the message.
  */
-function warnMaskSlotMember(owner: string, member: string, allowed: readonly string[]): void {
+function warnUnknownField(owner: string, member: string, allowed: readonly string[]): void {
     if (process.env.NODE_ENV !== 'production') {
         const sig = `${owner}.${member}`;
-        if (warnedMaskSlotMembers.has(sig)) return;
-        warnedMaskSlotMembers.add(sig);
+        if (warnedUnknownFields.has(sig)) return;
+        warnedUnknownFields.add(sig);
         szReport({
             diagnostic: UNKNOWN_FIELD,
             args: { owner, member, allowed },
@@ -3364,7 +3368,7 @@ function warnUnknownMaskMembers(
     allowed: readonly string[],
 ): void {
     for (const member of Object.keys(value)) {
-        if (!allowed.includes(member)) warnMaskSlotMember(owner, member, allowed);
+        if (!allowed.includes(member)) warnUnknownField(owner, member, allowed);
     }
 }
 
@@ -4070,16 +4074,37 @@ function collectObjectProperty(
         }
         return true;
     }
-    if (own(PROPERTY_MAP, rawKey) !== undefined && 'color' in value) {
-        classes.push(
-            buildColorObjectClass(rawKey, value as { color: string; op?: number | string }, prefix),
-        );
+    // A colour object only when `color` is a string, as `is_color_object` reads it.
+    if (own(PROPERTY_MAP, rawKey) !== undefined && typeof value.color === 'string') {
+        classes.push(colorObjectClass(rawKey, value, prefix));
         return true;
     }
     if (own(PROPERTY_MAP, rawKey) !== undefined) warnPropertyObjectValue(rawKey, value);
     warnOwnedKeyVariantObject(rawKey);
     collectNestedVariant(rawKey, value as SzObject, prefix, classes);
     return true;
+}
+
+/**
+ * The class a colour object writes, naming each member it does not read:
+ * nothing is emitted for one.
+ *
+ * @param key - The sz key holding the object.
+ * @param value - The colour object, its `color` a string.
+ * @param prefix - Variant prefix to prepend.
+ * @returns The class.
+ */
+function colorObjectClass(key: string, value: Record<string, unknown>, prefix: string): string {
+    // Development only, the walk with it: a production bundle drops the whole
+    // block, so a colour object costs no key walk there.
+    if (process.env.NODE_ENV !== 'production') {
+        for (const member of Object.keys(value)) {
+            if (member !== 'color' && member !== 'op') {
+                warnUnknownField(key, member, COLOR_OBJECT_MEMBERS);
+            }
+        }
+    }
+    return buildColorObjectClass(key, value as { color: string; op?: number | string }, prefix);
 }
 
 /** Keys already nudged about an object in variant position (once each). */
@@ -4142,7 +4167,7 @@ const _warnedPropertyObjects = new Set<string>();
 export function __resetSzWarnDedupForTests(): void {
     warnedAlignmentValues.clear();
     warnedMaskLayerValues.clear();
-    warnedMaskSlotMembers.clear();
+    warnedUnknownFields.clear();
     _warnedSpacingSteps.clear();
     _warnedBorderSideStyles.clear();
     _warnedOpacityTokens.clear();
