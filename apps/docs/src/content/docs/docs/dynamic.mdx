@@ -193,15 +193,16 @@ On the server, `dynamic()` returns class names without touching CSSOM. There is 
 
 ## Manifest generation
 
-The build plugin writes the manifest automatically when you use the csszyx Vite or
-Webpack plugin. No extra config needed.
+The Vite and Webpack plugins write the manifest when the build asks for it, with
+the same option on both. See [why it is off by default](#the-manifest-and-why-it-is-off-by-default)
+before you turn it on.
 
 ```ts
-// vite.config.ts — manifest is written automatically in production
+// vite.config.ts
 import csszyx from 'csszyx/vite';
 
 export default defineConfig({
-  plugins: [...csszyx(), tailwindcss(), react()],
+  plugins: [...csszyx({ build: { emitManifest: true } }), tailwindcss(), react()],
 });
 ```
 

@@ -7,7 +7,7 @@
  * map. The CSS asset then flows through the processAssets hook: the manifest is
  * emitted with the map and the owned selector is rewritten to its token.
  */
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -69,7 +69,18 @@ class EmitExtraAssetsPlugin {
     }
 }
 
-async function runWebpack(root: string): Promise<void> {
+/**
+ * Build the fixture with webpack.
+ *
+ * @param root - The fixture root.
+ * @param build - Options for the plugin's `build`; `emitManifest` left out
+ *        builds with its default.
+ * @param build.emitManifest - `build.emitManifest`.
+ */
+async function runWebpack(
+    root: string,
+    build: { emitManifest?: boolean } = { emitManifest: true },
+): Promise<void> {
     const config: Configuration = {
         mode: 'production',
         context: root,
@@ -96,7 +107,11 @@ async function runWebpack(root: string): Promise<void> {
             webpackPlugin({
                 // scanCss registers the CSS as a watched theme dependency,
                 // exercising the theme-deps compilation tap.
-                build: { emitManifest: true, cache: false, scanCss: ['src/style.css'] },
+                build: {
+                    ...build,
+                    cache: false,
+                    scanCss: ['src/style.css'],
+                },
                 production: { mangle: true },
             }) as webpack.WebpackPluginInstance,
         ],
@@ -110,6 +125,37 @@ async function runWebpack(root: string): Promise<void> {
         });
     });
 }
+
+describe('the webpack manifest', () => {
+    /**
+     * Build a one-class fixture and list the output folder.
+     *
+     * @param emitManifest - `build.emitManifest`, or undefined for the default.
+     * @returns The emitted file names.
+     */
+    async function outputOf(emitManifest: boolean | undefined): Promise<string[]> {
+        const root = mkdtempSync(join(tmpdir(), 'csszyx-webpack-manifest-'));
+        tempDirs.push(root);
+        mkdirSync(join(root, 'src'), { recursive: true });
+        writeFileSync(join(root, 'src/index.js'), "import './style.css';\n", 'utf8');
+        writeFileSync(
+            join(root, 'src/App.tsx'),
+            'export const App = () => <div sz={{ m: 3 }} />;\n',
+            'utf8',
+        );
+        writeFileSync(join(root, 'src/style.css'), '.m-3 { margin: 0.75rem; }\n', 'utf8');
+        await runWebpack(root, emitManifest === undefined ? {} : { emitManifest });
+        return readdirSync(join(root, 'dist'));
+    }
+
+    it('is not emitted by default, as on Vite', { timeout: WEBPACK_TEST_TIMEOUT_MS }, async () => {
+        expect(await outputOf(undefined)).not.toContain('csszyx-manifest.json');
+    });
+
+    it('is emitted when the build asks for it', { timeout: WEBPACK_TEST_TIMEOUT_MS }, async () => {
+        expect(await outputOf(true)).toContain('csszyx-manifest.json');
+    });
+});
 
 describe('webpack processAssets mangle pass', () => {
     it('mangles owned CSS selectors and emits a manifest carrying the map', {
