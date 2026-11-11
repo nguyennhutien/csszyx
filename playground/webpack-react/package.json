@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "@csszyx/compiler": "workspace:*",
-    "@swc/core": "^1.16.20",
+    "@swc/core": "^1.16.21",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
@@ -34,7 +34,7 @@
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
     "webpack": "^5.112.2",
-    "webpack-cli": "^7.2.3",
+    "webpack-cli": "^7.3.1",
     "webpack-dev-server": "^6.1.0"
   }
 }
