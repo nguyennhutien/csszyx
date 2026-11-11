@@ -29,6 +29,7 @@
  * @module
  */
 import { MERGE_TABLE_MISSING, szReport } from '@csszyx/compiler/report';
+import { CLASS_LIST_SPACE } from '@csszyx/compiler/sz-limits';
 
 import { decodeToken, encodeToken, type MangleBridge, mangleBridge } from './class-codec.js';
 import { getMergeSignatureGeneration, getMergeSignatureTable } from './merge-signatures.js';
@@ -177,7 +178,7 @@ function mergeUncached(inputs: readonly ClassInput[], bridge: MangleBridge | und
         if (!input || typeof input !== 'string') {
             continue;
         }
-        for (const token of input.split(/\s+/)) {
+        for (const token of input.split(CLASS_LIST_SPACE)) {
             if (token) mergeClassToken(token, order, byKey, bridge);
         }
     }

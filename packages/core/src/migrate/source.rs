@@ -28,7 +28,7 @@ use super::dynamic::{
 use super::line_endings::{detect_line_ending, with_line_ending};
 use super::normalize::{normalize_sz_expression, static_key};
 use super::sz_codegen::{sz_expression, sz_html_value, sz_object_literal};
-use super::value::{is_js_whitespace, SzObject};
+use super::value::{is_class_space, is_js_whitespace, SzObject};
 use super::variant_parser::{class_name_to_sz_object_with, tokenize, Lookup};
 use super::verdict::{
     Judge, ServedAnswers, TableVerdict, TableVerdicts, UnderscoreAnswers, UnderscoreQuestion,
@@ -597,7 +597,7 @@ impl<'a> Migration<'_, '_> {
         let existing_keys = keys.clone();
         let range = span_range(attribute.span);
 
-        let trimmed = literal.value.trim_matches(is_js_whitespace);
+        let trimmed = literal.value.trim_matches(is_class_space);
         let converted = class_name_to_sz_object_with(trimmed, self.lookup);
         let mut remaining = converted.keep_in_class_name.clone();
         remaining.extend(converted.unrecognized.iter().cloned());
@@ -706,7 +706,7 @@ fn static_sz(object: &ObjectExpression<'_>) -> SiblingSz {
 /// A static className as the attribute text that replaces it: `sz={{ … }}`,
 /// preceded by the classes that stay in className when there are any.
 fn process_static_string(class_name: &str, lookup: Lookup<'_>) -> Option<(String, Vec<String>)> {
-    let trimmed = class_name.trim_matches(is_js_whitespace);
+    let trimmed = class_name.trim_matches(is_class_space);
     if trimmed.is_empty() {
         return None;
     }
@@ -735,5 +735,25 @@ mod tests {
         assert_eq!(process_static_string("", Lookup::default()), None);
         assert_eq!(process_static_string(" \u{00A0} ", Lookup::default()), None);
         assert_eq!(process_static_string("mystery", Lookup::default()), None);
+    }
+
+    /// A static `className` is a `class` attribute: a NEL joins two names into
+    /// one class that styles nothing, and migrate keeps it so.
+    #[test]
+    fn keeps_a_class_a_nel_joins_in_a_static_class_name() {
+        let options = TransformOptions::default();
+        for jsx in [
+            "export const A = () => <div className=\"p-4\u{0085}m-2\" />;",
+            "export const A = () => <div className=\"\u{0085}p-4\" />;",
+        ] {
+            let result = transform_source(jsx, "A.tsx", &options);
+            assert!(!result.changed, "{jsx:?} became {:?}", result.code);
+        }
+        let control = transform_source(
+            "export const A = () => <div className=\"p-4 m-2\" />;",
+            "A.tsx",
+            &options,
+        );
+        assert!(control.changed);
     }
 }

@@ -121,6 +121,17 @@ describe('setSzClassPrefix', () => {
         expect(szr({ p: 4 })).toContain('tw:p-4');
     });
 
+    it('keeps a class whole that holds a character `\\s` reads as a space', () => {
+        // A BOM is not White_Space, so the engine keeps it inside the class;
+        // the class list is split on the space it is joined with, never `\s`.
+        globals.__csszyx_ssr_mangle_map = { 'tw:content-[a﻿b]': 'a' };
+        setSzClassPrefix('tw');
+
+        expect(_sz({ content: 'a﻿b', p: 4 })).toBe('a tw:p-4');
+        delete globals.__csszyx_ssr_mangle_map;
+        expect(_sz({ content: 'a﻿b' })).toBe('tw:content-[a﻿b]');
+    });
+
     it('looks up the mangled name of the prefixed class', () => {
         globals.__csszyx_ssr_mangle_map = { 'tw:p-4': 'a' };
         setSzClassPrefix('tw');

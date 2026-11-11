@@ -31,6 +31,18 @@ const LANES: ReadonlyArray<readonly [string, Lane]> = [
     ),
 ];
 
+/**
+ * Each code point JavaScript's `\s` or Unicode White_Space holds, as hex: the
+ * two sets differ, and a lane reading the wrong one writes a different class.
+ */
+const SPACE_CANDIDATES: string[] = [];
+for (let code = 0; code <= 0xffff; code++) {
+    const char = String.fromCharCode(code);
+    if (/\s/.test(char) || /\p{White_Space}/u.test(char)) {
+        SPACE_CANDIDATES.push(code.toString(16).toUpperCase().padStart(4, '0'));
+    }
+}
+
 beforeEach(() => {
     __resetSzWarnDedupForTests();
 });
@@ -46,9 +58,48 @@ describe.each(LANES)('a space inside a value — %s', (_name, lower) => {
         [{ content: 'a b' }, 'content-[a_b]'],
         [{ list: 'square inside' }, 'list-[square_inside]'],
         [{ hover: { brightness: 'calc(1 + 0.5)' } }, 'hover:brightness-[calc(1_+_0.5)]'],
+        // Unicode White_Space, the set the engine splits on: a NEL is a space,
+        // a BOM is not, though JavaScript's `\s` holds them the other way.
+        [{ content: 'a\u0085b' }, 'content-[a_b]'],
+        [{ content: 'a\uFEFFb' }, 'content-[a\uFEFFb]'],
+        [{ content: 'a\u0085\u00a0\u3000b' }, 'content-[a_b]'],
     ])('%j writes %s', (sz, className) => {
         expect(lower(sz)).toBe(className);
     });
+
+    // Every character either set holds, so the lanes read one set: the
+    // engine's `char::is_whitespace` is Unicode White_Space.
+    it.each(SPACE_CANDIDATES)('U+%s inside a value is a space only if White_Space', hex => {
+        const char = String.fromCodePoint(Number.parseInt(hex, 16));
+        const expected = /\p{White_Space}/u.test(char) ? 'content-[a_b]' : `content-[a${char}b]`;
+        expect(lower({ content: `a${char}b` })).toBe(expected);
+    });
+
+    // The same set at either end of a value, inside an arbitrary value, a
+    // background image and an arbitrary variant: each reads it on its own.
+    it.each(SPACE_CANDIDATES)(
+        'U+%s is whitespace only if White_Space, wherever it is read',
+        hex => {
+            const c = String.fromCodePoint(Number.parseInt(hex, 16));
+            const space = /\p{White_Space}/u.test(c);
+            // `content` keeps a space at either end: it is part of the string.
+            expect(lower({ content: `${c}a${c}` })).toBe(
+                space ? 'content-[_a_]' : `content-[${c}a${c}]`,
+            );
+            expect(lower({ willChange: `${c}a${c}b${c}` })).toBe(
+                space ? 'will-change-[a_b]' : `will-change-[${c}a${c}b${c}]`,
+            );
+            expect(lower({ bgImg: `${c}none${c}` })).toBe(
+                space ? 'bg-none' : `bg-[url(${c}none${c})]`,
+            );
+            expect(lower({ css: { willChange: `${c}a${c}b${c}` } })).toBe(
+                space ? '[will-change:a_b]' : `[will-change:${c}a${c}b${c}]`,
+            );
+            expect(lower({ [`[&${c}>span]`]: { p: 4 } })).toBe(
+                space ? '[&>span]:p-4' : `[&${c}>span]:p-4`,
+            );
+        },
+    );
 
     it.each([[{ display: 'flex hidden' }], [{ position: 'absolute top' }], [{ bgRepeat: 'a b' }]])(
         '%j writes one class, never several',

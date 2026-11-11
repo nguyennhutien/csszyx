@@ -15,6 +15,7 @@
 
 import { CsszyxError } from '@csszyx/compiler/errors';
 import { LITE_SZ_OBJECT, szRender } from '@csszyx/compiler/report';
+import { CLASS_LIST_SPACE } from '@csszyx/compiler/sz-limits';
 
 // Inlined at build time — NOT a runtime dep. See tsup.config.ts.
 export { __szBoolClass } from '@csszyx/compiler/bool-class';
@@ -125,7 +126,8 @@ export function _szMerge(...classes: SzStringInput[]): string {
         if (!cls) {
             continue;
         }
-        for (const token of (cls as string).split(' ')) {
+        // Where the core merge and the engine split a list.
+        for (const token of (cls as string).split(CLASS_LIST_SPACE)) {
             if (token && !seen.has(token)) {
                 seen.add(token);
                 result.push(token);

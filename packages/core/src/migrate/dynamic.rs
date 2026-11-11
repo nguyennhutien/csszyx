@@ -14,7 +14,7 @@ use oxc_ast::ast::{
 use oxc_span::GetSpan;
 
 use super::sz_codegen::{sz_expression, sz_object_literal};
-use super::value::{is_js_whitespace, SzObject};
+use super::value::{is_class_space, SzObject};
 use super::variant_parser::{class_name_to_sz_object_with, Lookup};
 
 /// Function names read as className composition helpers.
@@ -191,7 +191,7 @@ pub fn handle_template_literal(
         .collect::<Vec<_>>()
         .join(" ");
     let trimmed_static = static_text
-        .split(is_js_whitespace)
+        .split(is_class_space)
         .filter(|word| !word.is_empty())
         .collect::<Vec<_>>()
         .join(" ");
@@ -305,8 +305,8 @@ fn ternary_inner(
         return None;
     };
     let condition = slice(source, conditional.test.span());
-    let consequent = consequent.value.trim_matches(is_js_whitespace);
-    let alternate = alternate.value.trim_matches(is_js_whitespace);
+    let consequent = consequent.value.trim_matches(is_class_space);
+    let alternate = alternate.value.trim_matches(is_class_space);
 
     if alternate.is_empty() {
         if consequent.is_empty() {
@@ -361,7 +361,7 @@ fn logical_and_inner(
 /// A class string as an object literal, or `None` when nothing in it is
 /// recognised.
 fn migrate_string(class_name: &str, lookup: Lookup<'_>) -> Option<(String, Vec<String>)> {
-    let trimmed = class_name.trim_matches(is_js_whitespace);
+    let trimmed = class_name.trim_matches(is_class_space);
     if trimmed.is_empty() {
         return None;
     }

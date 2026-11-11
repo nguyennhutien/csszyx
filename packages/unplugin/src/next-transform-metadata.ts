@@ -1,7 +1,7 @@
 /* eslint-disable jsdoc/require-param-description */
 import { createHash } from 'node:crypto';
 
-import { type SourceTransformResult, transform } from '@csszyx/compiler';
+import { CLASS_LIST_SPACE, type SourceTransformResult, transform } from '@csszyx/compiler';
 import { collectMergeCallClassNames, lexicalRegionEnd } from './authored-class-scanner.js';
 import { emittedClassSites } from './dead-class.js';
 import type {
@@ -254,7 +254,7 @@ function collectTransformClasses(
     result: ReturnType<typeof transform>,
     discoveredClasses: Set<string>,
 ): void {
-    for (const className of result.className.split(/\s+/).filter(Boolean)) {
+    for (const className of result.className.split(CLASS_LIST_SPACE).filter(Boolean)) {
         discoveredClasses.add(className);
     }
 }

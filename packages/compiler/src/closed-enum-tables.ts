@@ -151,14 +151,61 @@ export function bareClosedEnumClass(key: string, value: string): string {
     return oneClass(affix ? `${affix.prefix}${value}${affix.suffix}` : value);
 }
 
+/** One character of Unicode White_Space, the set the engine splits on. */
+const WHITE_SPACE = /\p{White_Space}/u;
+
+/** A run of Unicode White_Space. */
+const WHITE_SPACE_RUN = /\p{White_Space}+/u;
+
 /**
  * A class with whitespace in it, as one class: its runs of whitespace become
- * `_`, as Tailwind reads them. Every lowered class goes through it, and so
- * does the class a diagnostic names, so the two never differ.
+ * `_`, as Tailwind reads them, and a run at either end goes. Every lowered
+ * class goes through it, and so does the class a diagnostic names, so the two
+ * never differ.
+ *
+ * Whitespace is Unicode White_Space, as `split_whitespace` in `lower.rs`
+ * reads it: JavaScript's `\s` also takes a BOM (U+FEFF) and leaves out a NEL
+ * (U+0085), so the two lanes wrote different classes for either. Linear in
+ * the class's length.
  *
  * @param className - The class as lowered.
  * @returns The class as emitted.
  */
 export function oneClass(className: string): string {
-    return /\s/.test(className) ? className.trim().split(/\s+/).join('_') : className;
+    if (!WHITE_SPACE.test(className)) return className;
+    return className
+        .split(WHITE_SPACE_RUN)
+        .filter(part => part !== '')
+        .join('_');
+}
+
+/**
+ * The value without the White_Space at either end, as `str::trim` in the
+ * engine reads it; `String.prototype.trim` reads `\s`. Every White_Space code
+ * point is in the BMP, so one UTF-16 unit is one character here. Linear in
+ * the value's length, with no regex to backtrack.
+ *
+ * @param value - The value as written.
+ * @returns The value trimmed.
+ */
+export function trimWhiteSpace(value: string): string {
+    let start = 0;
+    let end = value.length;
+    while (start < end && WHITE_SPACE.test(value[start] as string)) start++;
+    while (end > start && WHITE_SPACE.test(value[end - 1] as string)) end--;
+    return value.slice(start, end);
+}
+
+/** Every White_Space character, for {@link withoutWhiteSpace}. */
+const WHITE_SPACE_ALL = /\p{White_Space}/gu;
+
+/**
+ * The text with every White_Space character dropped, as the engine filters
+ * `char::is_whitespace` out of an arbitrary variant.
+ *
+ * @param text - The text as written.
+ * @returns The text without whitespace.
+ */
+export function withoutWhiteSpace(text: string): string {
+    return text.replace(WHITE_SPACE_ALL, '');
 }

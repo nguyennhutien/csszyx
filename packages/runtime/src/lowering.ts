@@ -16,6 +16,7 @@
  */
 
 import {
+    CLASS_LIST_SPACE,
     deepMergeSzObjects,
     transform as rawTransform,
     type SzObject,
@@ -76,7 +77,8 @@ export function lowerSz(szProp: object | readonly object[]): string {
         prefix === null
             ? unprefixed
             : unprefixed
-                  .split(/\s+/)
+                  // A class may hold a character `\s` matches (a BOM).
+                  .split(CLASS_LIST_SPACE)
                   .filter(Boolean)
                   .map(name => `${prefix}:${name}`)
                   .join(' ');
@@ -94,7 +96,7 @@ export function lowerSz(szProp: object | readonly object[]): string {
 
     if (activeMangleMap) {
         return className
-            .split(/\s+/)
+            .split(CLASS_LIST_SPACE)
             .filter(Boolean)
             .map((c: string) => activeMangleMap[c] || c)
             .join(' ');

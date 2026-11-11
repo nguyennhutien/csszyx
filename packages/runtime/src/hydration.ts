@@ -19,6 +19,7 @@ import {
     szReport,
     WEB_CRYPTO_UNAVAILABLE,
 } from '@csszyx/compiler/report';
+import { CLASS_LIST_SPACE } from '@csszyx/compiler/sz-limits';
 
 import { createHydrationMangleMap } from './hydration-map.js';
 import { digestMangleMap, webCryptoUnavailable } from './mangle-checksum.js';
@@ -862,10 +863,17 @@ export function getSSRContext(): SSRContext | null {
  * ```
  */
 export function validateHydrationClass(className: string, expectedClassName: string): boolean {
-    // Normalize both class strings for comparison
-    const normalize = (s: string): string => sortStrings(s.split(/\s+/).filter(Boolean)).join(' ');
+    return sortedClassList(className) === sortedClassList(expectedClassName);
+}
 
-    return normalize(className) === normalize(expectedClassName);
+/**
+ * A class list in one order, split where the engine splits one.
+ *
+ * @param classes - A class list.
+ * @returns Its classes, sorted and joined with a space.
+ */
+function sortedClassList(classes: string): string {
+    return sortStrings(classes.split(CLASS_LIST_SPACE).filter(Boolean)).join(' ');
 }
 
 /**

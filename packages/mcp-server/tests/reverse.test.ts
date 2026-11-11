@@ -148,3 +148,24 @@ describe("the project's Tailwind prefix", () => {
         );
     });
 });
+
+describe('a class holding a BOM', () => {
+    // The engine keeps a BOM inside a class, and the round trip reads the
+    // input and the emitted list as one class each, as the engine does.
+    it('round-trips whole', async () => {
+        const data = await reverse('content-[a﻿b] p-4');
+        expect(data.roundTrip).toEqual({
+            ok: true,
+            emitted: expect.stringContaining('content-[a﻿b]'),
+        });
+    });
+
+    // A browser splits a class attribute on ASCII whitespace: a NEL joins two
+    // names into one class, which reverse leaves unrecognised, as migrate does.
+    it('keeps a class a NEL joins as one class', async () => {
+        const data = await reverse('p-4\u0085m-2');
+        expect(data.szObject).toEqual({});
+        expect(data.unrecognized).toEqual(['p-4\u0085m-2']);
+        expect(data.roundTrip.ok).toBe(true);
+    });
+});

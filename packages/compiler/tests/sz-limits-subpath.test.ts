@@ -63,7 +63,11 @@ describe('@csszyx/compiler/sz-limits subpath', () => {
     it('exports exactly the limits, and nothing that drags the transform in', async () => {
         const { limits } = await loadEntries();
 
+        // `CLASS_LIST_SPACE` and `HTML_CLASS_SPACE` are regex constants: where a
+        // class list splits, and nothing of the transform.
         expect(Object.keys(limits).sort()).toEqual([
+            'CLASS_LIST_SPACE',
+            'HTML_CLASS_SPACE',
             'MAX_SZ_DEPTH',
             'SzDepthError',
             'isForbiddenSzKey',
@@ -79,6 +83,8 @@ describe('@csszyx/compiler/sz-limits subpath', () => {
         expect(limits.SzDepthError).toBe(browser.SzDepthError);
         expect(limits.isForbiddenSzKey).toBe(browser.isForbiddenSzKey);
         expect(limits.MAX_SZ_DEPTH).toBe(browser.MAX_SZ_DEPTH);
+        expect(limits.CLASS_LIST_SPACE).toBe(browser.CLASS_LIST_SPACE);
+        expect(limits.HTML_CLASS_SPACE).toBe(browser.HTML_CLASS_SPACE);
     });
 
     // `SzDepthError` extends the error class and words its message from the

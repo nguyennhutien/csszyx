@@ -16,6 +16,7 @@
  */
 
 import {
+    CLASS_LIST_SPACE,
     isForbiddenSzKey,
     MAX_SZ_DEPTH,
     SzDepthError,
@@ -775,7 +776,7 @@ function tokenBase(token: string, bridge: MangleBridge | undefined): string {
  * @returns The non-empty class tokens.
  */
 function tokenize(className: string): string[] {
-    return className.split(/\s+/).filter(Boolean);
+    return className.split(CLASS_LIST_SPACE).filter(Boolean);
 }
 
 /**

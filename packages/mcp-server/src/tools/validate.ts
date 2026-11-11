@@ -22,6 +22,7 @@
 import { projectAnswers } from '@csszyx/cli';
 import {
     BOOLEAN_SHORTHANDS,
+    CLASS_LIST_SPACE,
     KNOWN_SPECIAL_PROPERTIES,
     PROPERTY_MAP,
     REMOVED_BOOLEAN_SUGAR,
@@ -412,7 +413,8 @@ function validation(input: ValidateInput): {
         transformResult: transformResult
             ? {
                   className: transformResult.className,
-                  classCount: transformResult.className.split(/\s+/).filter(Boolean).length,
+                  classCount: transformResult.className.split(CLASS_LIST_SPACE).filter(Boolean)
+                      .length,
               }
             : undefined,
         transformError: transformError ?? undefined,

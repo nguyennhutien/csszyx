@@ -39,7 +39,7 @@ import {
     SPLIT_SHORTHAND_KEYS,
     SUGGESTION_MAP,
 } from './sz-key-tables.js';
-import { MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
+import { CLASS_LIST_SPACE, MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
 import type { SzProps } from './types/sz-props.js';
 
 // The tables the diagnostic renderer reads too live in leaf modules, so the
@@ -66,7 +66,13 @@ export {
 } from './sz-key-tables.js';
 // Re-exported so the runtime (which imports from `@csszyx/compiler/browser`,
 // i.e. this module) shares one SzDepthError type, depth limit, and key guard.
-export { isForbiddenSzKey, MAX_SZ_DEPTH, SzDepthError } from './sz-limits.js';
+export {
+    CLASS_LIST_SPACE,
+    HTML_CLASS_SPACE,
+    isForbiddenSzKey,
+    MAX_SZ_DEPTH,
+    SzDepthError,
+} from './sz-limits.js';
 
 // Imported here, below the `export … from` block, on purpose: an app bundle
 // places the chunk `closed-enum-tables.js` and `sz-key-tables.js` build into
@@ -81,6 +87,8 @@ import {
     CLOSED_ENUM_CLASSES,
     CLOSED_ENUM_VALUE_MOVES,
     oneClass,
+    trimWhiteSpace,
+    withoutWhiteSpace,
 } from './closed-enum-tables.js';
 // The registry's words for every line this module prints, the reporter that
 // fills them in development and the suggestion an unknown key's line names
@@ -1059,7 +1067,7 @@ function isArbitraryVariant(key: string): boolean {
  */
 export function normalizeArbitraryVariant(key: string): string {
     // "[& > span]" → "[&>span]"
-    return key.replace(/\s+/g, '');
+    return withoutWhiteSpace(key);
 }
 
 /**
@@ -1236,7 +1244,7 @@ function warnBracketedValue(key: string, value: string, inner: string): void {
  * @returns the value with whitespace runs replaced by underscores
  */
 function normalizeDeclarationValue(value: string): string {
-    return value.trim().replace(/\s+/g, '_');
+    return oneClass(value);
 }
 
 // Properties that support native fraction values (e.g. w-1/2) without brackets
@@ -3075,7 +3083,7 @@ function formatGradientPosition(key: string, value: string): string {
 
 /** Formats background image keywords, gradients, variables, and URLs. */
 function formatBackgroundImage(rawValue: string): string {
-    const value = rawValue.trim();
+    const value = trimWhiteSpace(rawValue);
     if (value === 'none') return 'bg-none';
     // A CSS-wide keyword is the property's value, never a URL: the `image:`
     // hint sets `background-image` to it, as `format_bg_img_string` does.
@@ -4558,7 +4566,7 @@ export function isValidSzProp(szProp: unknown): szProp is SzObject {
  * @returns {string} The normalized className string
  */
 export function normalizeClassName(className: string): string {
-    return className.split(/\s+/).filter(Boolean).join(' ');
+    return className.split(CLASS_LIST_SPACE).filter(Boolean).join(' ');
 }
 
 /**

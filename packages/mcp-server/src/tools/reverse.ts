@@ -20,7 +20,7 @@
  */
 
 import { classNameToSzObject, type ProjectAnswers, projectAnswers } from '@csszyx/cli';
-import { sortStrings, transform } from '@csszyx/compiler';
+import { CLASS_LIST_SPACE, HTML_CLASS_SPACE, sortStrings, transform } from '@csszyx/compiler';
 import { z } from 'zod';
 
 import { projectNote } from './project-note.js';
@@ -77,7 +77,7 @@ export function roundTrip(
         console.warn = originalWarn;
     }
     const want = sortStrings([...recognized]);
-    const got = sortStrings(emitted.split(/\s+/).filter(Boolean));
+    const got = sortStrings(emitted.split(CLASS_LIST_SPACE).filter(Boolean));
     const ok = want.length === got.length && want.every((cls, i) => cls === got[i]);
     return { ok, emitted };
 }
@@ -145,7 +145,11 @@ export async function handleReverse(
     const { szObject, unrecognized, tableVerdicts, skipped, unanswered, underscoresSkipped } =
         await convert(classes, prefix, project);
     const unrecognizedSet = new Set(unrecognized);
-    const recognized = classes.split(/\s+/).filter(cls => cls && !unrecognizedSet.has(cls));
+    // Split where the migrate engine splits a class attribute, as a browser
+    // does: an NBSP or a NEL joins two names into one class.
+    const recognized = classes
+        .split(HTML_CLASS_SPACE)
+        .filter(cls => cls && !unrecognizedSet.has(cls));
 
     return {
         content: [
