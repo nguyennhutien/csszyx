@@ -212,7 +212,13 @@ project is elsewhere, or to compile under another prefix:
 The result echoes the `classPrefix` it used. When none was given and none was
 read, a `note` says why, since the classes are then in the unprefixed
 vocabulary: no stylesheet sets one, or the project's stylesheets set different
-prefixes or did not compile.
+prefixes or did not compile. A `classPrefix` given that differs from the one
+the project's build lowers under gets a `note` too, naming that prefix: the
+classes shown are not the ones the build writes. A project that sets no prefix, or whose prefix could not be
+read, gets no such note: a given `classPrefix` there previews another project.
+
+`csszyx_validate` shows `transformResult.className` as the build writes it,
+under the prefix the project sets.
 
 The preview does not read the project's stylesheet, so it cannot tell which
 class covers which. A build can: it drops a Tailwind class that a later one on

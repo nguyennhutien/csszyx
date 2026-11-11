@@ -973,8 +973,11 @@ export const SIZE_BUDGETS = [
         // Measured 13,382. 14,550 on 2026-11-09, measured 14,268: the tools
         // ask the project's Tailwind about an `_` in a value
         // (`csszyx_validate`, `csszyx_compile_preview`) and say when
-        // `csszyx_migrate` and `csszyx_reverse` could not.
-        maxGzipBytes: 14_550,
+        // `csszyx_migrate` and `csszyx_reverse` could not. 14,900 on
+        // 2026-11-11, measured 14,598 with the other 0.18.1 changes merged
+        // (14,482 alone): the preview names a classPrefix the build does not
+        // lower under, and validate shows the engine's prefixed classes.
+        maxGzipBytes: 14_900,
     },
     {
         name: '@csszyx/vue-adapter `.`, loaded by Node',

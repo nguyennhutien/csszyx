@@ -171,6 +171,19 @@ function noPrefixNote(cwd: string, unread: string | null): string {
 }
 
 /**
+ * The note for a classPrefix the project's stylesheets do not set.
+ *
+ * @param given - The classPrefix given, `''` for none.
+ * @param set - The prefix the project's build lowers under.
+ * @returns The note.
+ */
+function otherPrefixNote(given: string, set: string): string {
+    const what =
+        given === '' ? 'An empty classPrefix was given' : `classPrefix \`${given}\` was given`;
+    return `${what}, and this project's build lowers its classes under \`${set}\`: the classes above are not the ones it writes. Leave classPrefix out to see those; when the preview is for another project, this is expected.`;
+}
+
+/**
  * Compile a source module and report what csszyx made of it.
  *
  * The prefix is the one given, else the one the project's stylesheets set
@@ -201,6 +214,11 @@ export async function handleCompilePreview(
             ? await answers.prefix()
             : { prefix: input.classPrefix, unread: null };
     const classPrefix = read.prefix;
+    // A prefix given that the project does not set shows classes it serves
+    // nothing for: said beside them.
+    // A project whose prefix cannot be read gets no such note.
+    const set = input.classPrefix === undefined ? read : await answers.prefix();
+    const given = input.classPrefix === undefined || set.unread !== null ? null : input.classPrefix;
     const { result, warnings } = compileWithDiagnostics(input.source, filename, classPrefix);
     // The build names an `_` its Tailwind reads as a space; a preview asked
     // before the code is written says so too, from the same stylesheets.
@@ -238,6 +256,11 @@ export async function handleCompilePreview(
                         // holds two or more classes can lose one to it.
                         ...(mergesSomewhere(result) ? { mergeNote: MERGE_NOTE } : {}),
                         ...(classPrefix === null ? { note: noPrefixNote(cwd, read.unread) } : {}),
+                        // Only where the project sets a prefix: with none, a given
+                        // one previews another project, as the schema invites.
+                        ...(given !== null && set.prefix !== null && given !== set.prefix
+                            ? { note: otherPrefixNote(given, set.prefix) }
+                            : {}),
                         ...(underscore.skipped === null
                             ? {}
                             : { underscoreNote: underscoreUncheckedNote(underscore.skipped) }),
