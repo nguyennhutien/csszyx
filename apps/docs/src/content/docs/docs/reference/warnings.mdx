@@ -682,7 +682,7 @@ class that produces no CSS; the runtime does not judge it.
 
 | Message | Notes |
 | --- | --- |
-| ``[csszyx] unknown-field: `{owner}` has no field `{member}`, and nothing is emitted for it.`` — help: `` `{owner}` takes `{ {allowed} }`. `` | **browser too**. Catches `maskLinear: { form: … }` for `from`. |
+| ``[csszyx] unknown-field: `{owner}` has no field `{member}`, and nothing is emitted for it.`` — help: `` `{owner}` takes `{ {allowed} }`. `` | **browser too**. Catches `maskLinear: { form: … }` for `from`, and a colour object's member other than `color` and `op`: `ring: { width: 2, color: 'rose-500' }` writes `ring-rose-500` and names `width`, which goes on its own key (`ring: 2`). |
 | ``[csszyx] moved-value: `mask: '{value}'` names a gradient layer, which moved to `{key}`, and nothing is emitted for it.`` — help: ``write this layer on `{key}`; `mask` takes only `none`, a `url()` or a CSS variable.`` | build, **browser too**, production too, with the kind `moved-value`: nothing is emitted for the value. A trailing `!` is left out of it. See [Effects & Filters](/docs/reference/effects/). |
 
 ## szv

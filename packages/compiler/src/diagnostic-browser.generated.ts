@@ -41,7 +41,7 @@ export const PROPERTY_OBJECT: SzBrowserDiagnostic<SzDiagnosticArgs['property-obj
 /** `non-variant-object`: An object on a csszyx-owned key that is not a variant. */
 export const NON_VARIANT_OBJECT: SzBrowserDiagnostic<SzDiagnosticArgs['non-variant-object']> = {"id":"non-variant-object","args":"key","text":"`{key}` is not a variant, so its object emits `{key}:` classes that produce no CSS.","help":"a `--*` key takes a declaration value; `container` takes `true`."};
 
-/** `unknown-field`: A field a structured value (a mask layer) does not take. */
+/** `unknown-field`: A field a structured value (a mask layer, a colour object) does not take. */
 export const UNKNOWN_FIELD: SzBrowserDiagnostic<SzDiagnosticArgs['unknown-field']> = {"id":"unknown-field","args":"owner member allowed","joiners":{"allowed":", "},"text":"`{owner}` has no field `{member}`, and nothing is emitted for it.","help":"`{owner}` takes `{ {allowed} }`."};
 
 /** `moved-value`: A value that moved to another key, with the key to write. */

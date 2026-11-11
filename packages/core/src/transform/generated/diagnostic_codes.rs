@@ -33,7 +33,7 @@ pub enum DiagnosticCode {
     PropertyObject,
     /// An object on a csszyx-owned key that is not a variant.
     NonVariantObject,
-    /// A field a structured value (a mask layer) does not take.
+    /// A field a structured value (a mask layer, a colour object) does not take.
     UnknownField,
     /// A runtime value on a key with no CSS-variable utility.
     RuntimeValue,
@@ -479,7 +479,7 @@ pub mod issue {
         )
     }
 
-    /// `unknown-field`: A field a structured value (a mask layer) does not take.
+    /// `unknown-field`: A field a structured value (a mask layer, a colour object) does not take.
     #[must_use]
     #[inline]
     pub fn unknown_field(

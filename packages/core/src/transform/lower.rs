@@ -1058,6 +1058,56 @@ pub(crate) fn collect_unknown_mask_slot_members(
     }
 }
 
+/// The members a colour object reads. Mirrors `COLOR_OBJECT_MEMBERS` in
+/// `transform-core.ts`.
+#[cfg(feature = "native-engine")]
+const COLOR_OBJECT_MEMBERS: [&str; 2] = ["color", "op"];
+
+/// Collect colour-object members the lowering does not read.
+///
+/// A colour object (`{ color, op }`) writes one class from those two; any other
+/// member writes nothing, so `ring: { width: 2, color }` lost the width
+/// without a word. Reported as the field a structured value does not take, as
+/// a mask slot's stray member is. Descends like the lowering does.
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_unknown_color_object_members(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, String, Vec<String>, u32)>,
+) {
+    for property in &object.properties {
+        let StaticSzValue::Object(nested) = &property.value else {
+            continue;
+        };
+        // In the lowering's order: a mask slot (its stops hold `color` beside
+        // `at`, and `collect_unknown_mask_slot_members` checks them), `css`
+        // and `bgImg` are read before a colour object is.
+        if mask_slot_members(&property.key).is_some()
+            || matches!(property.key.as_str(), "css" | "bgImg")
+        {
+            continue;
+        }
+        if !is_color_object(&property.key, nested) {
+            for_each_sz_object_in(&property.key, nested, &mut |object| {
+                collect_unknown_color_object_members(object, out);
+            });
+            continue;
+        }
+        for entry in &nested.properties {
+            if !COLOR_OBJECT_MEMBERS.contains(&entry.key.as_str()) {
+                out.push((
+                    property.key.clone(),
+                    entry.key.clone(),
+                    COLOR_OBJECT_MEMBERS
+                        .iter()
+                        .map(|member| (*member).to_string())
+                        .collect(),
+                    entry.span.start,
+                ));
+            }
+        }
+    }
+}
+
 /// `{ color, op }` form. The lowering falls through to variant handling and
 /// emits classes like `p:bg-red-500` — `p:` matches no Tailwind variant, so
 /// the styles silently generate no CSS. Reports the first nested keys so the
@@ -6468,11 +6518,82 @@ mod tests {
     }
 
     #[cfg(feature = "native-engine")]
+    fn color_member_hits(object: &StaticSzObject) -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        super::collect_unknown_color_object_members(object, &mut out);
+        out.into_iter()
+            .map(|(owner, member, allowed, _offset)| {
+                assert_eq!(allowed, ["color", "op"]);
+                (owner, member)
+            })
+            .collect()
+    }
+
+    /// A colour object reads `color` and `op`; any other member is named, at
+    /// any depth, and only on a colour object: a mask stop, `bgImg` and an
+    /// object whose `color` is not a string are not one. Mirrors the
+    /// TypeScript check in `collectObjectProperty`.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn names_a_colour_object_member_it_does_not_read() {
+        let color = || property("color", StaticSzValue::String("rose-500".into()));
+        let named = StaticSzObject {
+            properties: vec![
+                property(
+                    "ring",
+                    object(vec![property("width", StaticSzValue::Number(2.0)), color()]),
+                ),
+                property(
+                    "hover",
+                    object(vec![property(
+                        "bg",
+                        object(vec![color(), property("op", StaticSzValue::Number(50.0))]),
+                    )]),
+                ),
+            ],
+        };
+        assert_eq!(
+            color_member_hits(&named),
+            [("ring".to_string(), "width".to_string())]
+        );
+
+        let silent = StaticSzObject {
+            properties: vec![
+                property(
+                    "maskLinear",
+                    object(vec![property(
+                        "from",
+                        object(vec![
+                            property("at", StaticSzValue::String("20%".into())),
+                            color(),
+                        ]),
+                    )]),
+                ),
+                property(
+                    "bgImg",
+                    object(vec![
+                        property("gradient", StaticSzValue::String("linear".into())),
+                        color(),
+                    ]),
+                ),
+                property(
+                    "bg",
+                    object(vec![
+                        property("color", StaticSzValue::Number(5.0)),
+                        property("size", StaticSzValue::String("x".into())),
+                    ]),
+                ),
+            ],
+        };
+        assert_eq!(color_member_hits(&silent), Vec::<(String, String)>::new());
+    }
+
+    #[cfg(feature = "native-engine")]
     #[test]
     fn flags_an_unknown_member_of_each_slot() {
         // A typo inside a slot emits NOTHING at lowering, so the collector is
         // the only thing standing between the author and a silently missing
-        // mask. Mirrors the TypeScript `warnMaskSlotMember` allowlists.
+        // mask. Mirrors the TypeScript `warnUnknownField` allowlists.
         let linear = StaticSzObject {
             properties: vec![property(
                 "maskLinear",
