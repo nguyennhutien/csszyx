@@ -864,8 +864,10 @@ export const SIZE_BUDGETS = [
         // a space, and its report, which `csszyx check` and the Next commands
         // import from here. 23,000 on 2026-11-09, measured 22,696: the same
         // comparison reads facts through one helper and splits whitespace as
-        // the engine does.
-        maxGzipBytes: 23_000,
+        // the engine does. 23,700 on 2026-11-11, measured 23,386: the
+        // readings per stylesheet prefix that `csszyx migrate` and the MCP
+        // tools share (`underscore-roots.ts`).
+        maxGzipBytes: 23_700,
     },
     {
         name: '@csszyx/unplugin `./next-turbo-loader`, loaded by Node',

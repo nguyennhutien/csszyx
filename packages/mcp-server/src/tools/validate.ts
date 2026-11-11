@@ -350,7 +350,7 @@ export async function handleValidateInProject(
     const answers = projectAnswers(context.cwd ?? process.cwd());
     const { prefix } = await answers.prefix();
     const result = engineResult(input.sz, prefix);
-    const underscore = await underscoreSpaceAnswers(result, answers, PREVIEW_FILE);
+    const underscore = await underscoreSpaceAnswers(result, answers, PREVIEW_FILE, prefix);
     const found = underscore.found.map(({ key, value, className, literal, spaced, escaped }) =>
         toolDiagnostic({
             code: 'underscore-space',

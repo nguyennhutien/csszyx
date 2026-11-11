@@ -77,6 +77,12 @@ export {
     suppressedAdvisoryMessage,
 } from './transform-diagnostics.js';
 export {
+    bareOf,
+    type UnderscoreRoot,
+    underscoreReadingsPerRoot,
+    underscoreSpaceVerdictsPerRoot,
+} from './underscore-roots.js';
+export {
     reportUnderscoreSpaces,
     type UnderscoreFact,
     type UnderscoreSite,
@@ -85,6 +91,4 @@ export {
     underscoreSpaceFindings,
     underscoreSpaceMessage,
     underscoreSpaceProbes,
-    underscoreSpaceReadings,
-    underscoreSpaceVerdicts,
 } from './underscore-space.js';
