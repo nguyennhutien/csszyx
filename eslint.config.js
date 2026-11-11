@@ -172,7 +172,11 @@ export default [
             'jsdoc/check-param-names': 'error',
             'jsdoc/check-tag-names': 'error',
             'jsdoc/check-types': 'error',
-            'jsdoc/require-param': 'error',
+            // Report a missing `@param`, never write one: the fixer inserts the
+            // tag with no description (`@param spaced.values`), which
+            // `require-param-description` then rejects, so a commit's
+            // `eslint --fix` left junk lines in the file and failed anyway.
+            'jsdoc/require-param': ['error', { enableFixer: false }],
             'jsdoc/require-param-description': 'error',
             'jsdoc/require-returns': 'error',
             'jsdoc/require-returns-description': 'error',
