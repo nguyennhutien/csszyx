@@ -24,7 +24,7 @@
     "dependencies": {
         "@csszyx/runtime": "workspace:*",
         "@csszyx/unplugin": "workspace:*",
-        "@tailwindcss/postcss": "4.3.3",
+        "@tailwindcss/postcss": "4.3.4",
         "csszyx": "workspace:*",
         "next": "16.4.2",
         "react": "19.2.4",
