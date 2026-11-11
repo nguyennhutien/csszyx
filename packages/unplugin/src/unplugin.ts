@@ -8584,8 +8584,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Emit the files that describe the whole build: the manifest, and the
-     * global variable map when configured.
+     * Emit the files that describe the whole build: the manifest when
+     * `build.emitManifest` asks for it, as the Vite lane does, and the global
+     * variable map when configured.
      *
      * @param compilation The parent compilation.
      * @param compiler Active Webpack compiler.
@@ -8597,10 +8598,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         shouldMangle: boolean,
     ): void {
         const { RawSource } = compiler.webpack.sources;
-        compilation.emitAsset(
-            'csszyx-manifest.json',
-            new RawSource(JSON.stringify(createBundleManifest(shouldMangle))),
-        );
+        if (options.build?.emitManifest === true) {
+            compilation.emitAsset(
+                'csszyx-manifest.json',
+                new RawSource(JSON.stringify(createBundleManifest(shouldMangle))),
+            );
+        }
         if (!shouldEmitGlobalVarMapAsset(globalVarMangleConfig)) return;
         const globalVarMap = createGlobalVarMapAssetSource(
             state.varMangleMap,

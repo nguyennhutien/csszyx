@@ -94,7 +94,9 @@ describe('webpack child compilation', () => {
             },
             plugins: [
                 new ChildCompilePlugin(),
-                webpackPlugin({ build: { cache: false } }) as webpack.WebpackPluginInstance,
+                webpackPlugin({
+                    build: { cache: false, emitManifest: true },
+                }) as webpack.WebpackPluginInstance,
             ],
         };
 
