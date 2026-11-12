@@ -46,7 +46,7 @@ class RawSource {
 
 /** The `compiler.webpack` namespace a webpack 5 compiler carries. */
 const WEBPACK_NAMESPACE = {
-    Compilation: { PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE: 2500 },
+    Compilation: { PROCESS_ASSETS_STAGE_OPTIMIZE: 2500 },
     sources: { RawSource },
     WebpackError: Error,
 };
@@ -55,7 +55,7 @@ const WEBPACK_NAMESPACE = {
  * Prototype of a compilation whose class carries the stage, as webpack's own
  * `Compilation` does: `compilation.constructor` resolves to it.
  */
-const STAGED_COMPILATION = { constructor: { PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE: 1234 } };
+const STAGED_COMPILATION = { constructor: { PROCESS_ASSETS_STAGE_OPTIMIZE: 1234 } };
 
 /** Result of applying the plugin to a recording compiler. */
 interface AppliedPlugin {
@@ -180,10 +180,12 @@ describe('webpack processAssets stage', () => {
         expect(applied.stage).toBe(1234);
     });
 
-    it('falls back to stage 400 when neither the compiler nor the compilation has one', async () => {
+    it('falls back to stage 100 when neither the compiler nor the compilation has one', async () => {
+        // OPTIMIZE: before every minimizer (OPTIMIZE_SIZE, 400) — Next adds its
+        // own ahead of the plugin's — so the class marks are still calls.
         const applied = await applyPlugin({ config });
 
-        expect(applied.stage).toBe(400);
+        expect(applied.stage).toBe(100);
     });
 });
 

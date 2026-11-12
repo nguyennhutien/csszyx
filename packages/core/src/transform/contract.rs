@@ -49,6 +49,10 @@ pub struct TransformOptions {
     /// replaces an earlier one it covers. Absent means nothing is merged.
     #[serde(default)]
     pub merge_table_json: Option<String>,
+    /// Wrap every class string the engine emits in `__szCss(…)`, so a build
+    /// that mangles renames only those (ADR 0034). Off everywhere else.
+    #[serde(default)]
+    pub mark_classes: bool,
 }
 
 /// One exact app-owned global custom-property alias.
@@ -128,6 +132,9 @@ pub struct TransformMetadata {
     /// Whether the result imports the runtime bool-class helper (boolean-only keys).
     #[serde(default)]
     pub uses_bool_class: bool,
+    /// Whether the result calls the runtime class-mark helper `__szCss`.
+    #[serde(default)]
+    pub uses_class_mark: bool,
     /// Producer identity for cache safety.
     pub producer: TransformProducer,
     /// Whether native AST budget protection fired.

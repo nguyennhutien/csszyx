@@ -181,6 +181,7 @@ export interface SzDiagnosticArgs {
     'mangle-global-vars-plan-invalid': { readonly findings: readonly string[] };
     'mangle-map-too-large': { readonly size: number; readonly maxBytes: number };
     'mangle-census-late': { readonly form: 'classes' | 'census-changed'; readonly classes?: readonly string[] };
+    'mangle-mark-missed': { readonly count: number };
     'mangle-hybrid-hazard': { readonly form: 'collision' | 'orphan' | 'selector-renamed' | 'selector-matched'; readonly count: number; readonly names?: readonly string[]; readonly selectors?: readonly string[]; readonly entries?: readonly string[] };
     'merge-hook-late': { readonly className: string };
     'merge-origin-unreadable': { readonly reason: string };
@@ -508,6 +509,7 @@ export type SzDiagnosticId =
     | 'mangle-global-vars-plan-invalid'
     | 'mangle-map-too-large'
     | 'mangle-census-late'
+    | 'mangle-mark-missed'
     | 'mangle-hybrid-hazard'
     | 'merge-hook-late'
     | 'merge-origin-unreadable'

@@ -517,6 +517,11 @@ export const SZ_NODE_DIAGNOSTIC_WORDS: Readonly<Record<string, SzDiagnosticWords
             "census-changed": "let the prescan read every file that uses csszyx: keep it under the project root or a `compileSources` directory, and if `.gitignore` covers it, name it or its folder in the Tailwind stylesheet with `@source`; otherwise, set `production.mangle: false` for this build."
         }
     },
+    "mangle-mark-missed": {
+        "text": "The build could not read {count} class string(s) csszyx marked for renaming, so the browser renames them through the mangle map instead.",
+        "help": "nothing breaks; to rename them in the build, run csszyx before any plugin that rewrites calls to `__szCss`, or report the bundler and its version.",
+        "note": "the build renames a class string only where csszyx marked it with a call to `__szCss`; a call it cannot read stays a call that renames at runtime."
+    },
     "mangle-hybrid-hazard": {
         "text": {
             "collision": "Mangling renamed classes to {count} token(s) that CSS outside csszyx also uses as class names, such as `{names}`, so the renamed elements pick up that CSS and the elements it was written for pick up the csszyx rules.",

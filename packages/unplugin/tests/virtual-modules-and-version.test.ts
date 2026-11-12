@@ -102,6 +102,15 @@ describe('injectNextRuntimeImports remaining helpers', () => {
         expect(result.code).toContain("import { __szBoolClass } from '@csszyx/runtime';");
     });
 
+    it('injects __szCss from the runtime barrel for a marked module', async () => {
+        // The mangle registry is installed in modules importing the barrel, so
+        // a missed mark call still encodes through it at runtime (ADR 0034).
+        const { injectNextRuntimeImports } = await import('../src/next-runtime-injection');
+        const result = injectNextRuntimeImports('export const x = 1;\n', { usesClassMark: true });
+        expect(result.injected).toEqual(['__szCss']);
+        expect(result.code).toContain("import { __szCss } from '@csszyx/runtime';");
+    });
+
     it('only registers the prefix when every requested helper is already imported', async () => {
         const { injectNextRuntimeImports } = await import('../src/next-runtime-injection');
         const code = "import { _sz } from '@csszyx/runtime';\nexport const x = 1;\n";

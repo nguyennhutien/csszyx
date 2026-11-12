@@ -262,6 +262,8 @@ pub struct NativeTransformOptions {
     pub class_prefix: Option<String>,
     /// Which of the file's classes cover which, from the compiled stylesheet.
     pub merge_table_json: Option<String>,
+    /// Wrap every emitted class string in `__szCss(…)` for a mangle build.
+    pub mark_classes: Option<bool>,
 }
 
 /// One exact app-owned global custom-property alias.
@@ -327,6 +329,8 @@ pub struct NativeTransformMetadata {
     pub uses_unit_var: bool,
     /// Whether the result imports the runtime bool-class helper.
     pub uses_bool_class: bool,
+    /// Whether the result calls the runtime class-mark helper `__szCss`.
+    pub uses_class_mark: bool,
     /// Producer identity for cache safety.
     pub producer: String,
     /// Whether native AST budget protection fired.
@@ -444,6 +448,7 @@ pub fn transform_batch_native(
             cross_module_sz_objects_json: options.cross_module_sz_objects_json,
             class_prefix: options.class_prefix,
             merge_table_json: options.merge_table_json,
+            mark_classes: options.mark_classes.unwrap_or(false),
         },
     )
     .map(|results| {
@@ -494,6 +499,7 @@ impl From<TransformResult> for NativeTransformResult {
                 uses_spacing_var: result.metadata.uses_spacing_var,
                 uses_unit_var: result.metadata.uses_unit_var,
                 uses_bool_class: result.metadata.uses_bool_class,
+                uses_class_mark: result.metadata.uses_class_mark,
                 producer: producer_to_js(result.metadata.producer).to_string(),
                 ast_budget_exceeded: result.metadata.ast_budget_exceeded,
                 timings: NativeTransformTimings::from(result.metadata.timings),

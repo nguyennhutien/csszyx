@@ -165,12 +165,16 @@ pub(super) fn transform_file_with_table(
     batch_table: &BatchMergeTable,
 ) -> TransformResult {
     let _class_prefix = super::lower::ClassPrefixScope::enter(options.class_prefix.as_deref());
+    let class_mark = super::class_mark::ClassMarkScope::enter(options.mark_classes);
     let table = batch_table.table.clone();
     let table_problem = batch_table.problem.clone();
     // A pass with a table has already been told which lists cover each other.
     let groups = super::merge::MergeGroupScope::enter(table.is_none());
     let merge_table = super::merge::MergeTableScope::enter(table);
     let mut result = transform_file_in_scopes(file, options);
+    // A class string marked while parsing reaches the code only when the
+    // rewrite ran; a file left as written calls no helper.
+    result.metadata.uses_class_mark = result.metadata.transformed && class_mark.emitted();
     let lists = groups.finish();
     let removed = merge_table.take_removed();
     // A file that emitted nothing, over the AST budget for one, merges nothing.
@@ -285,6 +289,7 @@ fn transform_fast_static_ir_with_options(
             uses_spacing_var: false,
             uses_unit_var: false,
             uses_bool_class: false,
+            uses_class_mark: false,
             producer: TransformProducer::Rust,
             ast_budget_exceeded: false,
             timings: TransformTimings {
@@ -506,6 +511,7 @@ fn transform_static_classes_with_options(
             uses_spacing_var,
             uses_unit_var,
             uses_bool_class,
+            uses_class_mark: false,
             producer: TransformProducer::Rust,
             ast_budget_exceeded: parsed.ast_budget_exceeded,
             timings: TransformTimings {
@@ -1455,6 +1461,7 @@ fn noop_result(file: &TransformFile) -> TransformResult {
             uses_spacing_var: false,
             uses_unit_var: false,
             uses_bool_class: false,
+            uses_class_mark: false,
             producer: TransformProducer::Rust,
             ast_budget_exceeded: false,
             timings: TransformTimings::default(),
@@ -6128,5 +6135,212 @@ mod tests {
             "justify-start items-center not-italic subpixel-antialiased"
         );
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
+    }
+
+    /// The marked output with each mark call replaced by the string it wraps,
+    /// as the bundle pass does with an empty map; a call that sat alone in a
+    /// template placeholder or a `className` expression gives its text back to
+    /// the template or the attribute string the plain output writes.
+    fn unmark(code: &str) -> (String, Vec<String>) {
+        let call = crate::transform::class_mark::CLASS_MARK_CALL;
+        let mut out = String::new();
+        let mut marked = Vec::new();
+        let mut rest = code;
+        while let Some(at) = rest.find(call) {
+            out.push_str(&rest[..at]);
+            let after = &rest[at + call.len()..];
+            let mut stream = serde_json::Deserializer::from_str(after).into_iter::<String>();
+            let classes = stream
+                .next()
+                .expect("a string literal")
+                .expect("valid JSON");
+            let end = stream.byte_offset();
+            assert_eq!(&after[end..=end], ")", "one argument: {after}");
+            let tail = &after[end + 1..];
+            if out.ends_with("${") && tail.starts_with('}') {
+                out.truncate(out.len() - 2);
+                out.push_str(&classes);
+                rest = &tail[1..];
+            } else if out.ends_with("className={(")
+                && tail.starts_with(")}")
+                && !classes.contains('"')
+            {
+                out.truncate(out.len() - 2);
+                out.push('"');
+                out.push_str(&classes);
+                out.push('"');
+                rest = &tail[2..];
+            } else {
+                out.push_str(&after[..end]);
+                rest = tail;
+            }
+            marked.push(classes);
+        }
+        out.push_str(rest);
+        (out, marked)
+    }
+
+    /// Each class in a static `className="…"` the source writes.
+    fn authored_class_names(source: &str) -> Vec<String> {
+        source
+            .split("className=\"")
+            .skip(1)
+            .filter_map(|rest| rest.split('"').next())
+            .flat_map(|value| value.split(' ').map(str::to_owned))
+            .collect()
+    }
+
+    fn transform_marked(source: &str, mark_classes: bool) -> TransformResult {
+        transform_file_with_options(
+            &TransformFile {
+                filename: "/repo/src/App.tsx".into(),
+                source: source.into(),
+            },
+            TransformOptions {
+                mark_classes,
+                ..TransformOptions::default()
+            },
+        )
+    }
+
+    /// The shapes beyond the rewrite lanes that emit a class string: a boolean
+    /// key, a slot map, and a variant table picked with a static selection.
+    const MARK_SHAPES: &[&str] = &[
+        "export const A = ({ on }) => <div sz={{ borderB: on }} />;",
+        "export const A = ({ on }) => <div sz={[{ m: 1 }, { borderB: on }]} />;",
+        "export const A = ({ on }) => <div sz={[{ m: 1 }, on ? { p: 1 } : { p: 2 }]} />;",
+        "export const A = ({ on }) => <div sz={{ p: 2, truncate: on }} />;",
+        "export const A = ({ on }) => <div sz={on ? undefined : { p: 2 }} />;",
+        "export const A = ({ a, b }) => <div sz={a ? { p: 1 } : b ? { p: 2 } : { p: 3 }} />;",
+        // A class holding a backslash: each branch is written as a JS string
+        // that reads back as the class, bare and beside a static key.
+        "export const A = ({ on }) => <div sz={on ? { bg: 'url(a\\\\b)' } : { p: 1 }} />;",
+        "export const A = ({ on }) => <div sz={{ m: 1, bg: on ? 'url(a\\\\b)' : 'red-500' }} />;",
+        "const X = () => <Card sz={{ p: 4 }} szs={{ header: { bg: 'gray-100' }, raw: 'authored' }} />;",
+        "import { szr, szv } from '@csszyx/runtime';\nconst cardSz = szv({ base: { rounded: 'lg' }, variants: { pad: { sm: { p: 2 }, lg: { p: 8 } } } });\nexport const x = szr(cardSz({ pad: 'sm' }));\nexport const y = (pad) => szr(cardSz({ pad }));\n",
+    ];
+
+    /// With marking on, the output is the plain output with every class string
+    /// the engine emitted wrapped in the mark call — nothing else moves, and
+    /// each marked string holds only classes the engine reported or the author
+    /// wrote beside them.
+    #[test]
+    fn marking_wraps_every_emitted_class_string_and_changes_nothing_else() {
+        let mut marked_count = 0;
+        for source in REWRITE_SHAPES.iter().chain(MARK_SHAPES) {
+            let plain = transform_marked(source, false);
+            let marked = transform_marked(source, true);
+            assert!(plain.metadata.transformed, "{source}");
+            assert!(!plain.metadata.uses_class_mark, "{source}");
+            assert!(
+                !plain.code.contains("__szCss"),
+                "marking is off by default: {}",
+                plain.code
+            );
+            let (unmarked, strings) = unmark(&marked.code);
+            assert_eq!(unmarked, plain.code, "{source}\n{}", marked.code);
+            assert!(!strings.is_empty(), "nothing marked: {}", marked.code);
+            assert!(marked.metadata.uses_class_mark, "{source}");
+            assert_eq!(marked.classes, plain.classes, "{source}");
+            // A static class name the author wrote is folded into the marked
+            // string beside `sz`; nothing else that is not a reported class may be.
+            let authored = authored_class_names(source);
+            for class_name in strings.iter().flat_map(|s| s.split(' ')) {
+                assert!(
+                    marked.classes.iter().any(|c| c == class_name)
+                        || authored.iter().any(|c| c == class_name),
+                    "{class_name} is not a class: {}",
+                    marked.code
+                );
+            }
+            // A variant table keeps its names for the runtime registry, so its
+            // classes are reported without a marked string of their own.
+            if !source.contains("szv(") {
+                // A slot the author wrote as a string stays theirs.
+                for class_name in marked
+                    .classes
+                    .iter()
+                    .filter(|c| !source.contains(&format!("'{c}'")))
+                {
+                    assert!(
+                        strings
+                            .iter()
+                            .any(|s| s.split(' ').any(|c| c == class_name)),
+                        "{class_name} was emitted unmarked: {}",
+                        marked.code
+                    );
+                }
+            }
+            marked_count += strings.len();
+        }
+        assert!(marked_count > REWRITE_SHAPES.len() + MARK_SHAPES.len());
+    }
+
+    /// A boolean key names the class for the runtime to look up; it is an
+    /// argument, not a class string, so the rename must never reach it.
+    #[test]
+    fn the_key_of_a_boolean_class_is_never_marked() {
+        let marked = transform_marked(
+            "export const A = ({ on }) => <div sz={{ borderB: on }} />;",
+            true,
+        );
+        assert!(
+            marked
+                .code
+                .contains("__szBoolClass(on, \"borderB\", /*#__PURE__*/__szCss(\"border-b\"))"),
+            "{}",
+            marked.code
+        );
+    }
+
+    /// A slot written as a class string is the author's, and a variant table
+    /// the runtime picks from keeps its names for the registry to encode.
+    #[test]
+    fn authored_slots_and_variant_tables_stay_unmarked() {
+        let marked = transform_marked(MARK_SHAPES[MARK_SHAPES.len() - 2], true);
+        assert!(marked.code.contains("raw: 'authored'"), "{}", marked.code);
+        assert!(
+            marked
+                .code
+                .contains("header: /*#__PURE__*/__szCss(\"bg-gray-100\")"),
+            "{}",
+            marked.code
+        );
+        let szv = transform_marked(MARK_SHAPES[MARK_SHAPES.len() - 1], true);
+        assert!(
+            szv.code
+                .contains("szr(/*#__PURE__*/__szCss(\"rounded-lg p-2\"))"),
+            "{}",
+            szv.code
+        );
+        assert!(
+            szv.code
+                .contains("const __szvT_cardSz = {\"base\":\"rounded-lg\""),
+            "{}",
+            szv.code
+        );
+    }
+
+    /// A mark that opens a JSX expression container is wrapped in parentheses:
+    /// SWC drops an annotation in that position, and the bundle pass finds a
+    /// mark by it.
+    #[test]
+    fn a_mark_alone_in_a_jsx_container_is_parenthesised() {
+        let marked = transform_marked("export const A = () => <div sz={{ p: 4 }} />;", true);
+        assert!(
+            marked
+                .code
+                .contains("className={(/*#__PURE__*/__szCss(\"p-4\"))}"),
+            "{}",
+            marked.code
+        );
+    }
+
+    /// A file with nothing to rewrite has no class string to mark.
+    #[test]
+    fn a_file_without_sz_reports_no_mark() {
+        let marked = transform_marked("export const A = () => <div className=\"p-4\" />;", true);
+        assert!(!marked.metadata.uses_class_mark);
+        assert!(!marked.code.contains("__szCss"));
     }
 }

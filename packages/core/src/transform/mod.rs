@@ -3,6 +3,8 @@
 //! This module defines the stable Rust-side request/result shape shared by the
 //! native engine, NAPI bindings, and JavaScript wrapper.
 
+#[cfg(feature = "native-engine")]
+pub(crate) mod class_mark;
 mod contract;
 #[cfg(feature = "native-engine")]
 pub(crate) mod css_var_hoist_planner;

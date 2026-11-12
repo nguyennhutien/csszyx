@@ -4648,6 +4648,15 @@ export interface TransformSourceCodeOptions {
     mergeTable?: EngineMergeTable;
 
     /**
+     * Wrap every class string the engine emits in `__szCss(…)`, so a build
+     * that mangles renames those strings and no other (ADR 0034). Only the
+     * bundler plugin sets it, and only when the build mangles classes.
+     *
+     * @default false
+     */
+    markClasses?: boolean;
+
+    /**
      * Opt into tiered CSS custom property names for parser paths that support
      * the CSS variable system. Unsupported parser paths must preserve existing
      * `--_sz-*` output until they explicitly port this option.
@@ -4741,6 +4750,8 @@ export interface SourceTransformResult {
     usesUnitVar: boolean;
     /** Whether the source needs the bool-class runtime helper. */
     usesBoolClass: boolean;
+    /** Whether the code calls the `__szCss` class-mark helper. */
+    usesClassMark: boolean;
     /** Classes generated from sz syntax. */
     classes: Set<string>;
     /** Raw className/class strings collected for Tailwind discovery only. */

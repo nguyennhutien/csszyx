@@ -364,12 +364,15 @@ export const SIZE_BUDGETS = [
     // usual ~300 above. 40,350 on 2026-10-27, measured 40,055 (40,029
     // before the branch): the exported tables and the runtime's default config
     // are frozen, so an importer's write cannot change what later code reads.
+    // 40,700 on 2026-11-12, measured 40,381: `__szCss`, the runtime half of
+    // the class marks a mangle build inlines (ADR 0034), and the
+    // `mangle-mark-missed` registry entry.
     {
         name: 'csszyx installed app bundle (runtime + dynamic, compiler bundled)',
         kind: 'installed-app',
         target: 'packages/csszyx',
         imports: ['@csszyx/runtime', '@csszyx/dynamic'],
-        maxGzipBytes: 40_350,
+        maxGzipBytes: 40_700,
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
     // The wasm build of the parser is the fourth surface: not browser code,
@@ -835,7 +838,13 @@ export const SIZE_BUDGETS = [
         // warning with one `@source` per folder or file (ADR 0033). `./vite`
         // and `./webpack` re-export it from the same chunk, 76 gzip bytes
         // each of their own.
-        maxGzipBytes: 119_500,
+        // 122,700 on 2026-11-13, measured 122,370: the bundle pass that
+        // inlines the class marks (with webpack's shortened export callees
+        // and the calls a transformer stripped of their annotation), the
+        // census of names left unmarked, and the `mangle-mark-missed` warning
+        // (ADR 0034); the mangle passes split into named functions to keep
+        // each under the cognitive-complexity limit.
+        maxGzipBytes: 122_700,
         wrappers: ['./vite', './webpack'],
     },
     {
@@ -952,16 +961,18 @@ export const SIZE_BUDGETS = [
         target: 'packages/compiler',
         subpath: './migrate',
         // Measured 27,572. 28,300 on 2026-11-08, measured 27,982: the
-        // `underscore-space` registry entry.
-        maxGzipBytes: 28_300,
+        // `underscore-space` registry entry. 28,600 on 2026-11-12, measured
+        // 28,325: the `mangle-mark-missed` registry entry.
+        maxGzipBytes: 28_600,
     },
     {
         name: '@csszyx/compiler `./report`, loaded by Node',
         kind: 'node-entry',
         target: 'packages/compiler',
         subpath: './report',
-        // Measured 31,045.
-        maxGzipBytes: 31_700,
+        // Measured 31,045. 32,000 on 2026-11-12, measured 31,733: the
+        // `mangle-mark-missed` registry entry.
+        maxGzipBytes: 32_000,
     },
     // The MCP server's bin, which is also its `.` export: an editor starts
     // it for every session.

@@ -145,8 +145,11 @@ describe('vite global variable aliases', () => {
         // authored source. rolldown <=1.0.x (vite 8.0) ignored that contract
         // and kept the authored text; vite 8.1+ enforces it. Restoring the
         // authored source here requires emitting a real map from the sz
-        // transform (tracked as a backlog item).
-        expect(jsMap.sourcesContent?.join('\n')).toContain('className="card bg-(---gz)"');
+        // transform (tracked as a backlog item). The build mangles, so the
+        // class string is the one the compiler marked (ADR 0034).
+        expect(jsMap.sourcesContent?.join('\n')).toContain(
+            'className={(/*#__PURE__*/__szCss("card bg-(---gz)"))}',
+        );
     });
 });
 
@@ -217,6 +220,12 @@ async function runVite(root: string, options: { sourcemap?: boolean } = {}): Pro
                     replacement: requireFromHere.resolve('react-dom/client'),
                 },
                 { find: 'react', replacement: requireFromHere.resolve('react') },
+                // A mangle build imports `__szCss` from the runtime into each
+                // module it marks; the fixture has no node_modules of its own.
+                {
+                    find: /^@csszyx\/runtime$/,
+                    replacement: requireFromHere.resolve('@csszyx/runtime'),
+                },
             ],
         },
         plugins: [

@@ -21,7 +21,8 @@ export type NextRuntimeHelper =
     | '__szColorVar'
     | '__szSpacingVar'
     | '__szUnitVar'
-    | '__szBoolClass';
+    | '__szBoolClass'
+    | '__szCss';
 
 /** Runtime helper usage flags from a compiler transform result. */
 export interface NextRuntimeImportUsage {
@@ -36,6 +37,7 @@ export interface NextRuntimeImportUsage {
     usesSpacingVar?: boolean;
     usesUnitVar?: boolean;
     usesBoolClass?: boolean;
+    usesClassMark?: boolean;
 }
 
 /** Result of runtime helper import injection. */
@@ -79,6 +81,7 @@ export function runtimeHelperGroupsFromUsage(usage: NextRuntimeImportUsage): Run
     if (usage.usesSpacingVar) append('__szSpacingVar');
     if (usage.usesUnitVar) append('__szUnitVar');
     if (usage.usesBoolClass) append('__szBoolClass');
+    if (usage.usesClassMark) append('__szCss');
     return groups;
 }
 

@@ -277,17 +277,18 @@ interface ProductionConfig {
 Mangling rewrites every eligible csszyx-owned class name to a short alias (`z`, `y`, …), so
 the production bundle no longer contains the original utility names. It is **off by
 default**, so a build keeps readable class names — the supported way to verify the CSS a
-build emits — until you set `production: { mangle: true }`. Classes that also appear as static strings or template
-quasis in source-level `class`/`className` attributes or properties (including
-`clsx(...)` expressions) automatically retain their original names, so raw and `sz`
-consumers keep matching the same CSS rule. To check a single `sz` object without a build, run
+build emits — until you set `production: { mangle: true }`. The build renames only the class
+strings csszyx compiled from `sz`; any other string keeps its text, so a data value such as
+`setProperty('display', 'flex')` is never touched. A class you also write yourself — in a
+`className`, a `clsx(...)` argument or key, a variable, a template — keeps its original name
+everywhere, so raw and `sz` consumers keep matching the same CSS rule. To check a single `sz` object without a build, run
 `csszyx explain "{ p: 4, bg: 'blue-500' }"`.
 :::
 
 :::caution[Mangling can clash with literal short class names in a hybrid build]
-Mangling is a **production-only** step, applied at **build time**. Static
-`class`/`className` literals that overlap `sz` output are excluded automatically,
-even when the literal sits inside `clsx(...)`. Hybrid builds can still fail when a
+Mangling is a **production-only** step, applied at **build time**. A class your
+own code writes as text — a `class`/`className` literal, a `clsx(...)` argument or
+key, a variable — is excluded automatically. Hybrid builds can still fail when a
 **separate Tailwind plugin owns the utility CSS**, hand-written CSS occupies short
 alias names, or a raw class is assembled dynamically and cannot be discovered, in
 two ways:
