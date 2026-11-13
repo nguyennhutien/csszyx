@@ -374,7 +374,7 @@ describe('transform cache', () => {
         expect(readdirSync(cacheRoot).sort()).toEqual(['.gitignore', `${key}.json`]);
         const content = readFileSync(entryFile(cacheRoot, key), 'utf8');
 
-        expect(content).toContain('"version":23');
+        expect(content).toContain('"version":24');
         expect(readTransformCache(cacheRoot, input())).not.toBeNull();
     });
 
@@ -499,6 +499,39 @@ describe('transform cache', () => {
         const file = entryFile(cacheRoot, key);
         const entry = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
         entry.classPrefix = 'ui';
+        writeFileSync(file, JSON.stringify(entry));
+
+        expect(readTransformCache(cacheRoot, asked)).toBeNull();
+    });
+
+    it('keeps a marked transform apart from an unmarked one', () => {
+        // A marked entry calls `__szCss`, which only a mangle build renames
+        // away; replayed into any other build it would ship the call.
+        const cacheRoot = tempRoot();
+        expect(createTransformCacheKey(input({ markClasses: true })).key).not.toBe(
+            createTransformCacheKey(input()).key,
+        );
+        expect(createTransformCacheKey(input({ markClasses: false })).key).toBe(
+            createTransformCacheKey(input()).key,
+        );
+        writeTransformCache(cacheRoot, input({ markClasses: true }), {
+            ...result(),
+            usesClassMark: true,
+        });
+
+        expect(readTransformCache(cacheRoot, input())).toBeNull();
+        expect(readTransformCache(cacheRoot, input({ markClasses: true }))?.usesClassMark).toBe(
+            true,
+        );
+    });
+
+    it('rejects an entry whose recorded marking is not the one asked for', () => {
+        const cacheRoot = tempRoot();
+        const asked = input({ markClasses: true });
+        writeTransformCache(cacheRoot, asked, result());
+        const file = entryFile(cacheRoot, createTransformCacheKey(asked).key);
+        const entry = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
+        entry.markClasses = false;
         writeFileSync(file, JSON.stringify(entry));
 
         expect(readTransformCache(cacheRoot, asked)).toBeNull();

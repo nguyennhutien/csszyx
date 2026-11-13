@@ -79,6 +79,7 @@ interface WasmResultJson {
         uses_spacing_var: boolean;
         uses_unit_var: boolean;
         uses_bool_class: boolean;
+        uses_class_mark: boolean;
     };
 }
 
@@ -327,6 +328,7 @@ function wasmTransformOptions(options?: TransformSourceCodeOptions): object {
             encodeCrossModuleStatics(options?.crossModuleSzObjects) ?? null,
         class_prefix: options?.classPrefix ?? null,
         merge_table_json: options?.mergeTable ? JSON.stringify(options.mergeTable) : null,
+        mark_classes: options?.markClasses === true,
     };
 }
 
@@ -434,6 +436,7 @@ function fromWasmResult(
         usesSpacingVar: result.metadata.uses_spacing_var,
         usesUnitVar: result.metadata.uses_unit_var,
         usesBoolClass: result.metadata.uses_bool_class,
+        usesClassMark: result.metadata.uses_class_mark,
         classes: new Set(result.classes),
         rawClassNames: new Set(result.raw_class_names),
         mergeGroups: spans.mergeGroups,

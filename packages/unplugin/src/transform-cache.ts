@@ -45,7 +45,10 @@ import { sha256Of } from './content-digest.js';
 // 23: each `_` an `sz` value carries (`underscoreValues`), which the build
 // reports as `underscore-space`; a schema-22 entry has none to replay, and an
 // entry with none reads as a file with no `_`.
-const CACHE_SCHEMA_VERSION = 23;
+// 24: a mangle build marks each class string the engine emits (`markClasses`
+// in the key) and reports the helper it calls (`usesClassMark`); a schema-23
+// entry would resurrect the flag as `undefined` and leave `__szCss` unimported.
+const CACHE_SCHEMA_VERSION = 24;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'rust' | 'wasm';
@@ -53,21 +56,11 @@ export type TransformCacheProducer = 'rust' | 'wasm';
 /** Transform result shape that can be serialized into the on-disk cache. */
 export type CacheableTransformResult = SourceTransformResult;
 
-/** JSON-safe transform result stored inside a cache entry. */
-interface SerializedTransformResult {
-    code: string;
-    transformed: boolean;
-    usesRuntime: boolean;
-    usesMerge: boolean;
-    usesSzcn: boolean;
-    usesSzPart: boolean;
-    usesSzvPick: boolean;
-    usesSzvPick1: boolean;
-    szPartArgsProvable: boolean;
-    usesColorVar: boolean;
-    usesSpacingVar: boolean;
-    usesUnitVar: boolean;
-    usesBoolClass: boolean;
+/**
+ * JSON-safe transform result stored inside a cache entry: the scalar fields
+ * as the result carries them, the collections as arrays.
+ */
+interface SerializedTransformResult extends ScalarFields {
     classes: string[];
     rawClassNames: string[];
     /** Absent from an entry written before the field existed. */
@@ -98,6 +91,7 @@ interface TransformCacheEntry {
     mangleVarHoistMaxDepth: number | null;
     globalVarAliases: Array<[string, string]>;
     classPrefix?: string | null;
+    markClasses: boolean;
     filename: string;
     inputSha256: string;
     timestamp: string;
@@ -149,6 +143,12 @@ export interface TransformCacheKeyInput {
      * transform made under one prefix emits classes the other does not serve.
      */
     classPrefix?: string | null;
+    /**
+     * Whether each emitted class string is wrapped in `__szCss(…)`. Only a
+     * mangle build marks them, and a marked entry replayed into a build that
+     * does not mangle would call a helper nothing renames away.
+     */
+    markClasses?: boolean;
     /** Source filename; recovery tokens depend on it. */
     filename: string;
     /** Source file contents. */
@@ -197,6 +197,7 @@ export function createTransformCacheKey(input: TransformCacheKeyInput): Transfor
         `crossModuleStatics=${input.crossModuleStatics ?? 'none'}`,
         `crossModuleSzObjects=${input.crossModuleSzObjects ?? 'none'}`,
         `classPrefix=${input.classPrefix ?? 'none'}`,
+        `markClasses=${input.markClasses === true}`,
         `filename=${input.filename}`,
         `source=${inputSha256}`,
     ].join('\n');
@@ -248,6 +249,7 @@ export function readTransformCache(
         entry.mangleVarHoistMaxDepth !== (input.mangleVarHoistMaxDepth ?? null) ||
         !sameGlobalVarAliases(entry.globalVarAliases, globalVarAliases) ||
         (entry.classPrefix ?? null) !== (input.classPrefix ?? null) ||
+        entry.markClasses !== (input.markClasses === true) ||
         entry.filename !== input.filename ||
         entry.inputSha256 !== inputSha256
     ) {
@@ -295,6 +297,7 @@ export function writeTransformCache(
         mangleVarHoistMaxDepth: input.mangleVarHoistMaxDepth ?? null,
         globalVarAliases,
         classPrefix: input.classPrefix ?? null,
+        markClasses: input.markClasses === true,
         filename: input.filename,
         inputSha256,
         timestamp: new Date().toISOString(),
@@ -416,6 +419,7 @@ export type ScalarFields = Pick<
     | 'usesSpacingVar'
     | 'usesUnitVar'
     | 'usesBoolClass'
+    | 'usesClassMark'
 >;
 
 /**
@@ -441,6 +445,7 @@ export function scalarFieldsOf(result: ScalarFields): ScalarFields {
         usesSpacingVar: result.usesSpacingVar,
         usesUnitVar: result.usesUnitVar,
         usesBoolClass: result.usesBoolClass,
+        usesClassMark: result.usesClassMark,
     };
 }
 

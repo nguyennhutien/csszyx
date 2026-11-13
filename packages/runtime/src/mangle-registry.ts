@@ -166,6 +166,28 @@ export function installMangleRuntime(input: MangleRegistryInput): MangleRegistry
 }
 
 /**
+ * The mark a mangle build wraps every class string the compiler emits in, as
+ * Closure wraps a class in `goog.getCssName`. The build pass replaces each
+ * call with the renamed string before the minifier runs; a call it misses
+ * runs here and names each class through the installed registry, or keeps
+ * the name where there is none, so a missed mark never breaks a class.
+ *
+ * Cost: one split and one map lookup per class, `O(n)` in the string.
+ *
+ * @param classes - The classes the compiler emitted, joined with a space.
+ * @returns The classes as the build's CSS names them.
+ * @internal Called by generated code, not written by hand.
+ */
+export function __szCss(classes: string): string {
+    const registry = getMangleRegistry();
+    if (registry === null || classes === '') return classes;
+    return classes
+        .split(HTML_CLASS_SPACE)
+        .map(name => (name === '' ? name : (registry.encode(name) ?? name)))
+        .join(' ');
+}
+
+/**
  * The installed registry, or null when no build registered a map.
  *
  * The module-local slot is primary so two package VERSIONS in one app keep

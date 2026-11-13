@@ -51,6 +51,7 @@ interface EntryShape {
     name?: string;
     compilerVersion?: string;
     mangleVars?: boolean;
+    markClasses?: boolean;
     timestamp?: string;
     usesRuntime?: boolean;
     diagnostics?: string[];
@@ -72,6 +73,7 @@ function writeEntry(root: string, entry: EntryShape): void {
             inputSha256: createHash('sha256').update(entry.source).digest('hex'),
             compilerVersion: entry.compilerVersion ?? compilerVersion,
             mangleVars: entry.mangleVars ?? false,
+            markClasses: entry.markClasses ?? false,
             timestamp: entry.timestamp,
             result: {
                 code: entry.code,
@@ -192,6 +194,11 @@ describe('reading the build cache', () => {
 
     it('refuses an entry written with mangled variables', () => {
         const root = cacheWith(FILE, SOURCE, CODE, { mangleVars: true });
+        expect(findCachedTransform(root, FILE, SOURCE)).toBeNull();
+    });
+
+    it('refuses an entry a mangle build wrote with its class strings marked', () => {
+        const root = cacheWith(FILE, SOURCE, CODE, { markClasses: true });
         expect(findCachedTransform(root, FILE, SOURCE)).toBeNull();
     });
 

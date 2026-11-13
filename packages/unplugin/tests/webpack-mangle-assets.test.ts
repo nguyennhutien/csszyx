@@ -51,7 +51,9 @@ class EmitExtraAssetsPlugin {
                         new RawSource(
                             '<div class=" m-3  author-kept "></div><aside class=\'m-3\'></aside>' +
                                 // A BOM is not White_Space: the class holding it is one class.
-                                '<p class="author-kept\uFEFFx m-3"></p>',
+                                '<p class="author-kept\uFEFFx m-3"></p>' +
+                                // A name on the map's prototype is not an entry.
+                                '<i class="constructor m-3"></i>',
                         ),
                     );
                     compilation.emitAsset(
@@ -78,13 +80,18 @@ class EmitExtraAssetsPlugin {
  * @param build - Options for the plugin's `build`; `emitManifest` left out
  *        builds with its default.
  * @param build.emitManifest - `build.emitManifest`.
+ * @param ahead - Plugins registered before csszyx's, as Next registers its own.
+ * @param optimization - webpack `optimization` options for the build.
  */
 async function runWebpack(
     root: string,
     build: { emitManifest?: boolean } = { emitManifest: true },
+    ahead: webpack.WebpackPluginInstance[] = [],
+    optimization: Configuration['optimization'] = undefined,
 ): Promise<void> {
     const config: Configuration = {
         mode: 'production',
+        optimization,
         context: root,
         entry: './src/index.js',
         output: {
@@ -106,6 +113,7 @@ async function runWebpack(
         ],
         plugins: [
             new EmitExtraAssetsPlugin(),
+            ...ahead,
             webpackPlugin({
                 // scanCss registers the CSS as a watched theme dependency,
                 // exercising the theme-deps compilation tap.
@@ -197,6 +205,7 @@ describe('webpack processAssets mangle pass', () => {
         expect(html).not.toContain('m-3');
         expect(html).toContain('author-kept');
         expect(html).toContain('author-kept\uFEFFx');
+        expect(/<i class=["']?constructor ([^"'>]+)["']?>/.exec(html)?.[1]).toBe(token);
         const unchanged = readFileSync(join(root, 'dist/unchanged.html'), 'utf8');
         expect(unchanged).toContain('author-kept');
         expect(unchanged).toContain('author-other');
@@ -216,6 +225,122 @@ describe('webpack processAssets mangle pass', () => {
         expect(extraJs).toContain(`"${token}"`);
         expect(extraJs).not.toContain('"m-3"');
     });
+});
+
+/**
+ * Stands in for the minimizer Next adds to `plugins` ahead of csszyx's: at
+ * `OPTIMIZE_SIZE` it drops the annotation and renames the callee, as a
+ * minifier does, so a mark it reaches first can no longer be found.
+ */
+class MinifierAheadPlugin {
+    apply(compiler: webpack.Compiler): void {
+        compiler.hooks.thisCompilation.tap('minifier-ahead', compilation => {
+            compilation.hooks.processAssets.tap(
+                {
+                    name: 'minifier-ahead',
+                    stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE,
+                },
+                assets => {
+                    const { RawSource } = compiler.webpack.sources;
+                    for (const name of Object.keys(assets).filter(file => file.endsWith('.js'))) {
+                        const code = String(assets[name]?.source());
+                        const minified = code.replaceAll('/*#__PURE__*/__szCss(', 't(');
+                        compilation.updateAsset(name, new RawSource(minified));
+                    }
+                },
+            );
+        });
+    }
+}
+
+/** Emits a chunk carrying a class string the compiler marked. */
+class EmitMarkedAssetPlugin {
+    apply(compiler: webpack.Compiler): void {
+        compiler.hooks.thisCompilation.tap('emit-marked', compilation => {
+            compilation.hooks.processAssets.tap(
+                {
+                    name: 'emit-marked',
+                    stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_ADDITIONS,
+                },
+                () => {
+                    const { RawSource } = compiler.webpack.sources;
+                    compilation.emitAsset(
+                        'marked.js',
+                        new RawSource('var y=/*#__PURE__*/__szCss("m-3"),z="m-3";'),
+                    );
+                },
+            );
+        });
+    }
+}
+
+it('inlines a marked class string before a minimizer registered ahead of it', {
+    timeout: WEBPACK_TEST_TIMEOUT_MS,
+}, async () => {
+    // ADR 0034: Next puts its minimizer at OPTIMIZE_SIZE ahead of the plugin's,
+    // so the bundle pass runs at OPTIMIZE, before any of them.
+    const root = mkdtempSync(join(tmpdir(), 'csszyx-webpack-mark-order-'));
+    tempDirs.push(root);
+    mkdirSync(join(root, 'src'));
+    writeFileSync(join(root, 'src/index.js'), "import './style.css';");
+    writeFileSync(join(root, 'src/App.tsx'), 'export const App = () => <div sz={{ m: 3 }} />;');
+    writeFileSync(join(root, 'src/style.css'), '.m-3 { margin: 0.75rem; }');
+
+    await runWebpack(root, { emitManifest: true }, [
+        new EmitMarkedAssetPlugin(),
+        new MinifierAheadPlugin(),
+    ]);
+
+    const map = JSON.parse(readFileSync(join(root, 'dist/csszyx-manifest.json'), 'utf8')) as {
+        mangleMap?: Record<string, string>;
+    };
+    const token = map.mangleMap?.['m-3'];
+    expect(token).toBeTruthy();
+    const marked = readFileSync(join(root, 'dist/marked.js'), 'utf8');
+    expect(marked).toBe(`var y="${token}",z="m-3";`);
+});
+
+it('inlines a mark called through an export webpack shortened', {
+    timeout: WEBPACK_TEST_TIMEOUT_MS,
+}, async () => {
+    // A module webpack does not concatenate keeps its own scope, and production
+    // `mangleExports` shortens its export names: the call is written
+    // `(0,ns/* .__szCss */ .$t)(…)`. A shared chunk is the usual reason, as in
+    // a Next client build; `concatenateModules: false` forces the same shape.
+    const root = mkdtempSync(join(tmpdir(), 'csszyx-webpack-mark-shortened-'));
+    tempDirs.push(root);
+    mkdirSync(join(root, 'src'));
+    writeFileSync(
+        join(root, 'src/index.js'),
+        "import './style.css';\nimport { __szCss } from './rt.js';\nglobalThis.y = /*#__PURE__*/__szCss(\"m-3\");\n",
+    );
+    writeFileSync(
+        join(root, 'src/rt.js'),
+        'export function __szCss(classes) { return classes; }\n',
+    );
+    writeFileSync(join(root, 'src/App.tsx'), 'export const App = () => <div sz={{ m: 3 }} />;');
+    writeFileSync(join(root, 'src/style.css'), '.m-3 { margin: 0.75rem; }');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+        await runWebpack(root, { emitManifest: true }, [], {
+            concatenateModules: false,
+            minimize: false,
+        });
+        const map = JSON.parse(readFileSync(join(root, 'dist/csszyx-manifest.json'), 'utf8')) as {
+            mangleMap?: Record<string, string>;
+        };
+        const token = map.mangleMap?.['m-3'];
+        expect(token).toBeTruthy();
+        const bundle = readFileSync(join(root, 'dist/bundle.js'), 'utf8');
+        expect(bundle.match(/globalThis\.y = [^;\n]*/)?.[0]).toBe(`globalThis.y = "${token}"`);
+        expect(bundle).not.toMatch(/__szCss \*\/ \.[\w$]+\)\(/);
+        const missed = warn.mock.calls.filter(call =>
+            String(call[0]).includes('mangle-mark-missed'),
+        );
+        expect(missed).toEqual([]);
+    } finally {
+        warn.mockRestore();
+    }
 });
 
 it.each([

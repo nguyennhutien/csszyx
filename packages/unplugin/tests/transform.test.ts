@@ -1,6 +1,7 @@
 import { transformSource } from '@csszyx/compiler/engine';
 import { describe, expect, it } from 'vitest';
 
+import { inlineClassMarks } from '../src/class-mark-inline.js';
 import { mangleCodeClassesSync } from '../src/unplugin.js';
 
 /**
@@ -237,6 +238,50 @@ describe('mangleCodeClassesSync — Pass 2 (ternary className expressions)', () 
             'className:variant==="primary"?"bg-violet-500 p-4":"flex items-center"',
             'className:variant==="primary"?"g c":"z h"',
         ],
+        [
+            // An operand is data: renaming it changes which branch is taken.
+            'a condition operand that is also a class',
+            'className:"flex"===kind?"p-4":kind!=="p-4"?"flex":"rounded-xl"',
+            'className:"flex"===kind?"c":kind!=="p-4"?"z":"d"',
+        ],
+        [
+            'a single-quoted condition operand',
+            'className:\'flex\'===kind?"p-4":"rounded-xl"',
+            'className:\'flex\'===kind?"c":"d"',
+        ],
+        [
+            'a key read and an `in` test',
+            'className:tone["flex"]&&"p-4" in m?"flex":"p-4"',
+            'className:tone["flex"]&&"p-4" in m?"z":"c"',
+        ],
+        [
+            // The leading space joins the branch to the string before it;
+            // dropping it fused both classes into one name.
+            'a branch that keeps its leading space',
+            'className:"p-4"+(a?" flex":"")',
+            'className:"c"+(a?" z":"")',
+        ],
+        [
+            'a branch after an identifier, spacing kept',
+            'className:x+(a?" flex  p-4 ":"")',
+            'className:x+(a?" z  c ":"")',
+        ],
+        [
+            'a placeholder branch that keeps its leading space',
+            'className:`p-4${a?" flex":""}`',
+            'className:`c${a?" z":""}`',
+        ],
+        [
+            // A plain object's prototype names are not map entries.
+            'a branch named like a prototype property',
+            'className:a?"constructor":"toString p-4"',
+            'className:a?"constructor":"toString c"',
+        ],
+        [
+            'a template placeholder comparing a class name',
+            'className:`flex ${kind==="flex"?"p-4":""}`',
+            'className:`z ${kind==="flex"?"c":""}`',
+        ],
     ])('mangles %s', (_label, code, expected) => {
         expect(mangleCodeClassesSync(code, TEST_MANGLE)).toBe(expected);
     });
@@ -257,7 +302,7 @@ describe('mangleCodeClassesSync — Pass 2.5 (quoted class-attribute arguments)'
         [
             'a colliding condition operand',
             'ssrAttribute("class", kind === "flex" ? "p-4" : "rounded-xl", false)',
-            'ssrAttribute("class", kind === "z" ? "c" : "d", false)',
+            'ssrAttribute("class", kind === "flex" ? "c" : "d", false)',
         ],
         [
             'a quoted object key',
@@ -270,6 +315,21 @@ describe('mangleCodeClassesSync — Pass 2.5 (quoted class-attribute arguments)'
             'ssrAttribute("class", someVar, false)',
         ],
         [
+            'a static class string',
+            'ssrAttribute("class", "flex p-4", false) + l(e, "className", \'p-4\')',
+            'ssrAttribute("class", "z c", false) + l(e, "className", \'c\')',
+        ],
+        [
+            'a template after the attribute name',
+            'ssrAttribute("class", `p-4 ${x}`, false)',
+            'ssrAttribute("class", `p-4 ${x}`, false)',
+        ],
+        [
+            'a leading string compared, not applied',
+            'l(e,"className","flex"===k?"p-4":"rounded-xl")',
+            'l(e,"className","flex"===k?"c":"d")',
+        ],
+        [
             'multiple SSR attributes',
             'ssrAttribute("class", a ? "flex" : "p-4", false) + ssrAttribute("class", b ? "items-center" : "rounded-xl", false)',
             'ssrAttribute("class", a ? "z" : "c", false) + ssrAttribute("class", b ? "h" : "d", false)',
@@ -279,15 +339,12 @@ describe('mangleCodeClassesSync — Pass 2.5 (quoted class-attribute arguments)'
     });
 });
 
-describe('mangleCodeClassesSync — Pass 3 (runtime helper string args)', () => {
+describe('helper arguments outside a class position (ADR 0034)', () => {
+    // The compiler marks the class strings it passes a helper; the chunk pass
+    // renames only those. An unmarked argument may be data, so it stays.
     it.each([
         ['a leading argument', '_szMerge("flex items-center","p-4")', '_szMerge("z h","c")'],
         ['a conditional argument', '_szMerge("flex",pe&&"p-4")', '_szMerge("z",pe&&"c")'],
-        [
-            'a minified conditional string',
-            '_szMerge("flex items-center",pe&&"p-4 rounded-xl")',
-            '_szMerge("z h",pe&&"c d")',
-        ],
         [
             'an unminified conditional string',
             '_szMerge("flex items-center", pe && "p-4 rounded-xl")',
@@ -298,8 +355,20 @@ describe('mangleCodeClassesSync — Pass 3 (runtime helper string args)', () => 
             '_szMerge("flex",pe&&"unknown-class")',
             '_szMerge("z",pe&&"unknown-class")',
         ],
-    ])('mangles %s', (_label, code, expected) => {
-        expect(mangleCodeClassesSync(code, TEST_MANGLE)).toBe(expected);
+    ])('renames %s the compiler marked', (_label, code, expected) => {
+        const marked = code.replace(/"[^"]*"/g, literal => `/*#__PURE__*/__szCss(${literal})`);
+        const inlined = inlineClassMarks(marked, TEST_MANGLE).code;
+        expect(mangleCodeClassesSync(inlined, TEST_MANGLE)).toBe(expected);
+        expect(mangleCodeClassesSync(code, TEST_MANGLE)).toBe(code);
+    });
+
+    it.each([
+        ['a style value', 'el.style.setProperty("display","flex")'],
+        ['an array of names', '["block","flex","p-4"].includes(v)'],
+        ['a translation key', 't("p-4")'],
+        ['a concatenation', 'a("flex"+" block")'],
+    ])('leaves %s as written', (_label, code) => {
+        expect(mangleCodeClassesSync(code, TEST_MANGLE)).toBe(code);
     });
 });
 

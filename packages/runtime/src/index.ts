@@ -57,6 +57,7 @@ export { __szBoolClass, __szColorVar, __szSpacingVar, __szUnitVar } from './lite
 export { registerSzClassPrefix, setSzClassPrefix } from './lowering-slot.js';
 // Runtime mangle registry — installed by the bundled registration module
 export {
+    __szCss,
     clearMangleRegistry,
     getMangleRegistry,
     installMangleRuntime,

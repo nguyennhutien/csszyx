@@ -84,8 +84,11 @@ surface that visibly is not an interface, so the integration hooks that ARE one
 — a data attribute, a role, a name you list in `manglePreserve` — are what a
 consumer reaches for first.
 
-Two kinds of class keep their readable names on purpose: one you also write as
-a literal string anywhere in your source, and anything you list in
+The build renames only the class strings csszyx compiled from `sz`, the way
+Closure Compiler renames only what `goog.getCssName` marks: a string that is
+data, in your code or in a dependency, keeps its text. Two kinds of class keep
+their readable names on purpose: one you also write as text anywhere in your
+source — a literal, a `clsx` key, a variable — and anything you list in
 [`manglePreserve`](/docs/reference/config/#production). Reach for the second
 when a stylesheet matches a class by its text (`[class*="bg-tag"]`), or when a
 `querySelector` needs the name. The build reports both cases before they cost

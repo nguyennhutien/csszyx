@@ -3702,6 +3702,22 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         }
     },
     {
+        "id": "mangle-mark-missed",
+        "summary": "Class strings csszyx marked that the bundle pass could not rename, renamed in the browser instead.",
+        "surfaces": {
+            "runtime": {
+                "production": false,
+                "host": "node"
+            }
+        },
+        "position": "none",
+        "args": {
+            "count": {
+                "type": "number"
+            }
+        }
+    },
+    {
         "id": "mangle-hybrid-hazard",
         "summary": "A production mangle that collides with, or breaks, CSS csszyx did not write.",
         "surfaces": {

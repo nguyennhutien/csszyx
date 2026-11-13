@@ -798,7 +798,10 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                     };
                     let class_name = lower_static_sz_object(&static_object).join(" ");
                     entries.push(SzsSlotEntryIr {
-                        emit_text: format!("\"{}\"", escape_json_string(&class_name)),
+                        emit_text: super::class_mark::mark_class_literal(format!(
+                            "\"{}\"",
+                            escape_json_string(&class_name)
+                        )),
                         class_name,
                         key,
                     });
@@ -1596,15 +1599,10 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 .filter_map(|site| site.argument.as_ref().map(|argument| (*site, argument)))
             {
                 let replacement = match argument {
-                    SzvCallArg::None => super::szv_precompile::json_string_literal(
-                        &super::szv_precompile::compute_static_szv_pick(&candidate.table, None),
-                    ),
-                    SzvCallArg::Static(selection) => super::szv_precompile::json_string_literal(
-                        &super::szv_precompile::compute_static_szv_pick(
-                            &candidate.table,
-                            Some(selection),
-                        ),
-                    ),
+                    SzvCallArg::None => static_szv_pick_literal(&candidate.table, None),
+                    SzvCallArg::Static(selection) => {
+                        static_szv_pick_literal(&candidate.table, Some(selection))
+                    }
                     SzvCallArg::Dynamic { span, single } => {
                         let (text, used_single) = dynamic_szv_replacement(
                             self.source,
@@ -3169,6 +3167,18 @@ fn single_dimension_selection(object: &ObjectExpression<'_>) -> Option<SzvSingle
         dimension,
         value_span: text_span(entry.value.span()),
     })
+}
+
+/// The class string a static `szv` pick resolves to, written as the literal
+/// that replaces the call: a class string the engine emits, so marked in a
+/// build that mangles.
+fn static_szv_pick_literal(
+    table: &super::szv_precompile::SzvTable,
+    selection: Option<&super::szv_precompile::StaticSelection>,
+) -> String {
+    super::class_mark::mark_class_literal(super::szv_precompile::json_string_literal(
+        &super::szv_precompile::compute_static_szv_pick(table, selection),
+    ))
 }
 
 /// Build the replacement text for one DYNAMIC factory call, preferring the

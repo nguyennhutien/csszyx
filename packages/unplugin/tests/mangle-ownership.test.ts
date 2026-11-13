@@ -87,6 +87,12 @@ async function runVite(root: string): Promise<void> {
                     replacement: requireFromHere.resolve('react-dom/client'),
                 },
                 { find: 'react', replacement: requireFromHere.resolve('react') },
+                // A mangle build imports `__szCss` from the runtime into each
+                // module it marks; the fixture has no node_modules of its own.
+                {
+                    find: /^@csszyx\/runtime$/,
+                    replacement: requireFromHere.resolve('@csszyx/runtime'),
+                },
             ],
         },
         plugins: [

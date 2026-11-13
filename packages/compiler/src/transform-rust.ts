@@ -311,6 +311,7 @@ function nativeTransformOptions(
         crossModuleSzObjectsJson: encodeCrossModuleStatics(options?.crossModuleSzObjects),
         classPrefix: options?.classPrefix ?? undefined,
         mergeTableJson: options?.mergeTable ? JSON.stringify(options.mergeTable) : undefined,
+        markClasses: options?.markClasses === true,
     };
 }
 
@@ -532,6 +533,7 @@ function fromNativeResult(
         usesSpacingVar: result.metadata.usesSpacingVar ?? false,
         usesUnitVar: result.metadata.usesUnitVar ?? false,
         usesBoolClass: result.metadata.usesBoolClass ?? false,
+        usesClassMark: result.metadata.usesClassMark ?? false,
         classes: new Set(result.classes),
         rawClassNames: new Set(result.rawClassNames),
         mergeGroups: spans.mergeGroups,

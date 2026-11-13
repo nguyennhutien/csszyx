@@ -85,6 +85,7 @@ interface CacheEntry {
     compilerVersion?: unknown;
     mangleVars?: unknown;
     classPrefix?: unknown;
+    markClasses?: unknown;
     timestamp?: unknown;
     result?: CompiledFile | null;
 }
@@ -253,8 +254,8 @@ class TransformCacheIndex {
      * The plugin keys its cache on more than the source — the compiler that
      * wrote the entry, whether variables were mangled, the cross-module
      * registry — so one file and hash can have several entries. A test wants
-     * the output this compiler produces with readable variable names, and of
-     * those the newest.
+     * the output this compiler produces with readable variable and class
+     * names, and of those the newest.
      *
      * @param filename - Path as the plugin records it.
      * @param sha256 - Hash of the current contents.
@@ -270,6 +271,9 @@ class TransformCacheIndex {
         for (const entry of this.byFilename.get(filename) ?? []) {
             if (entry.inputSha256 !== sha256) continue;
             if (entry.compilerVersion !== compilerVersion || entry.mangleVars === true) continue;
+            // A mangle build's output calls `__szCss`, which only its bundle
+            // pass renames away; a test wants the names as written.
+            if (entry.markClasses === true) continue;
             // Output lowered under another prefix names classes this project
             // does not serve. An entry older than the field was lowered with none.
             if ((entry.classPrefix ?? null) !== classPrefix) continue;

@@ -70,6 +70,7 @@ describe('optional engine result fields', () => {
                     usesSpacingVar: false,
                     usesUnitVar: false,
                     usesBoolClass: false,
+                    usesClassMark: false,
                 });
             expect([...result.cssVariableMap]).toEqual([]);
         },

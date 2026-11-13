@@ -64,6 +64,7 @@ import {
     collectMergeCallClassNames,
     findBalancedCodeEnd,
 } from './authored-class-scanner.js';
+import { collectUnmarkedNames, inlineClassMarks } from './class-mark-inline.js';
 import {
     classNameAuthorConflictMessage,
     findClassNameAuthorConflicts,
@@ -256,6 +257,7 @@ import {
     evictOldTransformCacheEntries,
     readTransformCache,
     resolveTransformCacheDir,
+    type ScalarFields,
     scalarFieldsOf,
     type TransformCacheKey,
     type TransformCacheKeyInput,
@@ -496,6 +498,13 @@ type WebpackAssetProcessor = (
 /**
  * Register the Webpack process-assets stage without nesting it inside plugin factories.
  *
+ * The pass taps `PROCESS_ASSETS_STAGE_OPTIMIZE` (100), ahead of every
+ * minimizer (`OPTIMIZE_SIZE`, 400): it inlines the `__szCss(…)` calls the
+ * compiler marked, and a minimizer renames the callee and drops the
+ * annotation they are found by. Next puts its own minimizer at 400 ahead of
+ * the plugin's, so sharing that stage ran after it (ADR 0034). Content hashes
+ * are recomputed later still, at `OPTIMIZE_HASH`.
+ *
  * @param compiler Webpack compiler instance.
  * @param processAssets Final asset processor.
  */
@@ -505,10 +514,10 @@ function registerWebpackAssetProcessor(
 ): void {
     compiler.hooks.compilation.tap('csszyx:post', compilation => {
         const stage =
-            compiler.webpack?.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE ||
-            (compilation.constructor as { PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE?: number })
-                .PROCESS_ASSETS_STAGE_OPTIMIZE_SIZE;
-        compilation.hooks.processAssets.tap({ name: 'csszyx:post', stage: stage || 400 }, assets =>
+            compiler.webpack?.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE ||
+            (compilation.constructor as { PROCESS_ASSETS_STAGE_OPTIMIZE?: number })
+                .PROCESS_ASSETS_STAGE_OPTIMIZE;
+        compilation.hooks.processAssets.tap({ name: 'csszyx:post', stage: stage || 100 }, assets =>
             processAssets(assets, compilation, compiler),
         );
     });
@@ -2676,6 +2685,51 @@ function findTemplateInterpolationEnd(templateContent: string, bodyStart: number
 }
 
 /**
+ * An own-key test for a class map: `constructor` is a class name, not an
+ * entry. `Object.hasOwn` is past the library level this package compiles
+ * against.
+ */
+const ownKey = Object.prototype.hasOwnProperty;
+
+/**
+ * Whether a quoted string inside a class-position expression is an operand
+ * rather than a value the expression can produce: compared (`kind === "flex"`,
+ * `"flex" !== kind`), tested with `in`, indexed (`a["flex"]`) or assigned.
+ * Such a string is data; renaming it changes what the code decides, not
+ * which class it applies.
+ *
+ * @param expr - The expression the string sits in.
+ * @param start - Index of the opening quote.
+ * @param end - Index after the closing quote.
+ * @returns True when the string must be left as written.
+ */
+function isOperandString(expr: string, start: number, end: number): boolean {
+    let before = start - 1;
+    while (before >= 0 && /\s/.test(expr.charAt(before))) before--;
+    let after = end;
+    while (after < expr.length && /\s/.test(expr.charAt(after))) after++;
+    const previous = expr[before];
+    if (previous === '[' || previous === '=' || previous === '<' || previous === '>') return true;
+    const rest = expr.slice(after, after + 11);
+    return /^(?:[=!]=|[<>]|in\b|instanceof\b)/.test(rest);
+}
+
+/**
+ * Whether the string that ends at `end` begins a longer expression — an
+ * operator follows it — rather than being a class value on its own. `>` and
+ * `/` are left out: in an HTML asset they close the tag the attribute sits in.
+ *
+ * @param code - The code the string sits in.
+ * @param end - Index after the closing quote.
+ * @returns True when an operator follows the string.
+ */
+function startsExpression(code: string, end: number): boolean {
+    let at = end;
+    while (at < code.length && (code[at] === ' ' || code[at] === '\t')) at++;
+    return /^(?:[=!<?.[+&|*%]|in\b|instanceof\b)/.test(code.slice(at, at + 11));
+}
+
+/**
  * Mangles class strings in bundled code (JS/HTML assets) using the given mangle map.
  *
  * Exported for unit testing; the plugin calls this via the thin private wrapper that
@@ -2684,7 +2738,14 @@ function findTemplateInterpolationEnd(templateContent: string, bodyStart: number
  * Pass 1:   Direct `className="..."` / `class="..."` static strings
  * Pass 1.5: Template literal quasi (static) segments in `className:\`...\``
  * Pass 2:   `className:EXPR` patterns with ternary operators containing quoted strings
- * Pass 3:   Quoted string arguments to csszyx runtime helpers (_szMerge, _sz, etc.)
+ * Pass 2.5: The value after a `"class"` / `"className"` attribute-name string
+ * Pass 4:   Compiled `szsc` slot maps
+ *
+ * Each pass reads a string in a class position only. A string anywhere else
+ * — a helper argument, an array, a data value — is renamed only when the
+ * compiler marked it, by `inlineClassMarks` before this runs (ADR 0034); the
+ * argument heuristic that once renamed any string whose every token was a
+ * key also renamed data and vendor strings, and is gone.
  *
  * @param code     bundled source code
  * @param mangleMap class-name → mangled-token mapping
@@ -2697,18 +2758,36 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
      * @returns mangled class string (unknown classes left unchanged)
      */
     function mangleClassString(classString: string): string {
-        return classString
-            .split(HTML_CLASS_SPACE)
-            .filter(Boolean)
-            .map((cls: string) => {
-                // Class names inside a double-quoted JS string may have \" (and other
-                // sequences) escaped. Unescape before map lookup so that e.g.
-                // before:content-['\"\"'] resolves to its mangle map entry, which is
-                // keyed by the actual class name before:content-['""'].
-                // If not in the map, return the original (escaped) token unchanged.
-                return mangleMap[cls.replace(/\\(.)/g, '$1')] || cls;
-            })
-            .join(' ');
+        return classString.split(HTML_CLASS_SPACE).filter(Boolean).map(mangleToken).join(' ');
+    }
+
+    /**
+     * One class token renamed through the map, or as written.
+     *
+     * Class names inside a double-quoted JS string may have \" (and other
+     * sequences) escaped. Unescape before map lookup so that e.g.
+     * before:content-['\"\"'] resolves to its mangle map entry, which is keyed
+     * by the actual class name before:content-['""']. Only the map's own keys
+     * count: `constructor` is a class name, not a map entry.
+     *
+     * @param token - A token as the code writes it.
+     * @returns Its token, or the token unchanged.
+     */
+    function mangleToken(token: string): string {
+        const name = token.replace(/\\(.)/g, '$1');
+        return ownKey.call(mangleMap, name) ? mangleMap[name] : token;
+    }
+
+    /**
+     * Rename each class in a string where it stands, keeping every space: a
+     * branch's leading space is what separates it from the string before it,
+     * as in `"p-4"+(a?" flex":"")`.
+     *
+     * @param classString - The string's text.
+     * @returns The text with each known class renamed.
+     */
+    function mangleClassesInPlace(classString: string): string {
+        return classString.replace(/[^\t\n\f\r ]+/g, mangleToken);
     }
 
     /**
@@ -2774,14 +2853,16 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
      */
     function mangleTemplateInterpolation(inner: string): MangledTemplateFragment {
         let changed = false;
-        const value = inner.replace(/"([^"]*)"/g, (quoted: string, classString: string) => {
-            const parts = classString.split(HTML_CLASS_SPACE).filter(Boolean);
-            if (parts.length === 0) return quoted;
-            const mangled = parts.map(className => mangleMap[className] || className).join(' ');
-            if (mangled === classString) return quoted;
-            changed = true;
-            return `"${mangled}"`;
-        });
+        const value = inner.replace(
+            /"([^"]*)"/g,
+            (quoted: string, classString: string, at: number) => {
+                if (isOperandString(inner, at, at + quoted.length)) return quoted;
+                const mangled = mangleClassesInPlace(classString);
+                if (mangled === classString) return quoted;
+                changed = true;
+                return `"${mangled}"`;
+            },
+        );
         return { value, changed };
     }
 
@@ -2793,21 +2874,29 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
     // `"` and `\`, OR a backslash followed by any char (handles \" \\  \n etc.).
     // Naive [^"]* broke on class names with embedded escaped quotes such as
     // before:content-['""'] which the pre-plugin emits as "before:content-['\"\"']".
+    // A string an operator follows starts an expression (`className:"a"===k?…`)
+    // and is an operand, not the value: Pass 2 reads that expression.
+    /**
+     * Rename one `class=` / `className:` string that is the whole value.
+     * @param match - The attribute or property with its string.
+     * @param classes - The string's text.
+     * @param offset - Where the match starts.
+     * @param whole - The text being rewritten.
+     * @returns The renamed match, or the match as written.
+     */
+    const renameWholeValue = (
+        match: string,
+        classes: string,
+        offset: number,
+        whole: string,
+    ): string => {
+        if (startsExpression(whole, offset + match.length)) return match;
+        const mangled = mangleClassString(classes);
+        return mangled === classes ? match : match.replace(classes, mangled);
+    };
     let result = code
-        .replace(/(?:class(?:Name)?|sz)[:=]\s*"((?:[^"\\]|\\.)*)"/g, (match, classes) => {
-            const mangled = mangleClassString(classes);
-            if (mangled === classes) {
-                return match;
-            }
-            return match.replace(classes, mangled);
-        })
-        .replace(/(?:class(?:Name)?|sz)[:=]\s*'((?:[^'\\]|\\.)*)'/g, (match, classes) => {
-            const mangled = mangleClassString(classes);
-            if (mangled === classes) {
-                return match;
-            }
-            return match.replace(classes, mangled);
-        });
+        .replace(/(?:class(?:Name)?|sz)[:=]\s*"((?:[^"\\]|\\.)*)"/g, renameWholeValue)
+        .replace(/(?:class(?:Name)?|sz)[:=]\s*'((?:[^'\\]|\\.)*)'/g, renameWholeValue);
 
     // Pass 1.5: Template literal quasi (static) segments in className:`...`
     // Generated by the pre-plugin for sz objects with ternary property values, e.g.:
@@ -2848,12 +2937,9 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
             return null;
         }
         let changed = false;
-        const mangled = expr.replace(/"([^"]*)"/g, (qm: string, inner: string) => {
-            const parts = inner.split(HTML_CLASS_SPACE).filter(Boolean);
-            if (parts.length === 0) {
-                return qm;
-            }
-            const mangledStr = parts.map((p: string) => mangleMap[p] || p).join(' ');
+        const mangled = expr.replace(/"([^"]*)"/g, (qm: string, inner: string, at: number) => {
+            if (isOperandString(expr, at, at + qm.length)) return qm;
+            const mangledStr = mangleClassesInPlace(inner);
             if (mangledStr !== inner) {
                 changed = true;
                 return `"${mangledStr}"`;
@@ -2863,35 +2949,63 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
         return changed ? mangled : null;
     }
 
-    {
+    const staticString = /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/y;
+
+    /**
+     * Whether the string literal at `start` is followed by an operator.
+     * @param text - The code being rewritten.
+     * @param start - Index of the opening quote.
+     * @returns True when the string begins a longer expression.
+     */
+    function leadsExpression(text: string, start: number): boolean {
+        staticString.lastIndex = start;
+        return staticString.test(text) && startsExpression(text, staticString.lastIndex);
+    }
+
+    /**
+     * Pass 2: each `className:EXPR` with a ternary. A lone static string or a
+     * template is Pass 1/1.5 territory; a string an operator follows starts an
+     * expression Pass 1 skipped, so it is read here.
+     *
+     * @param text - The code being rewritten.
+     * @returns The code with each such expression's branches renamed.
+     */
+    function manglePropertyExpressions(text: string): string {
         const marker = 'className:';
         let searchFrom = 0;
         let out = '';
-        while (searchFrom < result.length) {
-            const idx = result.indexOf(marker, searchFrom);
-            if (idx === -1) {
-                out += result.slice(searchFrom);
-                break;
-            }
-            out += result.slice(searchFrom, idx + marker.length);
+        while (searchFrom < text.length) {
+            const idx = text.indexOf(marker, searchFrom);
+            if (idx === -1) return out + text.slice(searchFrom);
             const afterColon = idx + marker.length;
+            out += text.slice(searchFrom, afterColon);
             // Skip optional space (unminified SSR form: "className: `...")
             let exprStart = afterColon;
-            while (exprStart < result.length && result[exprStart] === ' ') {
-                exprStart++;
-            }
-            const firstChar = result[exprStart];
-            // Static string or template literal → Pass 1/1.5 territory, leave untouched
-            if (firstChar === '"' || firstChar === "'" || firstChar === '`') {
+            while (text[exprStart] === ' ') exprStart++;
+            if (isPass1Value(text, exprStart)) {
                 searchFrom = afterColon;
                 continue;
             }
-            const j = scanClassExpression(result, afterColon);
-            const expr = result.slice(afterColon, j);
+            const j = scanClassExpression(text, afterColon);
+            const expr = text.slice(afterColon, j);
             out += mangleTernaryClassStrings(expr) ?? expr;
             searchFrom = j;
         }
-        result = out;
+        return out;
+    }
+
+    /**
+     * Whether the value at `at` is one Pass 1/1.5 already read: a template, or
+     * a string no operator follows.
+     *
+     * @param text - The code being rewritten.
+     * @param at - Index of the value's first character.
+     * @returns True when Pass 2 leaves it alone.
+     */
+    function isPass1Value(text: string, at: number): boolean {
+        const firstChar = text[at];
+        if (firstChar === '`') return true;
+        return (firstChar === '"' || firstChar === "'") && !leadsExpression(text, at);
     }
 
     // Pass 2.5: class values passed as the argument AFTER a quoted "class" /
@@ -2904,94 +3018,65 @@ export function mangleCodeClassesSync(code: string, mangleMap: Record<string, st
     // requires the trailing comma so quoted object KEYS (`"className": x`)
     // never match, and the ternary requirement plus class-position context
     // keep rewrites scoped exactly like Pass 2.
-    {
+    const staticClassString = /"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)'/y;
+
+    /**
+     * The lone static string at `at`, renamed per token as Pass 1 does, with
+     * the index after it; null when there is none, or an operator follows it
+     * and it is an operand of a longer expression.
+     *
+     * @param text - The code being rewritten.
+     * @param at - Index of the argument's first character.
+     * @returns The renamed literal and its end, or null.
+     */
+    function renameLoneString(text: string, at: number): { literal: string; end: number } | null {
+        const quote = text[at];
+        if (quote !== '"' && quote !== "'") return null;
+        staticClassString.lastIndex = at;
+        const match = staticClassString.exec(text);
+        if (match === null || startsExpression(text, staticClassString.lastIndex)) return null;
+        const classes = match[1] ?? String(match[2]);
+        return {
+            literal: `${quote}${mangleClassString(classes)}${quote}`,
+            end: staticClassString.lastIndex,
+        };
+    }
+
+    /**
+     * Pass 2.5: the class value after a quoted `"class"` / `"className"`
+     * attribute-name argument.
+     *
+     * @param text - The code being rewritten.
+     * @returns The code with each such value renamed.
+     */
+    function mangleAttributeArguments(text: string): string {
         const markerRe = /"class(?:Name)?"\s*,\s*/g;
         let out = '';
         let copiedTo = 0;
-        let m: RegExpExecArray | null = markerRe.exec(result);
-        while (m !== null) {
+        for (let m = markerRe.exec(text); m !== null; m = markerRe.exec(text)) {
             const exprStart = m.index + m[0].length;
-            const firstChar = result[exprStart];
-            // Static string → not a ternary; Pass 3's argument heuristic owns it.
-            if (firstChar === '"' || firstChar === "'" || firstChar === '`') {
-                m = markerRe.exec(result);
+            const lone = renameLoneString(text, exprStart);
+            if (lone !== null) {
+                out += text.slice(copiedTo, exprStart) + lone.literal;
+                copiedTo = lone.end;
+                markerRe.lastIndex = lone.end;
                 continue;
             }
-            const j = scanClassExpression(result, exprStart);
-            const expr = result.slice(exprStart, j);
-            const mangled = mangleTernaryClassStrings(expr);
+            // A template is left as written.
+            if (text[exprStart] === '`') continue;
+            const j = scanClassExpression(text, exprStart);
+            const mangled = mangleTernaryClassStrings(text.slice(exprStart, j));
             if (mangled !== null) {
-                out += result.slice(copiedTo, exprStart) + mangled;
+                out += text.slice(copiedTo, exprStart) + mangled;
                 copiedTo = j;
             }
             markerRe.lastIndex = j;
-            m = markerRe.exec(result);
         }
-        if (copiedTo > 0) {
-            result = out + result.slice(copiedTo);
-        }
+        return copiedTo > 0 ? out + text.slice(copiedTo) : text;
     }
 
-    // Pass 3: Mangle quoted string arguments to csszyx runtime helpers (_szMerge, _sz, etc.)
-    // that did NOT get a className= prefix in Pass 1. These are compiled class strings
-    // produced by the sz array/conditional compiler path — e.g. the static arg in:
-    //   _szMerge("demo-preview", "p-8 flex gap-6...", { bg })
-    // Safe heuristic: only replace a string if ALL its space-separated tokens are in
-    // the mangle map. Mangled tokens (e.g. "J", "h") are NOT keys in the map, so
-    // already-mangled strings from Pass 1/2 are never double-mangled.
-    //
-    // Lookbehind (?<=[,(]\s*) ensures we only match strings preceded by a comma or
-    // open-paren (i.e., function arguments), allowing optional whitespace between
-    // the separator and the opening quote. Without this guard, the naive /"([^"]+)"/g
-    // regex matches "garbage" between the close-quote of one string and the open-quote
-    // of the next (e.g. `","` in `"demo-preview","p-8 flex..."`), consuming the opening
-    // quote of the target string so it is never matched.
-    // The \s* is required because SSR bundles are NOT minified — spaces appear after
-    // commas and operators (e.g. `_szMerge(x, "p-8 flex...")`, `pe && "text-right"`).
-    // The lookbehind also covers && so that conditional array elements compiled by the
-    // sz-array path (condition && "class-string") are mangled correctly.
-    // `{` and `[` are separators too: a class-keyed object (`clsx({ 'p-4':
-    // cond })`) bundles to `{"p-4":e,"flex":t}` and a class array to
-    // `["p-4","flex"]`, and only the entries after the first were being
-    // rewritten — the first follows the bracket, not `,` — so which utility
-    // lost its CSS depended on the order the author wrote them. A brace claims
-    // its string only when a `:` follows, the shape of an object KEY: a block
-    // `{"p-4"}` or an interpolation `${"p-4"}` is left alone.
-    // The separator (`,`/`(`/`[`/`{`/`&&`) and any whitespace are consumed and
-    // re-emitted rather than matched in a variable-length `(?<=…\s*)` lookbehind,
-    // which is quadratic (the engine retries the `\s*` length at every position).
-    // Consuming them keeps the scan linear and re-prepends them unchanged. The
-    // colon check is a sticky regex anchored at the match end, so it costs the
-    // whitespace it skips and never re-scans the string.
-    const objectKeyColon = /\s*:/y;
-    result = result.replace(/([,([{]|&&)(\s*)"([^"]+)"/g, (match, sep, ws, inner, offset) => {
-        if (sep === '{') {
-            objectKeyColon.lastIndex = offset + match.length;
-            if (!objectKeyColon.test(result)) {
-                return match;
-            }
-        }
-        const tokens = inner.split(CLASS_LIST_SPACE).filter(Boolean);
-        if (tokens.length === 0) {
-            return match;
-        }
-        let changed = false;
-        const mangled: string[] = [];
-        for (const t of tokens) {
-            const m = mangleMap[t];
-            if (m === undefined) {
-                return match;
-            } // any unknown token → skip whole string
-            if (m !== t) {
-                changed = true;
-            }
-            mangled.push(m);
-        }
-        if (!changed) {
-            return match;
-        }
-        return `${sep}${ws}"${mangled.join(' ')}"`;
-    });
+    result = manglePropertyExpressions(result);
+    result = mangleAttributeArguments(result);
 
     // Pass 4: compiled szs slot maps. The compiler replaces `szs={{...}}` with
     // `szsc={{ header: "bg-gray-100" }}`, which bundles to
@@ -3212,6 +3297,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // and a server never reaches it. Knowing we are serving is what keeps the
     // advisory list from being suppressed with nothing said in its place.
     let serving = false;
+    // Marked class calls the bundle pass could not read, so they run at
+    // runtime instead; reported once the build has rendered every chunk.
+    let classMarksMissed = 0;
     // Cross-module szv registry: filled by the prescan, refreshed per edit by
     // `refreshSzvRegistryEntry`, resolved per file. Watch lanes used to switch
     // this off because a one-shot prescan left an edited factory serving its
@@ -3278,6 +3366,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // if the `buildEnd` check finds the map would come out different now.
     let frozenOwnedClasses: ReadonlySet<string> = new Set<string>();
     let frozenAuthoredClasses: ReadonlySet<string> = new Set<string>();
+    let frozenUnmarkedClasses: ReadonlySet<string> = new Set<string>();
+    /**
+     * Per module, every name its text could hand a class list outside the
+     * strings the compiler marked. The chunk pass renames only marked strings,
+     * so a class one of these names leaves the map, and its CSS keeps the name
+     * the unmarked code writes (ADR 0034).
+     */
+    const unmarkedNamesByFile = new Map<string, { digest: string; names: ReadonlySet<string> }>();
     // True while the CSS rewrite runs in the transform phase (Vite build lane).
     // The output hook then leaves CSS assets alone: rewriting them a second
     // time would re-measure every asset and report every class as externally
@@ -4550,6 +4646,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             astBudget,
             mangleVars: options.production?.mangleVars === true,
             mangleVarHoistMaxDepth: options.production?.mangleVarHoistMaxDepth,
+            // Only a build that renames classes marks the strings to rename
+            // (ADR 0034); every lane decides that before its first transform.
+            markClasses: manglingEnabled,
             globalVarAliases:
                 earlyGlobalVarAliasEntries.length > 0 ? earlyGlobalVarAliasEntries : undefined,
             // Render dev-mode unknown-property warnings relative to the project root.
@@ -4587,6 +4686,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // A transform made under one Tailwind prefix emits classes a build
             // under another does not serve.
             classPrefix: compilerOptions.classPrefix,
+            // A marked transform calls `__szCss`, which only a mangle build
+            // renames away.
+            markClasses: compilerOptions.markClasses,
             // The registry entries fed to this file are part of its identity:
             // module A's config change must miss B's cached transform, or the
             // cache serves a stale table.
@@ -5555,6 +5657,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             // load. Raw-only modules therefore participate even when they do not
             // need the expensive sz parser pass.
             recordAuthoredClassesOf(filePath, content);
+            recordUnmarkedNames(filePath, content);
             if (!prescanSawServerModule && isRSCServerModule(content, filePath)) {
                 prescanSawServerModule = true;
             }
@@ -5728,6 +5831,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             rawDiscoveredClasses.add(cls);
         }
         recordSzClasses(filePath, result);
+        if (result.transformed) recordUnmarkedNames(filePath, result.code);
         for (const [token, data] of result.recoveryTokens) {
             state.recoveryTokens.set(token, data);
         }
@@ -5837,6 +5941,41 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (authoredRead.get(key) === digest) return;
         authoredRead.set(key, digest);
         recordAuthoredClasses(code);
+    }
+
+    /**
+     * Read the names a module leaves unmarked: its transformed text when the
+     * compiler rewrote it, its own text otherwise. Only a build that mangles
+     * reads them; the later text of a module replaces the earlier.
+     *
+     * @param file - Its path or bundler id.
+     * @param code - Its text.
+     */
+    function recordUnmarkedNames(file: string, code: string): void {
+        if (!manglingEnabled) return;
+        const key = normalizeSourceFilename(file);
+        // The transform hook reads the text the prescan read: a hash is a
+        // fraction of a read.
+        const digest = sha256Of(code).base64;
+        if (unmarkedNamesByFile.get(key)?.digest === digest) return;
+        unmarkedNamesByFile.set(key, { digest, names: collectUnmarkedNames(code) });
+    }
+
+    /**
+     * Owned classes some module writes outside a marked string.
+     *
+     * @returns The classes the map must leave as they are.
+     */
+    function unmarkedOwnedClasses(): Set<string> {
+        // One pass over every name read: linear in the names, where asking each
+        // owned class of each file was owned × files (11 s at 10,000 × 5,000).
+        const found = new Set<string>();
+        for (const { names } of unmarkedNamesByFile.values()) {
+            for (const name of names) {
+                if (state.ownedClasses.has(name)) found.add(name);
+            }
+        }
+        return found;
     }
 
     /**
@@ -6094,8 +6233,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // A preserved class leaves the eligible list but stays in the census,
         // so it remains forbidden as a token: the key and token spaces stay
         // disjoint, and the runtime's one-lookup contract holds.
+        const unmarked = unmarkedOwnedClasses();
         const eligible = mangleEligibleClasses(state.ownedClasses, state.authoredClasses).filter(
-            className => !manglePreserve.test(className),
+            className => !manglePreserve.test(className) && !unmarked.has(className),
         );
         if (!manglePreserveNoMatchWarned && manglingEnabled && state.ownedClasses.size > 0) {
             manglePreserveNoMatchWarned = true;
@@ -6125,6 +6265,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         state.mangleMap = computeMangleMap();
         frozenOwnedClasses = new Set(state.ownedClasses);
         frozenAuthoredClasses = new Set(state.authoredClasses);
+        frozenUnmarkedClasses = unmarkedOwnedClasses();
         mangleMapFrozen = true;
     }
 
@@ -6143,9 +6284,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const lateOwned = sortStrings(
             [...state.ownedClasses].filter(className => !frozenOwnedClasses.has(className)),
         );
-        const lateAuthored = sortStrings(
-            [...state.authoredClasses].filter(className => !frozenAuthoredClasses.has(className)),
-        );
+        const lateAuthored = sortStrings([
+            ...[...state.authoredClasses].filter(
+                className => !frozenAuthoredClasses.has(className),
+            ),
+            // A module first read after the freeze writes an owned class outside
+            // a marked string: the map renamed it, and that module keeps it.
+            ...[...unmarkedOwnedClasses()].filter(
+                className => !frozenUnmarkedClasses.has(className),
+            ),
+        ]);
         throw lateMangleCensusError(lateOwned, lateAuthored);
     }
 
@@ -6190,7 +6338,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     function mangleHtmlClassList(classes: string): string {
         const output: string[] = [];
         for (const className of classes.split(HTML_CLASS_SPACE)) {
-            if (className) output.push(state.mangleMap[className] || className);
+            if (!className) continue;
+            // Own keys only: `constructor` is a class name, not a map entry.
+            const owned = ownKey.call(state.mangleMap, className);
+            output.push(owned ? state.mangleMap[className] : className);
         }
         return output.join(' ');
     }
@@ -6290,21 +6441,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         return result;
     }
 
-    /** Per-module output accumulated before final class discovery. */
-    interface PreTransformOutput {
-        code: string;
-        transformed: boolean;
-        usesRuntime: boolean;
-        usesMerge: boolean;
-        usesSzcn: boolean;
-        usesSzPart: boolean;
-        usesSzvPick: boolean;
-        usesSzvPick1: boolean;
-        szPartArgsProvable: boolean;
-        usesColorVar: boolean;
-        usesSpacingVar: boolean;
-        usesUnitVar: boolean;
-        usesBoolClass: boolean;
+    /**
+     * Per-module output accumulated before final class discovery: the
+     * transform result's scalar fields, and the classes its `sz` lowered to.
+     */
+    interface PreTransformOutput extends ScalarFields {
         szClasses?: Set<string>;
     }
 
@@ -6329,6 +6470,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             usesSpacingVar: false,
             usesUnitVar: false,
             usesBoolClass: false,
+            usesClassMark: false,
         };
     }
 
@@ -7142,6 +7284,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (shouldProcessSource(id)) {
             trackGlobalVarSourceFile(id, code);
             recordAuthoredClassesOf(id, code);
+            // A module that may hold `sz` goes through `transformSzSource`,
+            // which reads the text it ships; reading the source too was a
+            // second read the first one replaced.
+            if (!moduleMayHoldSz(code)) recordUnmarkedNames(id, code);
             if (!markup) readSourceHooks(id, code);
         }
         return true;
@@ -7194,6 +7340,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 },
                 result.diagnostics,
             );
+            // An adapter marks nothing, so every class its output writes stays.
+            recordUnmarkedNames(id, result.code);
             return { ...unchangedPreTransform(result.code), transformed: result.code !== code };
         }
 
@@ -7203,6 +7351,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         recordFileVarMangleEntries(state, id, cssVariableEntries(result));
         recordFileCSSVariableMetrics(state, id, result.code);
         recordSzClasses(id, result);
+        recordUnmarkedNames(id, result.code);
         reportTransformDiagnostics(result, id, warn, code, watch);
         for (const [token, data] of result.recoveryTokens) state.recoveryTokens.set(token, data);
         return compilerPreTransformOutput(result);
@@ -8363,14 +8512,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * side would bill the same payload twice and report a cost that is mostly
      * the map counted again.
      *
+     * A build that mangles marked each class string the compiler emitted as
+     * an `__szCss(…)` call, and the calls are inlined here even when the map
+     * is empty, so none reaches the browser it does not need to (ADR 0034).
+     * The "before" side inlines them unrenamed: the comparison weighs the
+     * renaming, not the calls.
+     *
      * @param source - Asset source as the bundler produced it.
      * @param shouldMangle - Whether class mangling applies to this output.
      * @returns The rewritten source.
      */
     function rewriteCodeAsset(source: string, shouldMangle: boolean): string {
-        if (!shouldMangle) return replacePlaceholders(source);
-        const before = replacePlaceholders(source);
-        const after = replacePlaceholders(mangleCodeClasses(source));
+        if (!manglingEnabled) return replacePlaceholders(source);
+        const marked = inlineClassMarks(source, shouldMangle ? state.mangleMap : {});
+        classMarksMissed += marked.missed;
+        if (!shouldMangle) return replacePlaceholders(marked.code);
+        const before = replacePlaceholders(inlineClassMarks(source, {}).code);
+        const after = replacePlaceholders(mangleCodeClasses(marked.code));
         recordCodePair(sizeAccount, before, after);
         return after;
     }
@@ -8458,6 +8616,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function reportBuildSummary(): void {
         reportMangleSize();
+        if (classMarksMissed > 0) {
+            console.warn(diagnosticMessage('mangle-mark-missed', { count: classMarksMissed }));
+            classMarksMissed = 0;
+        }
         capFlush.now();
         // Blunt mode asked for silence and gets it; `'nudges'` asked for a
         // calmer log, and one line saying how much was left out is the opposite

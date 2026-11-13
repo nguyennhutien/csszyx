@@ -1004,6 +1004,11 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
         }
     },
     {
+        "id": "mangle-mark-missed",
+        "position": "none",
+        "args": "count"
+    },
+    {
         "id": "mangle-hybrid-hazard",
         "position": "none",
         "args": "form count names? selectors? entries?",

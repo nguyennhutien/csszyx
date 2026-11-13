@@ -7,6 +7,7 @@
 use string_wizard::{MagicString, UpdateOptions};
 
 use super::{
+    class_mark::{mark_class_literal, marking},
     css_var_planner::apply_css_variable_mangling,
     lower::{lower_static_sz_object, lower_sz_attribute_classes},
     recovery::{generate_inline_recovery_token, SourceLines},
@@ -314,7 +315,7 @@ fn rewrite_array_sz_attribute(
             continue;
         }
         if !part.classes.is_empty() || part.ternary.is_none() {
-            let classes = js_string_literal(&part.classes.join(" "));
+            let classes = mark_class_literal(js_string_literal(&part.classes.join(" ")));
             arguments.push(part.condition_span.map_or_else(
                 || classes.clone(),
                 |span| {
@@ -425,7 +426,7 @@ fn rewrite_static_sz_with_existing_class(
 ) {
     let class_attribute = &ir.class_attributes[class_index];
     if class_attribute.expression_span.is_some() {
-        let next = js_string_literal(&classes.join(" "));
+        let next = mark_class_literal(js_string_literal(&classes.join(" ")));
         wrap_class_attribute(
             magic,
             class_attribute,
@@ -505,15 +506,15 @@ fn rewrite_ternary_sz_attribute(
         // Fold the chain from the tail back, so the emitted nesting matches the
         // authored one and JavaScript's own short-circuit keeps each arm's test
         // unevaluated until every test before it has failed.
-        let mut tail = format!("\"{}\"", ternary.alternate_classes.join(" "));
+        // A JS string that reads back as the classes: one holding `\` or `"`
+        // needs escaping, or `bg-[url(a\b)]` reaches the DOM as a backspace.
+        let quoted = |classes: &[String]| mark_class_literal(js_string_literal(&classes.join(" ")));
+        let mut tail = quoted(&ternary.alternate_classes);
         for arm in ternary.chain_arms.iter().rev() {
             let arm_test = &source[arm.test_span.start as usize..arm.test_span.end as usize];
-            tail = format!("{arm_test} ? \"{}\" : {tail}", arm.classes.join(" "));
+            tail = format!("{arm_test} ? {} : {tail}", quoted(&arm.classes));
         }
-        format!(
-            "{test} ? \"{}\" : {tail}",
-            ternary.consequent_classes.join(" ")
-        )
+        format!("{test} ? {} : {tail}", quoted(&ternary.consequent_classes))
     };
 
     // Template literal appending one `${…}` segment per conditional after the
@@ -522,7 +523,16 @@ fn rewrite_ternary_sz_attribute(
     let template_literal = || {
         let mut out = String::from("`");
         if !static_classes.is_empty() {
-            out.push_str(&static_classes.join(" "));
+            let statics = static_classes.join(" ");
+            // A template quasi cannot carry a call, so a marked build gives
+            // the static classes their own placeholder.
+            if marking() {
+                out.push_str("${");
+                out.push_str(&mark_class_literal(js_string_literal(&statics)));
+                out.push('}');
+            } else {
+                out.push_str(&statics);
+            }
             out.push(' ');
         }
         for (index, ternary) in ternaries.iter().enumerate() {
@@ -576,7 +586,7 @@ fn rewrite_ternary_sz_attribute(
                         if joined.is_empty() {
                             "undefined".to_string()
                         } else {
-                            format!("\"{joined}\"")
+                            mark_class_literal(js_string_literal(&joined))
                         }
                     };
                     let test = &source[only_ternary.test_span.start as usize
@@ -942,7 +952,8 @@ fn append_object_property(source: &str, has_properties: bool, property: &str) ->
 /// other conditional keeps its `test ? "…" : "…"` form.
 fn conditional_expression_source(source: &str, ternary: &super::StaticTernaryIr) -> String {
     let expression = &source[ternary.test_span.start as usize..ternary.test_span.end as usize];
-    let consequent = js_string_literal(&ternary.consequent_classes.join(" "));
+    let consequent = mark_class_literal(js_string_literal(&ternary.consequent_classes.join(" ")));
+    // The key names the class for the runtime to look up; it is never marked.
     if let Some(key) = &ternary.bool_class_key {
         return format!(
             "__szBoolClass({expression}, {}, {consequent})",
@@ -958,7 +969,7 @@ fn conditional_expression_source(source: &str, ternary: &super::StaticTernaryIr)
     );
     format!(
         "{expression} ? {consequent} : {}",
-        js_string_literal(&ternary.alternate_classes.join(" "))
+        mark_class_literal(js_string_literal(&ternary.alternate_classes.join(" ")))
     )
 }
 
@@ -1003,6 +1014,15 @@ fn overwrite_attribute(magic: &mut MagicString<'_>, span: super::TextSpan, class
     // noisy `class=""`.
     let replacement = if class_name.is_empty() {
         "className={undefined}".to_string()
+    } else if marking() {
+        // A JSX attribute string cannot carry a call, so a marked build writes
+        // the class name as an expression, in parentheses: SWC drops an
+        // annotation that opens a JSX expression container, and the bundle
+        // pass finds a mark by it.
+        format!(
+            "className={{({})}}",
+            mark_class_literal(js_string_literal(class_name))
+        )
     } else if class_name.contains('"') {
         format!("className={{{}}}", js_string_literal(class_name))
     } else {

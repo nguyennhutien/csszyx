@@ -119,6 +119,8 @@ export interface NativeTransformOptions {
     classPrefix?: string;
     /** Which of the file's classes cover which, from the compiled stylesheet. */
     mergeTableJson?: string;
+    /** Wrap every emitted class string in `__szCss(…)` for a mangle build. */
+    markClasses?: boolean;
 }
 
 /** Native transform output shape returned per source file. */
@@ -200,6 +202,8 @@ export interface NativeTransformResult {
         usesUnitVar?: boolean;
         /** Whether the emitted code calls the __szBoolClass runtime helper. */
         usesBoolClass?: boolean;
+        /** Whether the emitted code calls the __szCss class-mark helper. */
+        usesClassMark?: boolean;
         /** Producer identity for cache safety. */
         producer: 'rust';
         /** Whether native AST budget protection fired. */
