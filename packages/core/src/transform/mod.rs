@@ -22,6 +22,8 @@ pub(crate) mod global_var_aliases;
 #[cfg(feature = "native-engine")]
 pub mod global_var_usages;
 mod ir;
+#[cfg(feature = "native-engine")]
+mod lone_surrogate;
 pub mod lower;
 pub mod merge;
 #[cfg(feature = "native-engine")]

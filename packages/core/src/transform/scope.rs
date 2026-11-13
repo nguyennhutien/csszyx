@@ -324,7 +324,7 @@ mod tests {
         let source_type = SourceType::tsx();
         let parsed = Parser::new(&allocator, source, source_type).parse();
         assert!(
-            !parsed.panicked,
+            !parsed.fatal_error,
             "fixture failed to parse: {:?}",
             parsed.diagnostics
         );
@@ -536,7 +536,7 @@ mod tests {
             "const BASE = { p: 4 };\nlet mutable = { m: 2 };\nconst App = () => <div sz={BASE} />;";
         let allocator = Allocator::default();
         let parsed = Parser::new(&allocator, source, SourceType::tsx()).parse();
-        assert!(!parsed.panicked, "{:?}", parsed.diagnostics);
+        assert!(!parsed.fatal_error, "{:?}", parsed.diagnostics);
         let scope = DeclaratorScope::from_program(&parsed.program);
         let reference = offset_of(source, "BASE} />");
 
@@ -576,7 +576,7 @@ mod tests {
         let source = "let s = { p: 4 };\ns = { p: 8 };\nconst App = () => <div sz={s} />;";
         let allocator = Allocator::default();
         let parsed = Parser::new(&allocator, source, SourceType::tsx()).parse();
-        assert!(!parsed.panicked, "{:?}", parsed.diagnostics);
+        assert!(!parsed.fatal_error, "{:?}", parsed.diagnostics);
         let scope = DeclaratorScope::from_program(&parsed.program);
         let reference = offset_of(source, "s} />");
 
@@ -595,7 +595,7 @@ mod tests {
         let source = "let s = { p: 4 };\nconst App = () => <div sz={s} />;";
         let allocator = Allocator::default();
         let parsed = Parser::new(&allocator, source, SourceType::tsx()).parse();
-        assert!(!parsed.panicked, "{:?}", parsed.diagnostics);
+        assert!(!parsed.fatal_error, "{:?}", parsed.diagnostics);
         let scope = DeclaratorScope::from_program(&parsed.program);
         let reference = offset_of(source, "s} />");
 
@@ -614,7 +614,7 @@ mod tests {
         let source = "const s = { p: 4 };\ns.p = 8;\nconst App = () => <div sz={s} />;";
         let allocator = Allocator::default();
         let parsed = Parser::new(&allocator, source, SourceType::tsx()).parse();
-        assert!(!parsed.panicked, "{:?}", parsed.diagnostics);
+        assert!(!parsed.fatal_error, "{:?}", parsed.diagnostics);
         let scope = DeclaratorScope::from_program(&parsed.program);
 
         assert!(!scope.is_reassigned("s"));

@@ -246,8 +246,11 @@ impl UsageScan {
         if let (BindingPattern::BindingIdentifier(id), Some(Expression::StringLiteral(value))) =
             (&declarator.id, &declarator.init)
         {
-            self.constants
-                .insert(id.name.as_str().to_owned(), value.value.as_str().to_owned());
+            // A lone surrogate spells no custom property a stylesheet holds.
+            if let Some(text) = value.value.as_str() {
+                self.constants
+                    .insert(id.name.as_str().to_owned(), text.to_owned());
+            }
         }
     }
 
@@ -319,7 +322,7 @@ fn member_name<'b>(member: &'b MemberExpression<'_>) -> Option<&'b str> {
     match member {
         MemberExpression::StaticMemberExpression(member) => Some(member.property.name.as_str()),
         MemberExpression::ComputedMemberExpression(member) => match &member.expression {
-            Expression::StringLiteral(literal) => Some(literal.value.as_str()),
+            Expression::StringLiteral(literal) => literal.value.as_str(),
             Expression::Identifier(id) => Some(id.name.as_str()),
             _ => None,
         },
@@ -340,9 +343,10 @@ fn style_method_kind(method: &str) -> Option<GlobalVarUsageKind> {
 /// How an expression names a custom property: a string, or a binding.
 fn spelled(expression: &Expression<'_>) -> Option<Spelled> {
     match expression {
-        Expression::StringLiteral(literal) => {
-            Some(Spelled::Text(literal.value.as_str().to_owned()))
-        }
+        Expression::StringLiteral(literal) => literal
+            .value
+            .as_str()
+            .map(|text| Spelled::Text(text.to_owned())),
         Expression::Identifier(id) => Some(Spelled::Constant(id.name.as_str().to_owned())),
         _ => None,
     }
@@ -359,17 +363,22 @@ fn key_spelled(key: &PropertyKey<'_>) -> Option<Spelled> {
 
 /// The static text of an attribute: a string, an expression-container string,
 /// or the cooked chunks of an expression-container template.
-fn attribute_strings<'b>(attribute: &'b JSXAttribute<'_>) -> Vec<&'b str> {
+///
+/// A string with a lone surrogate gives no text: no custom property name can
+/// hold one, and any text written for it would be invented.
+fn attribute_strings<'b>(attribute: &JSXAttribute<'b>) -> Vec<&'b str> {
     match &attribute.value {
-        Some(JSXAttributeValue::StringLiteral(literal)) => vec![literal.value.as_str()],
+        Some(JSXAttributeValue::StringLiteral(literal)) => {
+            literal.value.as_str().into_iter().collect()
+        }
         Some(JSXAttributeValue::ExpressionContainer(container)) => match &container.expression {
-            JSXExpression::StringLiteral(literal) => vec![literal.value.as_str()],
+            JSXExpression::StringLiteral(literal) => literal.value.as_str().into_iter().collect(),
             // An untagged template with a malformed escape does not parse, so
             // every chunk that reaches this point has a cooked value.
             JSXExpression::TemplateLiteral(template) => template
                 .quasis
                 .iter()
-                .filter_map(|quasi| quasi.value.cooked.as_ref().map(oxc_ast::ast::Str::as_str))
+                .filter_map(|quasi| quasi.value.cooked.and_then(oxc_str::JSStr::as_str))
                 .collect(),
             _ => Vec::new(),
         },

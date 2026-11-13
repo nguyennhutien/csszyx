@@ -12,6 +12,7 @@ pub(crate) enum SzFallbackKind {
     Call,
     Identifier,
     Import,
+    LoneSurrogate,
     Member,
     Other,
     SzvFactory,
@@ -28,5 +29,8 @@ pub(crate) const SZ_FALLBACK_UNKNOWN_CALLEE: &str = "?";
 /// # Arguments
 /// * `kind` - Classified shape of the expression.
 pub(crate) const fn sz_site_fallback_misses_css(kind: SzFallbackKind) -> bool {
-    matches!(kind, SzFallbackKind::Import | SzFallbackKind::Variant)
+    matches!(
+        kind,
+        SzFallbackKind::Import | SzFallbackKind::LoneSurrogate | SzFallbackKind::Variant
+    )
 }

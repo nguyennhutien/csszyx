@@ -31,13 +31,14 @@ serde-wasm-bindgen = "0.6.5"
 indexmap = { version = "2", features = ["serde"] }
 napi = { version = "3.10.5", default-features = false, features = ["napi4"], optional = true }
 napi-derive = { version = "3.5.10", optional = true }
-oxc_allocator = { version = "0.140.0", optional = true }
-oxc_ast = { version = "0.140.0", optional = true }
-oxc_ast_visit = { version = "0.140.0", optional = true }
-oxc_parser = { version = "0.140.0", optional = true }
-oxc_semantic = { version = "0.140.0", optional = true }
-oxc_span = { version = "0.140.0", optional = true }
-oxc_syntax = { version = "0.140.0", optional = true }
+oxc_allocator = { version = "0.158.0", optional = true }
+oxc_ast = { version = "0.158.0", optional = true }
+oxc_ast_visit = { version = "0.158.0", optional = true }
+oxc_parser = { version = "0.158.0", optional = true }
+oxc_semantic = { version = "0.158.0", optional = true }
+oxc_span = { version = "0.158.0", optional = true }
+oxc_str = { version = "0.158.0", optional = true }
+oxc_syntax = { version = "0.158.0", optional = true }
 string_wizard = { version = "0.0.27", optional = true }
 
 # The pool runs the batch on every core natively. The wasm artifact has no
@@ -69,6 +70,7 @@ migrate = [
     "dep:oxc_ast_visit",
     "dep:oxc_parser",
     "dep:oxc_span",
+    "dep:oxc_str",
 ]
 native-engine = [
     "dep:oxc_allocator",
@@ -77,6 +79,7 @@ native-engine = [
     "dep:oxc_parser",
     "dep:oxc_semantic",
     "dep:oxc_span",
+    "dep:oxc_str",
     "dep:oxc_syntax",
     "dep:rayon",
     "dep:string_wizard",

@@ -42,16 +42,33 @@ describe('safelist scan robustness', () => {
     describe('JSX in plain JavaScript files', () => {
         const jsxInJs =
             'export const Toolbar = ({ x }) => <div className="toolbar date" sz={{ mx: 0, my: 4 }} />;';
+        // A `.cjs` file is a script, where the parser rejects `export`; the
+        // same component written the CommonJS way.
+        const jsxInCjs =
+            'exports.Toolbar = ({ x }) => <div className="toolbar date" sz={{ mx: 0, my: 4 }} />;';
 
         for (const ext of ['js', 'mjs', 'cjs']) {
             for (const [name, engine] of ENGINES) {
                 it(`${name} extracts classes from JSX in a .${ext} file (no silent empty scan)`, () => {
-                    const result = engine(jsxInJs, { filename: `Toolbar.${ext}` });
+                    const result = engine(ext === 'cjs' ? jsxInCjs : jsxInJs, {
+                        filename: `Toolbar.${ext}`,
+                    });
                     expect([...result.classes].sort()).toEqual(['mx-0', 'my-4']);
                     expect([...result.rawClassNames].sort()).toEqual(['date', 'toolbar']);
                     expect(result.diagnostics).toEqual([]);
                 });
             }
+        }
+
+        for (const [name, engine] of ENGINES) {
+            it(`${name} reports module syntax in a .cjs file as a parse error`, () => {
+                // The parser rejects module syntax in a script, and Node loads
+                // a `.cjs` file as one, so the file is reported, not compiled.
+                const result = engine(jsxInJs, { filename: 'Toolbar.cjs' });
+                expect(result.diagnostics?.map(String)).toEqual([
+                    expect.stringContaining('Cannot use export statement outside a module'),
+                ]);
+            });
         }
 
         it('plain JS without JSX still parses everywhere', () => {

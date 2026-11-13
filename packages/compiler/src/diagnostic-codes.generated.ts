@@ -68,8 +68,8 @@ export interface SzDiagnosticArgs {
     'moved-value': { readonly form: 'value' | 'mask-layer'; readonly key: string; readonly value: string; readonly layerKey?: 'maskLinear' | 'maskRadial' | 'maskConic' };
     'global-before-group': { readonly global: string; readonly value: string; readonly valueType: 'string' | 'number' | 'boolean'; readonly group: string };
     'runtime-family-conflict': { readonly form: 'key-first' | 'other-first'; readonly key: string; readonly other: string };
-    'fallback-missing-css': { readonly site: 'sz' | 'szr' | 'szv' | 'sz-variant-key'; readonly shape?: 'call' | 'identifier' | 'import' | 'member' | 'other' | 'szv-factory' | 'variant'; readonly detail?: string; readonly path?: string; readonly keyPath?: string };
-    'fallback-nudge': { readonly site: 'sz' | 'sz-array-element'; readonly shape?: 'call' | 'identifier' | 'import' | 'member' | 'other' | 'szv-factory' | 'variant'; readonly detail?: string; readonly path?: string };
+    'fallback-missing-css': { readonly site: 'sz' | 'szr' | 'szv' | 'sz-variant-key'; readonly shape?: 'call' | 'identifier' | 'import' | 'lone-surrogate' | 'member' | 'other' | 'szv-factory' | 'variant'; readonly detail?: string; readonly path?: string; readonly keyPath?: string };
+    'fallback-nudge': { readonly site: 'sz' | 'sz-array-element'; readonly shape?: 'call' | 'identifier' | 'import' | 'lone-surrogate' | 'member' | 'other' | 'szv-factory' | 'variant'; readonly detail?: string; readonly path?: string };
     'merge-classifier-unavailable': { readonly form: 'unreadable' | 'format-mismatch'; readonly error?: string; readonly tableFormat?: number };
     'parse-error': { readonly form: 'syntax' | 'summary' | 'panicked' | 'expression' | 'prescan'; readonly message?: string; readonly errorCount?: number };
     'nesting-depth': { readonly depth: number };

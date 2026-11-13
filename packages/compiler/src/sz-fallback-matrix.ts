@@ -27,6 +27,7 @@ export type SzFallbackKind =
     | 'call'
     | 'identifier'
     | 'import'
+    | 'lone-surrogate'
     | 'member'
     | 'other'
     | 'szv-factory'
@@ -37,6 +38,7 @@ export const SZ_FALLBACK_KINDS: readonly SzFallbackKind[] = [
     'call',
     'identifier',
     'import',
+    'lone-surrogate',
     'member',
     'other',
     'szv-factory',
@@ -87,6 +89,14 @@ export const SZ_FALLBACK_MATRIX: Readonly<Record<SzFallbackKind, SzFallbackTempl
         reason: 'imported binding `{detail}` could not be read at build time',
         suggestion:
             'export it as a `const` with a static object literal; a star re-export, a computed value or `build.importedStaticSz: false` keeps it at runtime; for variant-based styling use `szv()`, for runtime values `dynamic()`.',
+    },
+    // A string the value needs holds an unpaired UTF-16 surrogate. A class
+    // name cannot spell one, so any text the build wrote for it would be
+    // invented; the runtime renders the value as the author wrote it.
+    'lone-surrogate': {
+        reason: 'a string in it holds a lone UTF-16 surrogate, which has no text form to compile',
+        suggestion:
+            'write a complete surrogate pair, or remove the lone `\\uD800`-`\\uDFFF` escape; for runtime values use `dynamic()`.',
     },
     member: {
         reason: 'member expression is not statically resolvable',
@@ -244,11 +254,15 @@ export type SzFallbackConsequence = 'missing-css' | 'nudge';
  * A VARIANT key sits with the import: it is one key of an object literal the
  * author wrote right there, so nobody upstream collects what it holds.
  *
+ * A LONE-SURROGATE string is collected nowhere either: no class name can
+ * spell it, so the build never wrote one for anybody to generate.
+ *
  * The cost of drawing the line here is under-reporting: an unresolvable
  * module-level const reads as advisory. That is the safe direction.
  */
 export const SZ_SITE_MISSING_CSS_KINDS: ReadonlySet<SzFallbackKind> = new Set<SzFallbackKind>([
     'import',
+    'lone-surrogate',
     'variant',
 ]);
 

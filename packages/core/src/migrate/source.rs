@@ -125,7 +125,7 @@ pub fn transform_source(
     // parse failures, which is what the removed TypeScript migrate's Babel
     // parse threw on.
     let first_error = parsed.diagnostics.errors().next();
-    if parsed.panicked || first_error.is_some() {
+    if parsed.fatal_error || first_error.is_some() {
         let message = first_error.map_or(String::new(), |error| error.message.to_string());
         let mut result = unchanged_result(source);
         result
@@ -310,7 +310,8 @@ fn imports_from(source: &str, packages: &[&str]) -> bool {
 
 impl<'a> Visit<'a> for Migration<'_, '_> {
     fn visit_import_declaration(&mut self, declaration: &ImportDeclaration<'a>) {
-        let module = declaration.source.value.as_str();
+        // A specifier with a lone surrogate names no package csszyx knows.
+        let module = declaration.source.value.as_str().unwrap_or_default();
         let is_clsx_package = imports_from(module, CLSX_PACKAGES);
         if imports_from(module, CVA_PACKAGES) {
             self.has_cva_import = true;
@@ -469,7 +470,9 @@ impl<'a> Migration<'_, '_> {
         let range = span_range(attribute.span);
         match &attribute.value {
             Some(JSXAttributeValue::StringLiteral(literal)) => {
-                self.apply_static_class_migration(&literal.value, range);
+                if let Some(text) = literal.value.as_str() {
+                    self.apply_static_class_migration(text, range);
+                }
             }
             Some(JSXAttributeValue::ExpressionContainer(container)) => {
                 self.migrate_class_expression(&container.expression, range);
@@ -514,7 +517,9 @@ impl<'a> Migration<'_, '_> {
 
     fn migrate_class_expression(&mut self, expression: &JSXExpression<'a>, range: (usize, usize)) {
         if let JSXExpression::StringLiteral(literal) = expression {
-            self.apply_static_class_migration(&literal.value, range);
+            if let Some(text) = literal.value.as_str() {
+                self.apply_static_class_migration(text, range);
+            }
             return;
         }
         let Some(result) = self.dynamic_pattern_result(expression) else {
@@ -597,7 +602,10 @@ impl<'a> Migration<'_, '_> {
         let existing_keys = keys.clone();
         let range = span_range(attribute.span);
 
-        let trimmed = literal.value.trim_matches(is_class_space);
+        // JSX reads no escape in an attribute string, so the value is source
+        // text and never holds a lone surrogate.
+        let text = literal.value.as_str().unwrap_or_default();
+        let trimmed = text.trim_matches(is_class_space);
         let converted = class_name_to_sz_object_with(trimmed, self.lookup);
         let mut remaining = converted.keep_in_class_name.clone();
         remaining.extend(converted.unrecognized.iter().cloned());

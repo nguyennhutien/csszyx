@@ -10,8 +10,8 @@ use oxc_ast::{
         JSXAttributeName, JSXAttributeValue, JSXElement, JSXElementName, JSXExpression,
         JSXFragment, JSXMemberExpression, JSXMemberExpressionObject, JSXOpeningElement,
         JSXSpreadAttribute, LogicalExpression, ObjectExpression, ObjectProperty,
-        ObjectPropertyKind, Program, PropertyKey, Statement, TSTypeQuery, TSTypeQueryExprName,
-        TemplateLiteral, UnaryOperator, VariableDeclaration,
+        ObjectPropertyKind, Program, PropertyKey, Statement, StringLiteral, TSTypeQuery,
+        TSTypeQueryExprName, TemplateLiteral, UnaryOperator, VariableDeclaration,
     },
     AstKind,
 };
@@ -23,6 +23,7 @@ use std::collections::HashSet;
 use std::time::Instant;
 
 use super::{
+    lone_surrogate::needs_lone_surrogate,
     lower::{dynamic_css_var_class, is_removed_sz_key, is_variant_key, lower_static_sz_object},
     ClassAttributeIr, DeferredVariantKeyIr, DroppedKeyReason, DroppedSzKeyIr,
     DuplicateSzAttributeIr, DynamicCssVarCategory, DynamicCssVarIr, DynamicGroupConflictIr,
@@ -130,7 +131,7 @@ pub fn parse_source_shell_with_registries(
         ..TransformTimings::default()
     };
 
-    let ast_budget_exceeded = if parsed.panicked {
+    let ast_budget_exceeded = if parsed.fatal_error {
         false
     } else {
         let scope_start = Instant::now();
@@ -173,11 +174,11 @@ pub fn parse_source_shell_with_registries(
         visitor.ast_budget_exceeded
     };
 
-    let diagnostics = parse_error_diagnostics(parse_errors(&parsed), parsed.panicked);
+    let diagnostics = parse_error_diagnostics(parse_errors(&parsed), parsed.fatal_error);
     ParsedSourceShell {
         ir,
         diagnostics,
-        panicked: parsed.panicked,
+        panicked: parsed.fatal_error,
         ast_budget_exceeded,
         timings,
     }
@@ -782,11 +783,17 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             match &prop.value {
                 Expression::StringLiteral(value) => {
                     // Raw class string (also pass-1 output, so the transform is
-                    // idempotent): safelist, keep the original text.
+                    // idempotent): safelist, keep the original text. A lone
+                    // surrogate has no class text, so the slot map stays as
+                    // written, as for any slot the build cannot read.
+                    let Some(class_name) = value.value.as_str() else {
+                        self.ir.szs_diagnostics.push(unsupported_message);
+                        return;
+                    };
                     let value_span = prop.value.span();
                     entries.push(SzsSlotEntryIr {
                         key,
-                        class_name: value.value.to_string(),
+                        class_name: class_name.to_owned(),
                         emit_text: self.source[value_span.start as usize..value_span.end as usize]
                             .to_string(),
                     });
@@ -841,7 +848,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             Some(JSXAttributeValue::StringLiteral(value)) => (
                 StaticSzObject::empty(),
                 string_value_span(value.span, self.source),
-                Some(value.value.to_string()),
+                Some(jsx_string_text(value, self.source).to_owned()),
                 true,
                 Vec::new(),
                 Vec::new(),
@@ -865,7 +872,36 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 //    production output and prevents the engine from
                 //    leaving source unchanged for shapes the runtime
                 //    can still execute correctly.
-                if let Some((ternary, value_span)) =
+                //
+                // A value that needs a string with a lone surrogate takes the
+                // third path before the other two are tried: no class text
+                // can spell it, and trying them would record state for it.
+                if container
+                    .expression
+                    .as_expression()
+                    .is_some_and(|expression| {
+                        needs_lone_surrogate(expression, ctx.scope, ctx.program)
+                    })
+                {
+                    runtime_fallback_diagnostic = Some(super::RuntimeFallbackDiagnosticIr {
+                        kind: super::RuntimeFallbackKindIr::LoneSurrogate,
+                        detail: String::new(),
+                        path: String::new(),
+                    });
+                    (
+                        StaticSzObject::empty(),
+                        runtime_fallback_span_from_jsx_expression(&container.expression)?,
+                        None,
+                        false,
+                        Vec::new(),
+                        Vec::new(),
+                        true,
+                        false,
+                        candidate_classes_from_jsx_expression(&container.expression, ctx),
+                        Vec::new(),
+                        Vec::new(),
+                    )
+                } else if let Some((ternary, value_span)) =
                     static_ternary_from_jsx_expression(&container.expression, ctx)
                 {
                     (
@@ -1250,7 +1286,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         let (value_span, value, expression_span) = match &attr.value {
             Some(JSXAttributeValue::StringLiteral(value)) => (
                 string_value_span(value.span, self.source),
-                value.value.to_string(),
+                jsx_string_text(value, self.source).to_owned(),
                 None,
             ),
             Some(JSXAttributeValue::ExpressionContainer(container)) => {
@@ -1299,6 +1335,11 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         let Some(argument) = call.arguments.first() else {
             return;
         };
+        if matches!(callee.name.as_str(), "dynamic" | "szr" | "szv")
+            && self.catalog_argument_needs_lone_surrogate(callee.name.as_str(), call, argument)
+        {
+            return;
+        }
         match callee.name.as_str() {
             // szr(static-object) resolves the same classes at runtime that
             // dynamic() would inject; both need their literal args safelisted.
@@ -1370,7 +1411,9 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         if declaration.import_kind.is_type() {
             return;
         }
-        let source_value = declaration.source.value.as_str();
+        let Some(source_value) = declaration.source.value.as_str() else {
+            return;
+        };
         let Some(target) = szr_rewrite_target(source_value) else {
             return;
         };
@@ -1474,7 +1517,9 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         if declaration.import_kind.is_type() || self.cross_module.is_empty() {
             return;
         }
-        let source_value = declaration.source.value.as_str();
+        let Some(source_value) = declaration.source.value.as_str() else {
+            return;
+        };
         let Some((_, entries)) = self
             .cross_module
             .iter()
@@ -1785,6 +1830,46 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
 
     /// Record a `szr`/`szv` argument the parser could not read, classified for
     /// the shared fallback matrix.
+    /// Decline a catalog call whose argument needs a lone-surrogate string.
+    ///
+    /// None of its classes are collected: no class text can spell the value.
+    /// `szr` and `szv` report it as their unread-argument fallback does, the
+    /// `szr` one deferred the same way; `dynamic()` injects its own rules at
+    /// runtime and reports nothing.
+    fn catalog_argument_needs_lone_surrogate(
+        &mut self,
+        callee: &str,
+        call: &CallExpression<'_>,
+        argument: &Argument<'_>,
+    ) -> bool {
+        let ctx = self.resolve_context();
+        let Some(expression) = argument
+            .as_expression()
+            .filter(|expression| needs_lone_surrogate(expression, ctx.scope, ctx.program))
+        else {
+            return false;
+        };
+        let fallback = |site| super::SiteFallbackIr {
+            site,
+            kind: super::RuntimeFallbackKindIr::LoneSurrogate,
+            detail: String::new(),
+            offset: fallback_expression_offset(expression),
+            path: String::new(),
+        };
+        match callee {
+            "szr" => self.pending_szr_fallbacks.push(PendingSzrFallback {
+                call_span: text_span(call.span()),
+                fallback: fallback(super::SzFallbackSiteIr::Szr),
+            }),
+            "szv" => self
+                .ir
+                .site_fallbacks
+                .push(fallback(super::SzFallbackSiteIr::Szv)),
+            _ => {}
+        }
+        true
+    }
+
     fn record_site_fallback(&mut self, site: super::SzFallbackSiteIr, argument: &Argument<'_>) {
         let Some(expression) = argument.as_expression() else {
             return;
@@ -1806,7 +1891,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         let Some(JSXAttributeValue::StringLiteral(value)) = &attr.value else {
             return Err(UnsupportedRecoveryIr::NonLiteral);
         };
-        let mode = match value.value.as_str() {
+        let mode = match jsx_string_text(value, self.source) {
             "csr" => RecoveryMode::Csr,
             "dev-only" => RecoveryMode::DevOnly,
             other => return Err(UnsupportedRecoveryIr::UnknownMode(other.to_string())),
@@ -2109,7 +2194,12 @@ fn lenient_catalog_values<'a>(
         return Vec::new();
     }
     match unwrap_expression(expression) {
-        Expression::StringLiteral(value) => vec![StaticSzValue::String(value.value.to_string())],
+        Expression::StringLiteral(value) => value
+            .value
+            .as_str()
+            .map(|text| StaticSzValue::String(text.to_owned()))
+            .into_iter()
+            .collect(),
         Expression::TemplateLiteral(template) => {
             template_string_value(template).into_iter().collect()
         }
@@ -2275,7 +2365,7 @@ fn jsx_attribute_name<'a>(name: &'a JSXAttributeName<'a>) -> Option<&'a str> {
 /// exact same contract without a scope resolver.
 fn static_szs_value(expression: &Expression<'_>) -> Option<StaticSzValue> {
     match expression {
-        Expression::StringLiteral(value) => Some(StaticSzValue::String(value.value.to_string())),
+        Expression::StringLiteral(value) => string_value(value),
         Expression::TemplateLiteral(template) => template_string_value(template),
         Expression::NumericLiteral(value) => Some(StaticSzValue::Number(value.value)),
         Expression::BooleanLiteral(value) => Some(StaticSzValue::Boolean(value.value)),
@@ -2735,8 +2825,8 @@ fn push_array_element_parts(
     if is_falsy_style_literal(unwrapped) {
         return;
     }
-    if let Expression::StringLiteral(value) = unwrapped {
-        parts.push(static_array_part(split_class_tokens(&value.value), None));
+    if let Some(text) = string_literal_text(unwrapped) {
+        parts.push(static_array_part(split_class_tokens(text), None));
         return;
     }
     let logical = match unwrapped {
@@ -2746,12 +2836,13 @@ fn push_array_element_parts(
     if let Some(logical) = logical {
         let mut resolved_objects = Vec::new();
         let right = unwrap_expression(&logical.right);
-        let classes = if let Expression::StringLiteral(value) = right {
-            Some(split_class_tokens(&value.value))
-        } else {
-            array_element_static_object(right, ctx)
-                .map(|object| lower_resolved_object(object, &mut resolved_objects))
-        };
+        let classes = string_literal_text(right).map_or_else(
+            || {
+                array_element_static_object(right, ctx)
+                    .map(|object| lower_resolved_object(object, &mut resolved_objects))
+            },
+            |text| Some(split_class_tokens(text)),
+        );
         // An element that lowers to no class is dropped by the attribute pass,
         // which also keeps a guarded object's properties for the diagnostics.
         // Dropping it here as well would hide the half that has properties.
@@ -2968,7 +3059,7 @@ fn static_array_ternary_from_conditional(
     let mut branch_classes = |branch: &Expression<'_>| {
         let unwrapped = unwrap_expression(branch);
         if let Expression::StringLiteral(value) = unwrapped {
-            return Some(split_class_tokens(&value.value));
+            return value.value.as_str().map(split_class_tokens);
         }
         let (object, _, _) = static_object_from_expression(unwrapped, ctx)?;
         Some(lower_resolved_object(object, &mut resolved_objects))
@@ -3155,7 +3246,7 @@ fn single_dimension_selection(object: &ObjectExpression<'_>) -> Option<SzvSingle
     // engine collapse a call the other two leave alone.
     let dimension = match &entry.key {
         PropertyKey::StaticIdentifier(identifier) => identifier.name.to_string(),
-        PropertyKey::StringLiteral(string) => string.value.to_string(),
+        PropertyKey::StringLiteral(string) => string.value.as_str()?.to_owned(),
         _ => return None,
     };
     // `{ __proto__: v }` in a literal sets the PROTOTYPE instead of creating an
@@ -3233,7 +3324,7 @@ fn strict_static_selection(
         }
         let key = static_property_key(&entry.key)?;
         let value = match unwrap_expression(&entry.value) {
-            Expression::StringLiteral(literal) => literal.value.to_string(),
+            Expression::StringLiteral(literal) => literal.value.as_str()?.to_owned(),
             Expression::BooleanLiteral(literal) => literal.value.to_string(),
             Expression::NumericLiteral(literal) => {
                 super::szv_precompile::parity_safe_scalar_string(&super::StaticSzValue::Number(
@@ -3414,7 +3505,7 @@ fn strict_literal_value_diagnosed(
     path: &str,
 ) -> Result<StaticSzValue, String> {
     match unwrap_expression(expression) {
-        Expression::StringLiteral(literal) => Ok(StaticSzValue::String(literal.value.to_string())),
+        Expression::StringLiteral(literal) => string_value(literal).ok_or_else(|| path.to_string()),
         Expression::TemplateLiteral(template) => {
             template_string_value(template).ok_or_else(|| path.to_string())
         }
@@ -3679,7 +3770,7 @@ const fn estree_expression_type_name(expression: &Expression<'_>) -> &'static st
         Expression::ThisExpression(_) => "ThisExpression",
         Expression::ChainExpression(_) => "ChainExpression",
         Expression::YieldExpression(_) => "YieldExpression",
-        Expression::MetaProperty(_) => "MetaProperty",
+        Expression::ImportMeta(_) | Expression::NewTarget(_) => "MetaProperty",
         Expression::TSAsExpression(_) => "TSAsExpression",
         Expression::TSSatisfiesExpression(_) => "TSSatisfiesExpression",
         Expression::TSNonNullExpression(_) => "TSNonNullExpression",
@@ -4200,7 +4291,9 @@ fn collect_imported_sz_objects(
         if declaration.import_kind.is_type() {
             continue;
         }
-        let source_value = declaration.source.value.as_str();
+        let Some(source_value) = declaration.source.value.as_str() else {
+            continue;
+        };
         let Some((_, entries)) = registry
             .iter()
             .find(|(specifier, _)| specifier == source_value)
@@ -4264,7 +4357,9 @@ fn collect_imported_namespaces(
         if declaration.import_kind.is_type() {
             continue;
         }
-        let source_value = declaration.source.value.as_str();
+        let Some(source_value) = declaration.source.value.as_str() else {
+            continue;
+        };
         let Some((_, entries)) = registry
             .iter()
             .find(|(specifier, _)| specifier == source_value)
@@ -4645,7 +4740,11 @@ fn read_string_branches(value: &Expression<'_>, literals: &mut Vec<String>, opaq
             read_string_branches(&conditional.alternate, literals, opaque);
         }
         // An empty string moved nowhere, so it is read like any literal.
-        Expression::StringLiteral(literal) => literals.push(literal.value.to_string()),
+        // A lone surrogate spells no class, so it adds no literal; the sz
+        // attribute that holds one never reaches this read.
+        Expression::StringLiteral(literal) => {
+            literals.extend(literal.value.as_str().map(str::to_owned));
+        }
         absent if is_absent_sz_expression(absent) => {}
         _ => *opaque = true,
     }
@@ -5837,7 +5936,7 @@ fn static_property_from_object_property(
 fn static_property_key(key: &PropertyKey<'_>) -> Option<String> {
     match key {
         PropertyKey::StaticIdentifier(identifier) => Some(identifier.name.to_string()),
-        PropertyKey::StringLiteral(string) => Some(string.value.to_string()),
+        PropertyKey::StringLiteral(string) => string.value.as_str().map(str::to_owned),
         PropertyKey::NumericLiteral(number) => Some(number.value.to_string()),
         _ => None,
     }
@@ -5848,7 +5947,7 @@ fn static_value_from_expression(
     ctx: ResolveContext<'_>,
 ) -> Option<StaticSzValue> {
     match expression {
-        Expression::StringLiteral(value) => Some(StaticSzValue::String(value.value.to_string())),
+        Expression::StringLiteral(value) => string_value(value),
         Expression::TemplateLiteral(template) => template_string_value(template),
         Expression::NumericLiteral(value) => Some(StaticSzValue::Number(value.value)),
         Expression::UnaryExpression(value) => static_value_from_unary_expression(value),
@@ -5949,7 +6048,34 @@ fn is_skippable_static_value(expression: &Expression<'_>) -> bool {
 fn template_string_value(template: &TemplateLiteral<'_>) -> Option<StaticSzValue> {
     template
         .single_quasi()
-        .map(|text| StaticSzValue::String(text.to_string()))
+        .and_then(oxc_str::JSStr::as_str)
+        .map(|text| StaticSzValue::String(text.to_owned()))
+}
+
+/// The value a string literal spells, or none when it holds a lone surrogate:
+/// no class text can spell that, so every sz value reader declines it.
+fn string_value(literal: &StringLiteral<'_>) -> Option<StaticSzValue> {
+    literal
+        .value
+        .as_str()
+        .map(|text| StaticSzValue::String(text.to_owned()))
+}
+
+/// The text of a string literal, or none for any other expression and for a
+/// string that holds a lone surrogate.
+fn string_literal_text<'a>(expression: &Expression<'a>) -> Option<&'a str> {
+    match expression {
+        Expression::StringLiteral(literal) => literal.value.as_str(),
+        _ => None,
+    }
+}
+
+/// The text of a JSX attribute string, read from the source. JSX decodes no
+/// escape and no character reference there, so the value IS the text between
+/// the quotes and cannot hold a lone surrogate.
+fn jsx_string_text<'s>(literal: &StringLiteral<'_>, source: &'s str) -> &'s str {
+    let span = string_value_span(literal.span, source);
+    &source[span.start as usize..span.end as usize]
 }
 
 fn static_value_from_unary_expression(

@@ -232,6 +232,7 @@ const FALLBACK_SHAPES = /** @type {const} */ ([
     'call',
     'identifier',
     'import',
+    'lone-surrogate',
     'member',
     'other',
     'szv-factory',

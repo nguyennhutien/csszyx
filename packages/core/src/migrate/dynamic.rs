@@ -110,7 +110,7 @@ fn convert_clsx_argument(
     lookup: Lookup<'_>,
 ) -> Option<(String, Vec<String>)> {
     match argument {
-        Argument::StringLiteral(literal) => migrate_string(&literal.value, lookup),
+        Argument::StringLiteral(literal) => migrate_string(literal.value.as_str()?, lookup),
         Argument::LogicalExpression(logical) if logical.operator == LogicalOperator::And => {
             logical_and_inner(logical, source, lookup)
         }
@@ -176,20 +176,22 @@ pub fn handle_template_literal(
     let mut warnings = Vec::new();
     let mut unrecognized = Vec::new();
 
-    let static_text = template
+    // An untagged template has no invalid escapes, so every quasi cooks. A
+    // quasi with a lone surrogate has no class text, so the literal stays.
+    let Some(chunks) = template
         .quasis
         .iter()
-        // An untagged template has no invalid escapes, so every quasi cooks.
         .map(|quasi| {
             quasi
                 .value
                 .cooked
-                .as_ref()
-                .unwrap_or(&quasi.value.raw)
-                .to_string()
+                .map_or(Some(quasi.value.raw.as_str()), oxc_str::JSStr::as_str)
         })
-        .collect::<Vec<_>>()
-        .join(" ");
+        .collect::<Option<Vec<_>>>()
+    else {
+        return skip(unrecognized, warnings);
+    };
+    let static_text = chunks.join(" ");
     let trimmed_static = static_text
         .split(is_class_space)
         .filter(|word| !word.is_empty())
@@ -256,8 +258,9 @@ fn migrate_template_expression(
     converted: &mut u32,
 ) -> Option<String> {
     if let Expression::StringLiteral(literal) = expression {
-        let (_, literal_unrecognized) = migrate_string(&literal.value, lookup)?;
-        let converted_literal = class_name_to_sz_object_with(&literal.value, lookup);
+        let text = literal.value.as_str()?;
+        let (_, literal_unrecognized) = migrate_string(text, lookup)?;
+        let converted_literal = class_name_to_sz_object_with(text, lookup);
         for (key, value) in converted_literal.sz_object.js_ordered() {
             base.insert(key.clone(), value.clone());
         }
@@ -305,8 +308,8 @@ fn ternary_inner(
         return None;
     };
     let condition = slice(source, conditional.test.span());
-    let consequent = consequent.value.trim_matches(is_class_space);
-    let alternate = alternate.value.trim_matches(is_class_space);
+    let consequent = consequent.value.as_str()?.trim_matches(is_class_space);
+    let alternate = alternate.value.as_str()?.trim_matches(is_class_space);
 
     if alternate.is_empty() {
         if consequent.is_empty() {
@@ -350,7 +353,7 @@ fn logical_and_inner(
     let Expression::StringLiteral(right) = &logical.right else {
         return None;
     };
-    let (object, unrecognized) = migrate_string(&right.value, lookup)?;
+    let (object, unrecognized) = migrate_string(right.value.as_str()?, lookup)?;
     if !unrecognized.is_empty() {
         return None;
     }

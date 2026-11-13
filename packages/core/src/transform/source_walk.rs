@@ -82,7 +82,10 @@ impl<'a> Visit<'a> for SourceWalk {
 
     fn visit_string_literal(&mut self, literal: &StringLiteral<'a>) {
         if let Some(links) = &mut self.links {
-            links.text(&literal.value);
+            // A lone surrogate has no text form, so the string files nothing.
+            if let Some(text) = literal.value.as_str() {
+                links.text(text);
+            }
         }
     }
 

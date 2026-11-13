@@ -230,12 +230,12 @@ fn static_loads(record: &ModuleRecord<'_>) -> Vec<ModuleLoad> {
 /// escapes decoded; none for any other expression.
 fn static_text<'a>(expression: &'a Expression<'_>) -> Option<&'a str> {
     match expression {
-        Expression::StringLiteral(literal) => Some(literal.value.as_str()),
+        Expression::StringLiteral(literal) => literal.value.as_str(),
         Expression::TemplateLiteral(template) if template.expressions.is_empty() => template
             .quasis
             .first()
-            .and_then(|quasi| quasi.value.cooked.as_ref())
-            .map(oxc_ast::ast::Str::as_str),
+            .and_then(|quasi| quasi.value.cooked)
+            .and_then(oxc_str::JSStr::as_str),
         _ => None,
     }
 }
@@ -308,7 +308,9 @@ impl LinkScan {
         if let (ImportOrExportKind::Value, TSModuleReference::ExternalModuleReference(reference)) =
             (declaration.import_kind, &declaration.module_reference)
         {
-            self.load(&reference.expression.value);
+            if let Some(specifier) = reference.expression.value.as_str() {
+                self.load(specifier);
+            }
         }
     }
 
@@ -325,8 +327,15 @@ impl LinkScan {
     /// The text of a template's static parts.
     pub(crate) fn template(&mut self, template: &TemplateLiteral<'_>) {
         for quasi in &template.quasis {
-            let text = quasi.value.cooked.as_ref().unwrap_or(&quasi.value.raw);
-            self.text(text);
+            // A chunk with a lone surrogate has no text form and files
+            // nothing; a tagged chunk with a malformed escape files its raw text.
+            if let Some(text) = quasi
+                .value
+                .cooked
+                .map_or(Some(quasi.value.raw.as_str()), oxc_str::JSStr::as_str)
+            {
+                self.text(text);
+            }
         }
     }
 
