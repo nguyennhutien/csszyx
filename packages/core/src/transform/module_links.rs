@@ -19,6 +19,7 @@ use oxc_syntax::module_record::{
     ExportEntry, ExportExportName, ExportImportName, ImportImportName, ModuleRecord,
 };
 
+use super::lone_surrogate::scan_text;
 use super::parser::source_type_for_path;
 use super::registry_entries::{registry_entries, RegistryEntry};
 use super::source_walk::SourceWalk;
@@ -327,14 +328,11 @@ impl LinkScan {
     /// The text of a template's static parts.
     pub(crate) fn template(&mut self, template: &TemplateLiteral<'_>) {
         for quasi in &template.quasis {
-            // A chunk with a lone surrogate has no text form and files
-            // nothing; a tagged chunk with a malformed escape files its raw text.
-            if let Some(text) = quasi
-                .value
-                .cooked
-                .map_or(Some(quasi.value.raw.as_str()), oxc_str::JSStr::as_str)
-            {
-                self.text(text);
+            // A lone surrogate is spelled out, as a string's is; a tagged
+            // chunk with a malformed escape files its raw text.
+            match quasi.value.cooked {
+                Some(cooked) => self.text(&scan_text(cooked)),
+                None => self.text(&quasi.value.raw),
             }
         }
     }
@@ -635,6 +633,22 @@ mod tests {
         assert!(!is_export_type_suffix("mytype"));
         assert!(is_export_type_suffix("export type"));
         assert!(is_export_type_suffix("export\ttype "));
+    }
+
+    #[test]
+    fn a_tagged_chunk_with_a_malformed_escape_files_its_raw_text() {
+        let files = [TransformFile {
+            filename: "/p/a.tsx".to_owned(),
+            source: r"export const A = () => <style>{css`.a\u{ {} .b {}`}</style>;".to_owned(),
+        }];
+        let query = ModuleLinksQuery {
+            style_texts: true,
+            ..ModuleLinksQuery::default()
+        };
+        assert_eq!(
+            scan_module_links(&files, query).remove(0).style_css,
+            [r".a\u{ {} .b {}"]
+        );
     }
 
     fn links(source: &str, filename: &str) -> ModuleLinks {

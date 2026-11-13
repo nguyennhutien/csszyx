@@ -23,7 +23,7 @@ use std::collections::HashSet;
 use std::time::Instant;
 
 use super::{
-    lone_surrogate::needs_lone_surrogate,
+    lone_surrogate::lone_surrogate_string,
     lower::{dynamic_css_var_class, is_removed_sz_key, is_variant_key, lower_static_sz_object},
     ClassAttributeIr, DeferredVariantKeyIr, DroppedKeyReason, DroppedSzKeyIr,
     DuplicateSzAttributeIr, DynamicCssVarCategory, DynamicCssVarIr, DynamicGroupConflictIr,
@@ -876,18 +876,23 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                 // A value that needs a string with a lone surrogate takes the
                 // third path before the other two are tried: no class text
                 // can spell it, and trying them would record state for it.
-                if container
-                    .expression
-                    .as_expression()
-                    .is_some_and(|expression| {
-                        needs_lone_surrogate(expression, ctx.scope, ctx.program)
+                if let Some((expression, detail)) =
+                    container.expression.as_expression().and_then(|expression| {
+                        lone_surrogate_string(expression, ctx.scope, ctx.program)
+                            .map(|detail| (expression, detail))
                     })
                 {
                     runtime_fallback_diagnostic = Some(super::RuntimeFallbackDiagnosticIr {
                         kind: super::RuntimeFallbackKindIr::LoneSurrogate,
-                        detail: String::new(),
+                        detail,
                         path: String::new(),
                     });
+                    // The runtime renders every readable class beside the
+                    // string, so each is collected; only the tokens the lone
+                    // surrogate sits in are not.
+                    let mut candidates =
+                        candidate_classes_from_jsx_expression(&container.expression, ctx);
+                    candidates.extend(readable_string_classes(expression, ctx));
                     (
                         StaticSzObject::empty(),
                         runtime_fallback_span_from_jsx_expression(&container.expression)?,
@@ -897,7 +902,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                         Vec::new(),
                         true,
                         false,
-                        candidate_classes_from_jsx_expression(&container.expression, ctx),
+                        candidates,
                         Vec::new(),
                         Vec::new(),
                     )
@@ -1828,8 +1833,6 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         });
     }
 
-    /// Record a `szr`/`szv` argument the parser could not read, classified for
-    /// the shared fallback matrix.
     /// Decline a catalog call whose argument needs a lone-surrogate string.
     ///
     /// None of its classes are collected: no class text can spell the value.
@@ -1843,16 +1846,16 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         argument: &Argument<'_>,
     ) -> bool {
         let ctx = self.resolve_context();
-        let Some(expression) = argument
-            .as_expression()
-            .filter(|expression| needs_lone_surrogate(expression, ctx.scope, ctx.program))
-        else {
+        let Some((expression, detail)) = argument.as_expression().and_then(|expression| {
+            lone_surrogate_string(expression, ctx.scope, ctx.program)
+                .map(|detail| (expression, detail))
+        }) else {
             return false;
         };
         let fallback = |site| super::SiteFallbackIr {
             site,
             kind: super::RuntimeFallbackKindIr::LoneSurrogate,
-            detail: String::new(),
+            detail: detail.clone(),
             offset: fallback_expression_offset(expression),
             path: String::new(),
         };
@@ -1870,6 +1873,8 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         true
     }
 
+    /// Record a `szr`/`szv` argument the parser could not read, classified for
+    /// the shared fallback matrix.
     fn record_site_fallback(&mut self, site: super::SzFallbackSiteIr, argument: &Argument<'_>) {
         let Some(expression) = argument.as_expression() else {
             return;
@@ -3917,6 +3922,87 @@ fn candidate_classes_from_jsx_expression(
         }
         _ => Vec::new(),
     }
+}
+
+/// The classes a lone-surrogate fallback still renders from strings: the
+/// string the value is, or one an array element, a conditional branch or the
+/// right of a logical operator is, same-file bindings followed. Objects are
+/// [`candidate_classes_from_jsx_expression`]'s to collect.
+fn readable_string_classes(expression: &Expression<'_>, ctx: ResolveContext<'_>) -> Vec<String> {
+    let mut classes = Vec::new();
+    let mut followed = Vec::new();
+    collect_readable_string_classes(expression, ctx, &mut followed, &mut classes);
+    classes
+}
+
+fn collect_readable_string_classes(
+    expression: &Expression<'_>,
+    ctx: ResolveContext<'_>,
+    followed: &mut Vec<u32>,
+    classes: &mut Vec<String>,
+) {
+    match expression.get_inner_expression() {
+        Expression::StringLiteral(literal) => classes.extend(readable_class_tokens(literal.value)),
+        Expression::ArrayExpression(array) => {
+            for element in array
+                .elements
+                .iter()
+                .filter_map(ArrayExpressionElement::as_expression)
+            {
+                collect_readable_string_classes(element, ctx, followed, classes);
+            }
+        }
+        Expression::ConditionalExpression(conditional) => {
+            collect_readable_string_classes(&conditional.consequent, ctx, followed, classes);
+            collect_readable_string_classes(&conditional.alternate, ctx, followed, classes);
+        }
+        Expression::LogicalExpression(logical) => {
+            collect_readable_string_classes(&logical.right, ctx, followed, classes);
+        }
+        Expression::Identifier(identifier) => {
+            if let Some(initializer) = ctx.scope.resolve_initializer_before(
+                &identifier.name,
+                identifier.span.start,
+                ctx.program,
+            ) {
+                let at = initializer.span().start;
+                if !followed.contains(&at) {
+                    followed.push(at);
+                    collect_readable_string_classes(initializer, ctx, followed, classes);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The whitespace-separated class tokens of a string, without the ones a lone
+/// surrogate sits in: no class name can spell those.
+fn readable_class_tokens(value: oxc_str::JSStr<'_>) -> Vec<String> {
+    if let Some(text) = value.as_str() {
+        return split_class_tokens(text);
+    }
+    let mut tokens = Vec::new();
+    let mut token = Some(String::new());
+    for unit in value.chars() {
+        match unit.to_char() {
+            Some(character) if character.is_whitespace() => {
+                tokens.extend(
+                    token
+                        .replace(String::new())
+                        .filter(|token| !token.is_empty()),
+                );
+            }
+            Some(character) => {
+                if let Some(token) = &mut token {
+                    token.push(character);
+                }
+            }
+            None => token = None,
+        }
+    }
+    tokens.extend(token.filter(|token| !token.is_empty()));
+    tokens
 }
 
 /// Candidate classes for an expression, lowered under the variant keys it sits
@@ -6013,8 +6099,11 @@ fn static_value_from_member(
     // added is the read. The namespace table is asked only after that ordinary
     // resolution has declined, so a local or named-imported map is always what
     // answers when one exists.
-    let object = static_value_from_expression(&member.object, ctx)
-        .or_else(|| imported_namespace_object(&member.object, ctx))?;
+    let Some(object) = static_value_from_expression(&member.object, ctx)
+        .or_else(|| imported_namespace_object(&member.object, ctx))
+    else {
+        return static_value_beside_lone_surrogate(member, ctx);
+    };
     match object {
         // Last match, not first: duplicate keys are kept in source order on
         // purpose, and the later one is what JavaScript reads. A property the
@@ -6028,6 +6117,23 @@ fn static_value_from_member(
             .map(|property| property.value),
         _ => None,
     }
+}
+
+/// Read one named property off a same-file map that a lone surrogate keeps
+/// from being read whole.
+///
+/// The map is never compiled, so a sibling holding one costs nothing here: the
+/// selected value alone is read. The `sz` scan narrows to the same property,
+/// so a value that holds one itself never reaches this read.
+fn static_value_beside_lone_surrogate(
+    member: &oxc_ast::ast::StaticMemberExpression<'_>,
+    ctx: ResolveContext<'_>,
+) -> Option<StaticSzValue> {
+    lone_surrogate_string(&member.object, ctx.scope, ctx.program)?;
+    static_value_from_expression(
+        ctx.scope.selected_property_before(member, ctx.program)?,
+        ctx,
+    )
 }
 
 fn is_skippable_static_value(expression: &Expression<'_>) -> bool {
@@ -6070,9 +6176,9 @@ fn string_literal_text<'a>(expression: &Expression<'a>) -> Option<&'a str> {
     }
 }
 
-/// The text of a JSX attribute string, read from the source. JSX decodes no
-/// escape and no character reference there, so the value IS the text between
-/// the quotes and cannot hold a lone surrogate.
+/// The text of a JSX attribute string, read from the source. oxc keeps the raw
+/// text there and decodes no character reference, so the value is the source
+/// text between the quotes and cannot hold a lone surrogate.
 fn jsx_string_text<'s>(literal: &StringLiteral<'_>, source: &'s str) -> &'s str {
     let span = string_value_span(literal.span, source);
     &source[span.start as usize..span.end as usize]

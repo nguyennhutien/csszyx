@@ -7,6 +7,7 @@
 //! rejects cannot be checked at all, so it answers one `parse-error` record
 //! instead of an empty list.
 
+use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use oxc_allocator::Allocator;
@@ -19,6 +20,7 @@ use oxc_ast_visit::Visit;
 use oxc_parser::Parser;
 use serde::{Serialize, Serializer};
 
+use super::lone_surrogate::scan_text;
 use super::parser::{parse_errors, source_type_for_path};
 use super::recovery::SourceLines;
 use super::source_walk::SourceWalk;
@@ -306,7 +308,7 @@ impl UsageScan {
     /// Each `var(--token)` in the static text of a `className`, sorted, once.
     fn class_name(&mut self, attribute: &JSXAttribute<'_>) {
         for text in attribute_strings(attribute) {
-            for name in var_references(text) {
+            for name in var_references(&text) {
                 self.candidate(
                     GlobalVarUsageKind::ClassStringVarReference,
                     Spelled::Text(name.to_owned()),
@@ -364,21 +366,19 @@ fn key_spelled(key: &PropertyKey<'_>) -> Option<Spelled> {
 /// The static text of an attribute: a string, an expression-container string,
 /// or the cooked chunks of an expression-container template.
 ///
-/// A string with a lone surrogate gives no text: no custom property name can
-/// hold one, and any text written for it would be invented.
-fn attribute_strings<'b>(attribute: &JSXAttribute<'b>) -> Vec<&'b str> {
+/// A lone surrogate is spelled as [`scan_text`] writes it, so every `var(--x)`
+/// beside it still reads; a custom property name is ASCII and never holds one.
+fn attribute_strings<'b>(attribute: &JSXAttribute<'b>) -> Vec<Cow<'b, str>> {
     match &attribute.value {
-        Some(JSXAttributeValue::StringLiteral(literal)) => {
-            literal.value.as_str().into_iter().collect()
-        }
+        Some(JSXAttributeValue::StringLiteral(literal)) => vec![scan_text(literal.value)],
         Some(JSXAttributeValue::ExpressionContainer(container)) => match &container.expression {
-            JSXExpression::StringLiteral(literal) => literal.value.as_str().into_iter().collect(),
+            JSXExpression::StringLiteral(literal) => vec![scan_text(literal.value)],
             // An untagged template with a malformed escape does not parse, so
             // every chunk that reaches this point has a cooked value.
             JSXExpression::TemplateLiteral(template) => template
                 .quasis
                 .iter()
-                .filter_map(|quasi| quasi.value.cooked.and_then(oxc_str::JSStr::as_str))
+                .filter_map(|quasi| quasi.value.cooked.map(scan_text))
                 .collect(),
             _ => Vec::new(),
         },

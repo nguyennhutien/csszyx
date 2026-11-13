@@ -770,7 +770,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "sz-variant-key": "{fallbackSuggestion}"
         },
         "note": {
-            "sz": "its classes were not collected, so they produce no CSS unless another source names them.",
+            "sz": "{fallbackNote}",
             "szr": "its classes were not collected, so they produce no CSS unless another source names them.",
             "szv": "none of its variant classes were collected, so they produce no CSS unless another source names them."
         }

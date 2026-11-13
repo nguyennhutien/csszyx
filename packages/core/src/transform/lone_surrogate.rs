@@ -13,118 +13,163 @@
 //! more, which costs the wasm artifact several kilobytes for shapes no static
 //! read compiles anyway.
 
+use std::borrow::Cow;
+
 use oxc_ast::ast::{
     ArrayExpressionElement, Expression, ObjectPropertyKind, Program, PropertyKey, TemplateLiteral,
 };
 use oxc_span::GetSpan;
+use oxc_str::JSStr;
 
 use super::scope::DeclaratorScope;
 
-/// Whether reading `expression` statically needs a string with a lone
-/// surrogate, in it or in a same-file binding it names, followed through.
-pub fn needs_lone_surrogate<'p>(
-    expression: &Expression<'_>,
+/// The first string with a lone surrogate that reading `expression`
+/// statically needs, in it or in a same-file binding it names, written as
+/// [`JSStr::display`] writes it: for a diagnostic, never for output.
+pub fn lone_surrogate_string<'p>(
+    expression: &'p Expression<'p>,
     scope: &DeclaratorScope,
     program: &'p Program<'p>,
-) -> bool {
+) -> Option<String> {
     Scan {
         scope,
         program,
         followed: Vec::new(),
     }
     .expression(expression)
+    .map(|value| value.display().to_string())
+}
+
+/// The text of a string for a scan that writes none of it out: as is, or with
+/// each lone surrogate spelled `\uXXXX`, so the other tokens in it still read.
+///
+/// Sound wherever the tokens looked for are ASCII, such as a `var(--x)` or a
+/// class selector: the spelling adds a backslash token no real one contains
+/// and joins no two tokens into one.
+pub fn scan_text(value: JSStr<'_>) -> Cow<'_, str> {
+    value
+        .as_str()
+        .map_or_else(|| Cow::Owned(value.display().to_string()), Cow::Borrowed)
 }
 
 struct Scan<'s, 'p> {
     scope: &'s DeclaratorScope,
     program: &'p Program<'p>,
-    /// Initializers already read, by start offset: a binding that names
-    /// itself, directly or through another, ends the walk.
-    followed: Vec<u32>,
+    /// Initializers and selected properties already read, by span: a binding
+    /// that names itself, directly or through another, ends the walk.
+    followed: Vec<(u32, u32)>,
 }
 
-impl Scan<'_, '_> {
-    fn expression(&mut self, expression: &Expression<'_>) -> bool {
+impl<'p> Scan<'_, 'p> {
+    fn expression(&mut self, expression: &'p Expression<'p>) -> Option<JSStr<'p>> {
         match expression.get_inner_expression() {
-            Expression::StringLiteral(literal) => literal.value.as_str().is_none(),
+            Expression::StringLiteral(literal) => lone(literal.value),
             Expression::TemplateLiteral(template) => self.template(template),
             Expression::ObjectExpression(object) => {
-                object.properties.iter().any(|property| match property {
-                    ObjectPropertyKind::ObjectProperty(property) => {
-                        self.key(&property.key) || self.expression(&property.value)
-                    }
-                    ObjectPropertyKind::SpreadProperty(spread) => self.expression(&spread.argument),
-                })
+                object
+                    .properties
+                    .iter()
+                    .find_map(|property| match property {
+                        ObjectPropertyKind::ObjectProperty(property) => self
+                            .key(&property.key)
+                            .or_else(|| self.expression(&property.value)),
+                        ObjectPropertyKind::SpreadProperty(spread) => {
+                            self.expression(&spread.argument)
+                        }
+                    })
             }
             Expression::ArrayExpression(array) => {
-                array.elements.iter().any(|element| match element {
+                array.elements.iter().find_map(|element| match element {
                     ArrayExpressionElement::SpreadElement(spread) => {
                         self.expression(&spread.argument)
                     }
                     element => element
                         .as_expression()
-                        .is_some_and(|element| self.expression(element)),
+                        .and_then(|element| self.expression(element)),
                 })
             }
-            Expression::ConditionalExpression(conditional) => {
-                self.expression(&conditional.consequent) || self.expression(&conditional.alternate)
-            }
-            Expression::LogicalExpression(logical) => {
-                self.expression(&logical.left) || self.expression(&logical.right)
-            }
-            Expression::CallExpression(call) => call
+            Expression::ConditionalExpression(conditional) => self
+                .expression(&conditional.consequent)
+                .or_else(|| self.expression(&conditional.alternate)),
+            Expression::LogicalExpression(logical) => self
+                .expression(&logical.left)
+                .or_else(|| self.expression(&logical.right)),
+            // Only an szv variant call has its argument read at build time;
+            // any other call runs as written, so what it is passed is not.
+            Expression::CallExpression(call) if self.calls_an_szv(&call.callee) => call
                 .arguments
                 .iter()
                 .filter_map(|argument| argument.as_expression())
-                .any(|argument| self.expression(argument)),
-            Expression::StaticMemberExpression(member) => self.expression(&member.object),
-            Expression::ComputedMemberExpression(member) => {
-                self.expression(&member.object) || self.expression(&member.expression)
+                .find_map(|argument| self.expression(argument)),
+            // The read takes one property; its siblings are never compiled.
+            Expression::StaticMemberExpression(member) => {
+                match self.scope.selected_property_before(member, self.program) {
+                    Some(value) => self.follow(value),
+                    None => self.expression(&member.object),
+                }
             }
-            Expression::Identifier(identifier) => {
-                self.binding(&identifier.name, identifier.span.start)
-            }
-            _ => false,
+            Expression::Identifier(identifier) => self
+                .scope
+                .resolve_initializer_before(&identifier.name, identifier.span.start, self.program)
+                .and_then(|initializer| self.follow(initializer)),
+            _ => None,
         }
     }
 
-    fn template(&mut self, template: &TemplateLiteral<'_>) -> bool {
+    fn template(&mut self, template: &'p TemplateLiteral<'p>) -> Option<JSStr<'p>> {
         // A tagged template with a malformed escape has no cooked value; it
         // holds no string at all, so it is not a lone surrogate either.
-        template.quasis.iter().any(|quasi| {
-            quasi
-                .value
-                .cooked
-                .is_some_and(|cooked| cooked.as_str().is_none())
-        }) || template
-            .expressions
+        template
+            .quasis
             .iter()
-            .any(|expression| self.expression(expression))
+            .find_map(|quasi| quasi.value.cooked.and_then(lone))
+            .or_else(|| {
+                template
+                    .expressions
+                    .iter()
+                    .find_map(|expression| self.expression(expression))
+            })
     }
 
-    fn key(&mut self, key: &PropertyKey<'_>) -> bool {
+    fn key(&mut self, key: &'p PropertyKey<'p>) -> Option<JSStr<'p>> {
         match key {
-            PropertyKey::StringLiteral(literal) => literal.value.as_str().is_none(),
+            PropertyKey::StringLiteral(literal) => lone(literal.value),
             key => key
                 .as_expression()
-                .is_some_and(|expression| self.expression(expression)),
+                .and_then(|expression| self.expression(expression)),
         }
     }
 
-    fn binding(&mut self, name: &str, reference: u32) -> bool {
-        let Some(initializer) =
-            self.scope
-                .resolve_initializer_before(name, reference, self.program)
-        else {
+    /// Whether `callee` names a same-file `szv(…)` factory.
+    fn calls_an_szv(&self, callee: &Expression<'_>) -> bool {
+        let Expression::Identifier(callee) = callee else {
             return false;
         };
-        let at = initializer.span().start;
-        if self.followed.contains(&at) {
-            return false;
-        }
-        self.followed.push(at);
-        self.expression(initializer)
+        self.scope
+            .resolve_initializer_before(&callee.name, callee.span.start, self.program)
+            .is_some_and(|initializer| {
+                matches!(
+                    initializer.get_inner_expression(),
+                    Expression::CallExpression(factory)
+                        if matches!(&factory.callee, Expression::Identifier(name) if name.name == "szv")
+                )
+            })
     }
+
+    /// Read an initializer or a selected property once.
+    fn follow(&mut self, expression: &'p Expression<'p>) -> Option<JSStr<'p>> {
+        let span = expression.span();
+        if self.followed.contains(&(span.start, span.end)) {
+            return None;
+        }
+        self.followed.push((span.start, span.end));
+        self.expression(expression)
+    }
+}
+
+/// The value itself when it holds a lone surrogate.
+fn lone(value: JSStr<'_>) -> Option<JSStr<'_>> {
+    value.as_str().is_none().then_some(value)
 }
 
 #[cfg(test)]
@@ -146,7 +191,7 @@ mod tests {
         };
         let VariableDeclaration { declarations, .. } = &**declaration;
         let initializer = declarations[0].init.as_ref().expect("an initializer");
-        needs_lone_surrogate(initializer, &scope, &parsed.program)
+        lone_surrogate_string(initializer, &scope, &parsed.program).is_some()
     }
 
     #[test]
@@ -167,9 +212,9 @@ mod tests {
             r#"const a = [...["a\uD800"]];"#,
             r#"const a = c ? "p-4" : "a\uD800";"#,
             r#"const a = c && "a\uD800";"#,
-            r#"const a = t({ c: "a\uD800" });"#,
+            "const t = szv({});\nconst a = t({ c: \"a\\uD800\" });",
             r#"const a = { b: "a\uD800" }.b;"#,
-            r#"const a = { b: 1 }["a\uD800"];"#,
+            r#"const a = { b: 1, ...{ c: "a\uD800" } }.b;"#,
         ] {
             assert!(last_const_needs(source), "{source}");
         }
@@ -183,6 +228,11 @@ mod tests {
             r#"const a = ["p-4", , ...b];"#,
             r#"const a = ("\uD800" === c) ? "p-4" : "m-2";"#,
             r#"const a = new X("\uD800");"#,
+            r#"const a = t({ c: "a\uD800" });"#,
+            r#"const a = f.g("\uD800");"#,
+            "const t = make();\nconst a = t(\"\\uD800\");",
+            r#"const a = { b: 1 }["a\uD800"];"#,
+            r#"const a = { c: "a\uD800", b: 1 }.b;"#,
             "const a = 4;",
         ] {
             assert!(!last_const_needs(source), "{source}");
@@ -202,5 +252,30 @@ mod tests {
     #[test]
     fn reads_a_binding_that_names_itself_once() {
         assert!(!last_const_needs("const a = { p: a };\nconst c = [a, a];"));
+        assert!(!last_const_needs("const a = { p: a.p };\nconst c = a.p;"));
+    }
+
+    #[test]
+    fn scan_text_spells_a_lone_surrogate_as_an_escape() {
+        let allocator = Allocator::default();
+        let source = r#"const a = "x \uD800 y"; const b = "x y";"#;
+        let parsed = Parser::new(&allocator, source, SourceType::tsx()).parse();
+        let texts: Vec<String> = parsed
+            .program
+            .body
+            .iter()
+            .filter_map(|statement| match statement {
+                Statement::VariableDeclaration(declaration) => {
+                    match declaration.declarations[0].init.as_ref() {
+                        Some(Expression::StringLiteral(literal)) => {
+                            Some(scan_text(literal.value).into_owned())
+                        }
+                        _ => None,
+                    }
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(texts, [r"x \ud800 y", "x y"]);
     }
 }

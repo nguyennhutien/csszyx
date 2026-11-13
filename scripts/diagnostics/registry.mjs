@@ -91,6 +91,10 @@ export const COMPUTED = {
         reads: ['shape'],
         summary: 'What to write instead, from the same matrix.',
     },
+    fallbackNote: {
+        reads: ['shape'],
+        summary: 'What an `sz` fallback that missed CSS cost, from the same matrix.',
+    },
     earlier: {
         reads: ['classes', 'szCount', 'szAt'],
         summary: 'The classes and `sz` of the sides before the last, as a reader names them.',
@@ -676,7 +680,7 @@ export const DIAGNOSTICS = [
             'sz-variant-key': '{fallbackSuggestion}',
         },
         note: {
-            sz: 'its classes were not collected, so they produce no CSS unless another source names them.',
+            sz: '{fallbackNote}',
             szr: 'its classes were not collected, so they produce no CSS unless another source names them.',
             szv: 'none of its variant classes were collected, so they produce no CSS unless another source names them.',
         },
