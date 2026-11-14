@@ -16,7 +16,12 @@
 
 import { SZ_BROWSER_DIAGNOSTIC_COMPUTED_VALUES, textArg } from './diagnostic-computed.js';
 import type { SzDiagnosticComputed } from './diagnostic-render.js';
-import { describeSzFallback, type SzFallbackKind } from './sz-fallback-matrix.js';
+import {
+    describeSzFallback,
+    SZ_FALLBACK_MATRIX,
+    SZ_FALLBACK_SZ_NOTE,
+    type SzFallbackKind,
+} from './sz-fallback-matrix.js';
 
 /** One arg value, as the wire carries it. */
 type Args = Parameters<SzDiagnosticComputed>[0];
@@ -48,4 +53,6 @@ export const SZ_DIAGNOSTIC_COMPUTED_VALUES: Readonly<Record<string, SzDiagnostic
     ...SZ_BROWSER_DIAGNOSTIC_COMPUTED_VALUES,
     fallbackReason: args => fallbackOf(args).reason,
     fallbackSuggestion: args => fallbackOf(args).suggestion,
+    fallbackNote: args =>
+        SZ_FALLBACK_MATRIX[textArg(args, 'shape') as SzFallbackKind]?.szNote ?? SZ_FALLBACK_SZ_NOTE,
 };

@@ -27,6 +27,7 @@ export type SzFallbackKind =
     | 'call'
     | 'identifier'
     | 'import'
+    | 'lone-surrogate'
     | 'member'
     | 'other'
     | 'szv-factory'
@@ -37,6 +38,7 @@ export const SZ_FALLBACK_KINDS: readonly SzFallbackKind[] = [
     'call',
     'identifier',
     'import',
+    'lone-surrogate',
     'member',
     'other',
     'szv-factory',
@@ -52,7 +54,17 @@ export interface SzFallbackTemplate {
     reason: string;
     /** Actionable guidance. Never interpolated. */
     suggestion: string;
+    /**
+     * What a missing-css fallback at an `sz` attribute costs, when it is not
+     * {@link SZ_FALLBACK_SZ_NOTE}: some classes of the value are still
+     * collected.
+     */
+    szNote?: string;
 }
+
+/** What a missing-css fallback at an `sz` attribute costs, by default. */
+export const SZ_FALLBACK_SZ_NOTE =
+    'its classes were not collected, so they produce no CSS unless another source names them.';
 
 /** Placeholder substituted with the kind-specific detail. */
 export const SZ_FALLBACK_DETAIL_PLACEHOLDER = '{detail}';
@@ -87,6 +99,16 @@ export const SZ_FALLBACK_MATRIX: Readonly<Record<SzFallbackKind, SzFallbackTempl
         reason: 'imported binding `{detail}` could not be read at build time',
         suggestion:
             'export it as a `const` with a static object literal; a star re-export, a computed value or `build.importedStaticSz: false` keeps it at runtime; for variant-based styling use `szv()`, for runtime values `dynamic()`.',
+    },
+    // A string the value needs holds an unpaired UTF-16 surrogate. CSS is
+    // UTF-8 and cannot hold one, so no rule can match that class in any mode;
+    // `dynamic()` declines it too. The runtime renders the value as written,
+    // and the readable classes beside it are collected.
+    'lone-surrogate': {
+        reason: 'the string `{detail}` holds a lone UTF-16 surrogate, which CSS cannot hold, so it gets no CSS',
+        suggestion:
+            'write a complete surrogate pair, or remove the lone `\\uD800`-`\\uDFFF` escape.',
+        szNote: 'the other classes in this `sz` are still collected.',
     },
     member: {
         reason: 'member expression is not statically resolvable',
@@ -244,11 +266,16 @@ export type SzFallbackConsequence = 'missing-css' | 'nudge';
  * A VARIANT key sits with the import: it is one key of an object literal the
  * author wrote right there, so nobody upstream collects what it holds.
  *
+ * A LONE-SURROGATE string is collected nowhere either: CSS cannot hold the
+ * character, so no build step can generate a rule for it. The readable classes
+ * beside it are collected, which its own note says.
+ *
  * The cost of drawing the line here is under-reporting: an unresolvable
  * module-level const reads as advisory. That is the safe direction.
  */
 export const SZ_SITE_MISSING_CSS_KINDS: ReadonlySet<SzFallbackKind> = new Set<SzFallbackKind>([
     'import',
+    'lone-surrogate',
     'variant',
 ]);
 

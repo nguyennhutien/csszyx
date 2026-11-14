@@ -195,6 +195,7 @@ both engine artifacts emit identical wording.
 | `call` | `sz={makeSz()}` | Yes — `dynamic()` and friends compile correctly | No (nudge) |
 | `identifier` | `sz={styles}` where `styles` is not a readable const | Yes, when a caller supplies it | No (nudge) |
 | `import` | `sz={imported}` from another module | **No** | **Yes** |
+| `lone-surrogate` | `sz={{ content: "'\uD800'" }}` — a string the value needs holds an unpaired UTF-16 surrogate, here or in a same-file `const` it names | **No** | **Yes** |
 | `member` | `sz={theme.card}` | Yes, when a caller supplies it | No (nudge) |
 | `szv-factory` | `sz={myVariants({ … })}` where the compiler saw `myVariants = szv(…)` and refused its config | Yes — the runtime szv path renders | No (nudge) |
 | `other` | anything else — a template literal, a conditional | Yes | No (nudge) |
@@ -217,6 +218,7 @@ type:
 | `call` | ``function call `{detail}()` returns a value unknown at build time`` | ``for static variants, convert it to `szv()`; for runtime data, use `dynamic()`.`` |
 | `identifier` | ``identifier `{detail}` could not be resolved to a static value`` | ``make it a module-level or function-body `const` with a literal object value; for variant-based styling use `szv()`, for runtime values `dynamic()`.`` |
 | `import` | ``imported binding `{detail}` could not be read at build time`` | ``export it as a `const` with a static object literal; a star re-export, a computed value or `build.importedStaticSz: false` keeps it at runtime; for variant-based styling use `szv()`, for runtime values `dynamic()`.`` |
+| `lone-surrogate` | ``the string `{detail}` holds a lone UTF-16 surrogate, which CSS cannot hold, so it gets no CSS`` | ``write a complete surrogate pair, or remove the lone `\uD800`-`\uDFFF` escape.`` |
 | `member` | `member expression is not statically resolvable` | ``extract the value to a module-level `const`; for variant-based styling use `szv()`, for runtime values `dynamic()`.`` |
 | `szv-factory` | ``szv factory `{detail}()` could not be compiled: its config fails at `{path}` `` | ``make every variant value at that path a static sz object literal with canonical keys and non-overlapping branches; for runtime data use `dynamic()`.`` |
 | `other` | ``expression of type `{detail}` cannot be read at build time`` | ``use a literal sz object or a module-level `const`; for variant-based styling use `szv()`, for runtime values `dynamic()`.`` |
@@ -234,6 +236,16 @@ to `_sz(…)` instead, as an unresolvable spread does. A key no sz table claims
 takes the same path, since it may be a variant the project declares
 (`@custom-variant`, `--breakpoint-*`); a misspelt property key is therefore
 reported here too.
+
+For `lone-surrogate`, CSS cannot hold the character, so no rule can match
+the class that string names, whatever the build does. The build keeps the
+attribute as `_sz(…)` and the runtime renders the value as written;
+`{detail}` is the string, with the surrogate written as `\uXXXX`. The other
+classes in that `sz` are still collected, so the note says so instead of the
+usual one, and the rest of the file still compiles. An `szr()` or `szv()`
+argument that holds one reports the same kind, and none of its classes are
+collected. `dynamic()` declines such a string too. A surrogate pair, written
+as the character or as two escapes, compiles as usual.
 
 When the callee has no readable name — `sz={obj[key]()}` — `{detail}` is `?`.
 

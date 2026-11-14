@@ -12,6 +12,7 @@ use oxc_ast::ast::{
 use oxc_ast_visit::{walk, Visit};
 
 use super::global_var_usages::UsageScan;
+use super::lone_surrogate::scan_text;
 use super::module_links::LinkScan;
 
 /// The walk, and what each scan collects in it.
@@ -82,7 +83,9 @@ impl<'a> Visit<'a> for SourceWalk {
 
     fn visit_string_literal(&mut self, literal: &StringLiteral<'a>) {
         if let Some(links) = &mut self.links {
-            links.text(&literal.value);
+            // Hook scans look for ASCII selectors, so a lone surrogate is
+            // spelled out and the rest of the string still files.
+            links.text(&scan_text(literal.value));
         }
     }
 

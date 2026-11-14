@@ -453,6 +453,9 @@ pub enum RuntimeFallbackKindIr {
     /// both the szr site and the sz attribute: one cause reads as one message
     /// wherever the author put the call.
     SzvFactory,
+    /// A string the value needs holds a lone UTF-16 surrogate, which has no
+    /// text form to compile; `detail` is unused.
+    LoneSurrogate,
 }
 
 /// Why an sz expression was left to the runtime, for the fallback matrix.

@@ -69,22 +69,19 @@ pub fn registry_entries<'p>(program: &'p Program<'p>) -> Vec<RegistryEntry> {
             Statement::ExportDefaultDeclaration(export) => {
                 entries.extend(read(DEFAULT_EXPORT_NAME, default_initializer(export)));
             }
-            Statement::ExportNamedDeclaration(export) if is_local_value_export(export) => {
-                match &export.declaration {
-                    Some(Declaration::VariableDeclaration(declaration)) => {
-                        for (name, initializer) in declared_initializers(declaration) {
-                            if !is_reserved_szv_factory_name(name) {
-                                entries.extend(read(name, initializer));
-                            }
+            Statement::ExportDeclaration(export) => {
+                if let Declaration::VariableDeclaration(declaration) = &export.declaration {
+                    for (name, initializer) in declared_initializers(declaration) {
+                        if !is_reserved_szv_factory_name(name) {
+                            entries.extend(read(name, initializer));
                         }
                     }
-                    Some(_) => {}
-                    None => {
-                        for (local, exported) in listed_names(export) {
-                            if let Some(&initializer) = module_scope.get(local) {
-                                entries.extend(read(exported, initializer));
-                            }
-                        }
+                }
+            }
+            Statement::ExportNamedDeclaration(export) if is_local_value_export(export) => {
+                for (local, exported) in listed_names(export) {
+                    if let Some(&initializer) = module_scope.get(local) {
+                        entries.extend(read(exported, initializer));
                     }
                 }
             }
@@ -112,9 +109,10 @@ fn default_initializer<'p>(export: &'p ExportDefaultDeclaration<'p>) -> ScopedIn
     (export.declaration.as_expression(), true)
 }
 
-/// Whether a named export names values declared in this module.
+/// Whether a named export names values declared in this module. A list with
+/// a `from` source is an `ExportFromDeclaration`, so only the kind is left.
 fn is_local_value_export(export: &ExportNamedDeclaration<'_>) -> bool {
-    !export.export_kind.is_type() && export.source.is_none()
+    !export.export_kind.is_type()
 }
 
 /// Each identifier-bound declarator of one declaration, with its initializer.
@@ -143,8 +141,8 @@ fn module_scope_initializers<'p>(
     for statement in &program.body {
         let declaration = match statement {
             Statement::VariableDeclaration(declaration) => declaration,
-            Statement::ExportNamedDeclaration(export) => match &export.declaration {
-                Some(Declaration::VariableDeclaration(declaration)) => declaration,
+            Statement::ExportDeclaration(export) => match &export.declaration {
+                Declaration::VariableDeclaration(declaration) => declaration,
                 _ => continue,
             },
             _ => continue,

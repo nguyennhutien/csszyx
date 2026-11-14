@@ -38,7 +38,7 @@ export const SZ_DIAGNOSTIC_REGISTRY_FORMAT = 1;
 export { SZ_DIAGNOSTIC_CONSTANTS } from './diagnostic-constants.generated.js';
 
 /** The computed values a template may name beside its args. */
-export const SZ_DIAGNOSTIC_COMPUTED: readonly string[] = ["canonical","note","enumAllowed","canonicalAllowed","bare","movedKey","movedValue","groups","maxNestingDepth","mergeTableFormat","fallbackReason","fallbackSuggestion","earlier","example","spreadPlace","spellingHint","parserMessage","groupLiteral","valueLiteral"];
+export const SZ_DIAGNOSTIC_COMPUTED: readonly string[] = ["canonical","note","enumAllowed","canonicalAllowed","bare","movedKey","movedValue","groups","maxNestingDepth","mergeTableFormat","fallbackReason","fallbackSuggestion","fallbackNote","earlier","example","spreadPlace","spellingHint","parserMessage","groupLiteral","valueLiteral"];
 
 /** Every live id as the renderer reads it, in registry order. */
 export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
@@ -295,7 +295,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
             "sz-variant-key": "{fallbackSuggestion}"
         },
         "note": {
-            "sz": "its classes were not collected, so they produce no CSS unless another source names them.",
+            "sz": "{fallbackNote}",
             "szr": "its classes were not collected, so they produce no CSS unless another source names them.",
             "szv": "none of its variant classes were collected, so they produce no CSS unless another source names them."
         }

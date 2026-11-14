@@ -647,6 +647,7 @@
             "call",
             "identifier",
             "import",
+            "lone-surrogate",
             "member",
             "other",
             "szv-factory",
@@ -681,7 +682,7 @@
         "sz-variant-key": "{fallbackSuggestion}"
       },
       "note": {
-        "sz": "its classes were not collected, so they produce no CSS unless another source names them.",
+        "sz": "{fallbackNote}",
         "szr": "its classes were not collected, so they produce no CSS unless another source names them.",
         "szv": "none of its variant classes were collected, so they produce no CSS unless another source names them."
       }
@@ -707,6 +708,7 @@
             "call",
             "identifier",
             "import",
+            "lone-surrogate",
             "member",
             "other",
             "szv-factory",
@@ -4499,6 +4501,7 @@
     "mergeTableFormat": "The merge table format this engine reads (MERGE_TABLE_FORMAT).",
     "fallbackReason": "Why the value fell back, from the generated sz fallback matrix for `shape`.",
     "fallbackSuggestion": "What to write instead, from the same matrix.",
+    "fallbackNote": "What an `sz` fallback that missed CSS cost, from the same matrix.",
     "earlier": "The classes and `sz` of the sides before the last, as a reader names them.",
     "example": "The items of the one `sz` array that replaces them.",
     "spreadPlace": "Where that array goes: after the spread named by `spread`, or \"the spread\".",

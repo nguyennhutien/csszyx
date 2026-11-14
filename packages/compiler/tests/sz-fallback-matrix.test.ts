@@ -80,12 +80,17 @@ describe('describeSzFallback', () => {
     });
 
     it('points every kind at a concrete next step', () => {
-        for (const kind of SZ_FALLBACK_KINDS) {
+        // `lone-surrogate` is the one exception: `dynamic()` declines that
+        // string too, so its way out is to fix the string, not to move it.
+        for (const kind of SZ_FALLBACK_KINDS.filter(kind => kind !== 'lone-surrogate')) {
             const { suggestion } = describeSzFallback(kind);
             // A diagnostic the reader cannot act on is noise; every arm names
             // at least one of the two supported escape hatches.
             expect(suggestion).toMatch(/szv\(\)|dynamic\(\)/);
         }
+        expect(describeSzFallback('lone-surrogate').suggestion).toBe(
+            'write a complete surrogate pair, or remove the lone `\\uD800`-`\\uDFFF` escape.',
+        );
     });
 
     it('covers exactly the kinds the matrix declares', () => {

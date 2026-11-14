@@ -13,7 +13,8 @@
 
 use oxc_ast::ast::{
     AssignmentExpression, AssignmentTarget, BindingPattern, BlockStatement, Expression,
-    FunctionBody, Program, VariableDeclaration, VariableDeclarationKind,
+    FunctionBody, ObjectExpression, ObjectPropertyKind, Program, PropertyKey,
+    StaticMemberExpression, VariableDeclaration, VariableDeclarationKind,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_span::GetSpan;
@@ -175,7 +176,80 @@ impl DeclaratorScope {
         }
         find_initializer_at_span(program, entry.initializer)
     }
+
+    /// The value a named-property read takes from a same-file object
+    /// literal, followed through bindings and nested reads: for
+    /// `const theme = { a: …, b: { p: 4 } }`, `theme.b` selects `{ p: 4 }`.
+    ///
+    /// `None` when the object is not such a literal, when no key matches, or
+    /// when a spread or a computed key after the last match could replace it.
+    pub fn selected_property_before<'a>(
+        &self,
+        member: &'a StaticMemberExpression<'a>,
+        program: &'a Program<'a>,
+    ) -> Option<&'a Expression<'a>> {
+        self.selected_property(member, program, MEMBER_READ_DEPTH)
+    }
+
+    fn selected_property<'a>(
+        &self,
+        member: &'a StaticMemberExpression<'a>,
+        program: &'a Program<'a>,
+        depth: u8,
+    ) -> Option<&'a Expression<'a>> {
+        let object = self.object_literal(&member.object, program, depth)?;
+        for property in object.properties.iter().rev() {
+            let ObjectPropertyKind::ObjectProperty(property) = property else {
+                return None;
+            };
+            match &property.key {
+                PropertyKey::StaticIdentifier(key) if key.name == member.property.name => {
+                    return Some(&property.value);
+                }
+                PropertyKey::StringLiteral(key)
+                    if key.value.as_str() == Some(member.property.name.as_str()) =>
+                {
+                    return Some(&property.value);
+                }
+                PropertyKey::StaticIdentifier(_)
+                | PropertyKey::StringLiteral(_)
+                | PropertyKey::NumericLiteral(_) => {}
+                _ => return None,
+            }
+        }
+        None
+    }
+
+    /// The object literal an expression is, through wrappers, same-file
+    /// bindings and named-property reads. `depth` bounds a binding that
+    /// reads itself.
+    fn object_literal<'a>(
+        &self,
+        expression: &'a Expression<'a>,
+        program: &'a Program<'a>,
+        depth: u8,
+    ) -> Option<&'a ObjectExpression<'a>> {
+        let depth = depth.checked_sub(1)?;
+        match expression.get_inner_expression() {
+            Expression::ObjectExpression(object) => Some(object),
+            Expression::Identifier(identifier) => self.object_literal(
+                self.resolve_initializer_before(&identifier.name, identifier.span.start, program)?,
+                program,
+                depth,
+            ),
+            Expression::StaticMemberExpression(member) => self.object_literal(
+                self.selected_property(member, program, depth)?,
+                program,
+                depth,
+            ),
+            _ => None,
+        }
+    }
 }
+
+/// How many bindings and property reads one member read follows before it
+/// gives up, which ends a map that reads itself.
+const MEMBER_READ_DEPTH: u8 = 32;
 
 fn find_initializer_at_span<'a>(
     program: &'a Program<'a>,
@@ -324,7 +398,7 @@ mod tests {
         let source_type = SourceType::tsx();
         let parsed = Parser::new(&allocator, source, source_type).parse();
         assert!(
-            !parsed.panicked,
+            !parsed.fatal_error,
             "fixture failed to parse: {:?}",
             parsed.diagnostics
         );
@@ -338,6 +412,60 @@ mod tests {
 
     fn offset_of(source: &str, needle: &str) -> u32 {
         u32::try_from(source.find(needle).expect("needle exists")).expect("fixture offset fits u32")
+    }
+
+    /// The source text the last `const` initializer of `source` selects, when
+    /// that initializer is a named-property read.
+    fn selected_text(source: &str) -> Option<String> {
+        use oxc_ast::ast::{Expression, Statement};
+        let allocator = Allocator::default();
+        let parsed = Parser::new(&allocator, source, SourceType::tsx()).parse();
+        let scope = DeclaratorScope::from_program(&parsed.program);
+        let Some(Statement::VariableDeclaration(declaration)) = parsed.program.body.last() else {
+            panic!("the fixture ends with a const");
+        };
+        let Some(Expression::StaticMemberExpression(member)) = &declaration.declarations[0].init
+        else {
+            panic!("the last const reads a named property");
+        };
+        scope
+            .selected_property_before(member, &parsed.program)
+            .map(|value| span_text(source, value.span().start, value.span().end).to_owned())
+    }
+
+    #[test]
+    fn a_member_read_selects_the_last_matching_property() {
+        assert_eq!(
+            selected_text("const m = { 1: 'n', 'b': 'q', b: 'r', c: 's' };\nconst a = m.b;"),
+            Some("'r'".to_owned())
+        );
+        assert_eq!(
+            selected_text("const m = { b: 'r', 'c': 's' };\nconst a = (m as const).c;"),
+            Some("'s'".to_owned())
+        );
+        assert_eq!(
+            selected_text("const m = { n: { b: 1 } };\nconst a = m.n.b;"),
+            Some("1".to_owned())
+        );
+        // A string key after the match names another property, so the read
+        // passes it and lands on the identifier key it was written as.
+        assert_eq!(
+            selected_text("const m = { a: 'x', 'b': 'y' };\nconst a = m.a;"),
+            Some("'x'".to_owned())
+        );
+    }
+
+    #[test]
+    fn a_member_read_declines_what_could_replace_the_match() {
+        for source in [
+            "const m = { b: 1, [k]: 2 };\nconst a = m.b;",
+            "const m = { b: 1, ...o };\nconst a = m.b;",
+            "const m = { c: 1 };\nconst a = m.b;",
+            "const a = f().b;",
+            "const m = { b: m.b };\nconst a = m.b.c;",
+        ] {
+            assert_eq!(selected_text(source), None, "{source}");
+        }
     }
 
     #[test]
@@ -536,7 +664,7 @@ mod tests {
             "const BASE = { p: 4 };\nlet mutable = { m: 2 };\nconst App = () => <div sz={BASE} />;";
         let allocator = Allocator::default();
         let parsed = Parser::new(&allocator, source, SourceType::tsx()).parse();
-        assert!(!parsed.panicked, "{:?}", parsed.diagnostics);
+        assert!(!parsed.fatal_error, "{:?}", parsed.diagnostics);
         let scope = DeclaratorScope::from_program(&parsed.program);
         let reference = offset_of(source, "BASE} />");
 
@@ -576,7 +704,7 @@ mod tests {
         let source = "let s = { p: 4 };\ns = { p: 8 };\nconst App = () => <div sz={s} />;";
         let allocator = Allocator::default();
         let parsed = Parser::new(&allocator, source, SourceType::tsx()).parse();
-        assert!(!parsed.panicked, "{:?}", parsed.diagnostics);
+        assert!(!parsed.fatal_error, "{:?}", parsed.diagnostics);
         let scope = DeclaratorScope::from_program(&parsed.program);
         let reference = offset_of(source, "s} />");
 
@@ -595,7 +723,7 @@ mod tests {
         let source = "let s = { p: 4 };\nconst App = () => <div sz={s} />;";
         let allocator = Allocator::default();
         let parsed = Parser::new(&allocator, source, SourceType::tsx()).parse();
-        assert!(!parsed.panicked, "{:?}", parsed.diagnostics);
+        assert!(!parsed.fatal_error, "{:?}", parsed.diagnostics);
         let scope = DeclaratorScope::from_program(&parsed.program);
         let reference = offset_of(source, "s} />");
 
@@ -614,7 +742,7 @@ mod tests {
         let source = "const s = { p: 4 };\ns.p = 8;\nconst App = () => <div sz={s} />;";
         let allocator = Allocator::default();
         let parsed = Parser::new(&allocator, source, SourceType::tsx()).parse();
-        assert!(!parsed.panicked, "{:?}", parsed.diagnostics);
+        assert!(!parsed.fatal_error, "{:?}", parsed.diagnostics);
         let scope = DeclaratorScope::from_program(&parsed.program);
 
         assert!(!scope.is_reassigned("s"));

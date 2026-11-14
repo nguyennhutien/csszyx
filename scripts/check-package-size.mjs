@@ -583,7 +583,11 @@ export const SIZE_BUDGETS = [
         target: 'packages/vscode/dist/extension.js',
         // Raised from 50,300 on 2026-11-07, measured 50,587: the grid line
         // names lowering it carries with the compiler's (see that budget).
-        maxGzipBytes: 50_900,
+        // Raised from 50,900 on 2026-11-13, measured 51,095: the
+        // `lone-surrogate` fallback kind, its reason and its advice in the
+        // diagnostic tables it bundles (50,889 with the same files from
+        // `main`, same build).
+        maxGzipBytes: 51_400,
         // Built as production, so the leak gate reads it, except for the ids
         // whose words the extension shows as its own editor diagnostics
         // (`diagnostic-provider.ts`, from `SZ_EDITOR_DIAGNOSTIC_TEMPLATES`).

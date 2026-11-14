@@ -633,6 +633,7 @@ const fn fallback_shape(kind: super::RuntimeFallbackKindIr) -> &'static str {
         RuntimeFallbackKindIr::Member => "member",
         RuntimeFallbackKindIr::Other => "other",
         RuntimeFallbackKindIr::SzvFactory => "szv-factory",
+        RuntimeFallbackKindIr::LoneSurrogate => "lone-surrogate",
     }
 }
 
@@ -692,6 +693,7 @@ fn runtime_fallback_diagnostics(ir: &super::SourceIr) -> Diagnostics {
             RuntimeFallbackKindIr::Member => SzFallbackKind::Member,
             RuntimeFallbackKindIr::SzvFactory => SzFallbackKind::SzvFactory,
             RuntimeFallbackKindIr::Other => SzFallbackKind::Other,
+            RuntimeFallbackKindIr::LoneSurrogate => SzFallbackKind::LoneSurrogate,
         };
         let shape = Some(fallback_shape(diagnostic.kind));
         let detail = Some(diagnostic.detail.as_str());
