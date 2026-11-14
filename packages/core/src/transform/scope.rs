@@ -447,6 +447,12 @@ mod tests {
             selected_text("const m = { n: { b: 1 } };\nconst a = m.n.b;"),
             Some("1".to_owned())
         );
+        // A string key after the match names another property, so the read
+        // passes it and lands on the identifier key it was written as.
+        assert_eq!(
+            selected_text("const m = { a: 'x', 'b': 'y' };\nconst a = m.a;"),
+            Some("'x'".to_owned())
+        );
     }
 
     #[test]

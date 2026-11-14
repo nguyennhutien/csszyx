@@ -4,9 +4,7 @@
 //! compiler's own tables, so a key the compiler renamed is rewritten and a
 //! key it does not know is left alone.
 
-use oxc_ast::ast::{
-    Expression, ObjectExpression, ObjectPropertyKind, PropertyKey, PropertyKind, StringLiteral,
-};
+use oxc_ast::ast::{Expression, ObjectExpression, ObjectPropertyKind, PropertyKey, PropertyKind};
 use oxc_span::GetSpan;
 
 use super::class_rules::{self, Shape};
@@ -365,20 +363,19 @@ fn normalize_moved_value(
     let mut targets: Vec<(&'static str, String, oxc_span::Span)> = Vec::new();
     let mut keys: Vec<&str> = Vec::new();
     let mut moved = false;
-    for leaf in &leaves {
-        let (target, value) =
-            match closed_enum_value_move(canonical, leaf.value.as_str().unwrap_or_default()) {
-                Some((target, value)) => {
-                    moved = true;
-                    (target, value.to_string())
-                }
-                None => ("", leaf.value.as_str().unwrap_or_default().to_owned()),
-            };
+    for &(text, span) in &leaves {
+        let (target, value) = match closed_enum_value_move(canonical, text) {
+            Some((target, value)) => {
+                moved = true;
+                (target, value.to_string())
+            }
+            None => ("", text.to_owned()),
+        };
         let target_key = if target.is_empty() { canonical } else { target };
         if !keys.contains(&target_key) {
             keys.push(target_key);
         }
-        targets.push((target, value, leaf.span));
+        targets.push((target, value, span));
     }
     if !moved || keys.contains(&canonical) {
         return None;
@@ -417,19 +414,25 @@ fn normalize_moved_value(
 }
 
 /// The string leaves of a value made of strings, ternaries and nullish
-/// branches. False for any other leaf.
-fn string_leaves<'a>(expression: &'a Expression<'a>, out: &mut Vec<&'a StringLiteral<'a>>) -> bool {
+/// branches, each as its text and span. False for any other leaf.
+fn string_leaves<'a>(
+    expression: &'a Expression<'a>,
+    out: &mut Vec<(&'a str, oxc_span::Span)>,
+) -> bool {
     match expression {
         Expression::ConditionalExpression(conditional) => {
             string_leaves(&conditional.consequent, out)
                 && string_leaves(&conditional.alternate, out)
         }
-        // A lone surrogate declines the whole value, so every leaf is UTF-8.
-        Expression::StringLiteral(literal) if literal.value.as_str().is_some() => {
-            out.push(literal);
+        // A lone surrogate has no UTF-8 text and declines the whole value; a
+        // string is never nullish, so it is answered here either way.
+        Expression::StringLiteral(literal) => {
+            let Some(text) = literal.value.as_str() else {
+                return false;
+            };
+            out.push((text, literal.span));
             true
         }
-        Expression::StringLiteral(_) => false,
         _ => is_nullish(expression),
     }
 }

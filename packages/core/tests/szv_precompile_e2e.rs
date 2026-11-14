@@ -89,6 +89,22 @@ fn single_dimension_call_uses_the_narrow_picker() {
 }
 
 #[test]
+fn a_string_keyed_single_dimension_call_uses_the_narrow_picker() {
+    // `{ "pad": size }` names the same dimension as `{ pad: size }`.
+    let source = format!(
+        "{IMPORTS}const padSz = szv({{ variants: {{ pad: {{ sm: {{ p: 2 }}, lg: {{ p: 8 }} }} }} }});\nexport const x = (size) => szr(padSz({{ \"pad\": size }}));\n"
+    );
+    let result = run(&source);
+    assert!(
+        result
+            .code
+            .contains("__szvPick1(__szvT_padSz, \"pad\", size)"),
+        "single-dimension pick expected, got:\n{}",
+        result.code
+    );
+}
+
+#[test]
 fn defaults_disable_the_single_dimension_picker() {
     // The omitted dimensions contribute classes through defaultVariants, which
     // the narrow picker never visits — so this call must use the full picker.
