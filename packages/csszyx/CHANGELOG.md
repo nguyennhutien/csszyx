@@ -2,31 +2,40 @@
 
 ## [0.18.1](https://github.com/nguyennhutien/csszyx/compare/v0.18.0...v0.18.1) (2026-11-14)
 
-
 ### Bug Fixes
 
-* ask each stylesheet under its own prefix when the MCP tools check an `_` ([#467](https://github.com/nguyennhutien/csszyx/issues/467)) ([7766e9f](https://github.com/nguyennhutien/csszyx/commit/7766e9f93c8113e7e56d99fcb13721c7be6ffa43))
-* **core:** lower grid line names and name only one outer bracket pair in `bracketed-value` ([#461](https://github.com/nguyennhutien/csszyx/issues/461)) ([dc0447e](https://github.com/nguyennhutien/csszyx/commit/dc0447e02758b9de5156d2b0535c7fa9cf572b6b))
-* **core:** merge class names across a spread that carries no class ([#459](https://github.com/nguyennhutien/csszyx/issues/459)) ([776d759](https://github.com/nguyennhutien/csszyx/commit/776d759724f52cc236409950d91ae56502af5f94))
-* **core:** update oxc and keep lone-surrogate strings at runtime ([#478](https://github.com/nguyennhutien/csszyx/issues/478)) ([96067b3](https://github.com/nguyennhutien/csszyx/commit/96067b36b4c0cd9c3d5d8403c8915a8449e784e5))
-* **mcp-server:** show the classes under the project's prefix, or say they are not its ([#466](https://github.com/nguyennhutien/csszyx/issues/466)) ([4359b5f](https://github.com/nguyennhutien/csszyx/commit/4359b5fe4f5258a060e5325157b2c202d7f3af1b))
-* name a colour object member other than `color` and `op` instead of dropping it ([#468](https://github.com/nguyennhutien/csszyx/issues/468)) ([384471e](https://github.com/nguyennhutien/csszyx/commit/384471e7370442ede8a9917004a135b90312b94e))
-* read whitespace as Unicode White_Space in the runtime `transform`, as the engine does ([#471](https://github.com/nguyennhutien/csszyx/issues/471)) ([411eb22](https://github.com/nguyennhutien/csszyx/commit/411eb2224ec9fbdbbe21501ef794761a631238af))
-* rename only the class strings the compiler marks in a mangle build ([#475](https://github.com/nguyennhutien/csszyx/issues/475)) ([9a8146c](https://github.com/nguyennhutien/csszyx/commit/9a8146c4a1b566169da3aa3591c062e8ef29d8e9))
-* **runtime:** name the setup-file route in `merge-table-missing` help ([#457](https://github.com/nguyennhutien/csszyx/issues/457)) ([cefdba5](https://github.com/nguyennhutien/csszyx/commit/cefdba52b1c1ca69ea7c4cf170e697041a36f254))
-* scan every module the build lowers in `check`, and follow `.gitignore` in the sz walk ([#464](https://github.com/nguyennhutien/csszyx/issues/464)) ([b7b13e5](https://github.com/nguyennhutien/csszyx/commit/b7b13e59afa0bbe6df21188a8241d50d6b33f543))
-* **tailwind-oracle:** read `.gitignore` with the latest `ignore` ([#450](https://github.com/nguyennhutien/csszyx/issues/450)) ([9e71933](https://github.com/nguyennhutien/csszyx/commit/9e71933bcb2c4fdf18230013dcb5353a4a87b0e4))
-* type project breakpoints and `szv` selections under every package manager ([#460](https://github.com/nguyennhutien/csszyx/issues/460)) ([3f4ddae](https://github.com/nguyennhutien/csszyx/commit/3f4ddae4134eb3b130f690eeeeac015fa36fdb48))
-* **unplugin:** emit the webpack manifest from the parent compilation only ([#462](https://github.com/nguyennhutien/csszyx/issues/462)) ([9ee55e9](https://github.com/nguyennhutien/csszyx/commit/9ee55e954845e71bd77f0fca30945c3f3fddb787))
-* **unplugin:** emit the webpack manifest only when `build.emitManifest` asks for it ([#469](https://github.com/nguyennhutien/csszyx/issues/469)) ([41bf9ea](https://github.com/nguyennhutien/csszyx/commit/41bf9ea20870ff69774d5ea7e18d96fa2ea41546))
-* **unplugin:** read only the top level of a runtime `_sz` object ([#434](https://github.com/nguyennhutien/csszyx/issues/434)) ([b218dfe](https://github.com/nguyennhutien/csszyx/commit/b218dfec6353ff96957f89b63cffe10edaab3181))
-* **vscode:** publish with the Entra token even when a PAT is set ([#433](https://github.com/nguyennhutien/csszyx/issues/433)) ([d2158dc](https://github.com/nguyennhutien/csszyx/commit/d2158dc04f6d0a091e6d51d14d0eab5194730b06))
-* warn when an `_` in an `sz` value styles a space, and keep the one migrate should keep ([#463](https://github.com/nguyennhutien/csszyx/issues/463)) ([02b6b2d](https://github.com/nguyennhutien/csszyx/commit/02b6b2da59e72400ea45a54d5a3eb1f5a1535047))
-
+* **vscode:** publish with the Entra token even when a PAT is set ([#433](https://github.com/nguyennhutien/csszyx/issues/433))
+* **unplugin:** read only the top level of a runtime `_sz` object ([#434](https://github.com/nguyennhutien/csszyx/issues/434))
+* **tailwind-oracle:** read `.gitignore` with the latest `ignore` ([#450](https://github.com/nguyennhutien/csszyx/issues/450))
+* **runtime:** name the setup-file route in `merge-table-missing` help ([#457](https://github.com/nguyennhutien/csszyx/issues/457))
+* **core:** merge class names across a spread that carries no class ([#459](https://github.com/nguyennhutien/csszyx/issues/459))
+* **core:** read `null`, `undefined` and `false` branches as class-free ([#459](https://github.com/nguyennhutien/csszyx/issues/459))
+* type project breakpoints and `szv` selections under every package manager ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **runtime:** keep the `szv` selection type mutable ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **compiler:** type `snapStrictness` on `SzProps` ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **unplugin:** import `SzProps` for breakpoints in `theme.d.ts` ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **unplugin:** augment `csszyx` in the generated theme declaration ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **core:** lower grid line names and name only one outer bracket pair in `bracketed-value` ([#461](https://github.com/nguyennhutien/csszyx/issues/461))
+* **unplugin:** emit the webpack manifest from the parent compilation only ([#462](https://github.com/nguyennhutien/csszyx/issues/462))
+* warn when an `_` in an `sz` value styles a space, and keep the one migrate should keep ([#463](https://github.com/nguyennhutien/csszyx/issues/463))
+* warn when an `_` in an `sz` value styles a space ([#463](https://github.com/nguyennhutien/csszyx/issues/463))
+* **migrate:** keep the `_` the project's Tailwind keeps in an arbitrary value ([#463](https://github.com/nguyennhutien/csszyx/issues/463))
+* scan every module the build lowers in `check`, and follow `.gitignore` in the sz walk ([#464](https://github.com/nguyennhutien/csszyx/issues/464))
+* **cli:** scan every module the build lowers in `csszyx check` ([#464](https://github.com/nguyennhutien/csszyx/issues/464))
+* lower `.cts`, `.mts` and `.cjs` modules in the Next scan and jest ([#464](https://github.com/nguyennhutien/csszyx/issues/464))
+* skip what `.gitignore` covers in the sz walk and `check`, and read what `@source` names ([#464](https://github.com/nguyennhutien/csszyx/issues/464))
+* read whitespace as Unicode White_Space in the runtime `transform`, as the engine does ([#471](https://github.com/nguyennhutien/csszyx/issues/471))
+* name a colour object member other than `color` and `op` instead of dropping it ([#468](https://github.com/nguyennhutien/csszyx/issues/468))
+* ask each stylesheet under its own prefix when the MCP tools check an `_` ([#467](https://github.com/nguyennhutien/csszyx/issues/467))
+* **mcp-server:** show the classes under the project's prefix, or say they are not its ([#466](https://github.com/nguyennhutien/csszyx/issues/466))
+* **unplugin:** emit the webpack manifest only when `build.emitManifest` asks for it ([#469](https://github.com/nguyennhutien/csszyx/issues/469))
+* rename only the class strings the compiler marks in a mangle build ([#475](https://github.com/nguyennhutien/csszyx/issues/475))
+* **core:** update oxc and keep lone-surrogate strings at runtime ([#478](https://github.com/nguyennhutien/csszyx/issues/478))
+* **core:** keep sibling classes and css scans whole around a lone surrogate ([#478](https://github.com/nguyennhutien/csszyx/issues/478))
 
 ### Performance
 
-* load the template adapters' kit only for a template file ([#443](https://github.com/nguyennhutien/csszyx/issues/443)) ([5db7c11](https://github.com/nguyennhutien/csszyx/commit/5db7c118ce48b11dfbd9c3757735add5b6dcc6c3))
+* load the template adapters' kit only for a template file ([#443](https://github.com/nguyennhutien/csszyx/issues/443))
 
 ## [0.18.0](https://github.com/nguyennhutien/csszyx/compare/v0.17.2...v0.18.0) (2026-11-03)
 
