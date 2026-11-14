@@ -38,6 +38,8 @@ export interface NextRuntimeImportUsage {
     usesUnitVar?: boolean;
     usesBoolClass?: boolean;
     usesClassMark?: boolean;
+    /** The names the code calls a renamed helper by (`_szMerge$1`). */
+    helperAliases?: readonly string[];
 }
 
 /** Result of runtime helper import injection. */
@@ -83,6 +85,30 @@ export function runtimeHelperGroupsFromUsage(usage: NextRuntimeImportUsage): Run
     if (usage.usesBoolClass) append('__szBoolClass');
     if (usage.usesClassMark) append('__szCss');
     return groups;
+}
+
+/**
+ * The name the code calls `helper` by: the engine renames a helper whose own
+ * name the module spells to `helper$k`.
+ *
+ * @param helper A runtime helper.
+ * @param aliases The aliases the transform reported.
+ * @returns Its alias, or undefined when the code calls it by its own name.
+ */
+export function helperAlias(helper: string, aliases: readonly string[] = []): string | undefined {
+    return aliases.find(alias => alias.slice(0, alias.lastIndexOf('$')) === helper);
+}
+
+/**
+ * The import specifier for `helper`, bound to the name the code calls it by.
+ *
+ * @param helper A runtime helper.
+ * @param aliases The aliases the transform reported.
+ * @returns `helper`, or `helper as alias` for a renamed one.
+ */
+export function helperSpecifier(helper: string, aliases: readonly string[] = []): string {
+    const alias = helperAlias(helper, aliases);
+    return alias === undefined ? helper : `${helper} as ${alias}`;
 }
 
 /** Helpers that lower an sz object in the browser, and so need the prefix. */
@@ -191,7 +217,7 @@ export function injectNextRuntimeImports(
     // Same slim rule as the vite/webpack hook: provably string-only _szPart
     // arguments route the merge helpers through the compiler-free entry.
     const groups = runtimeHelperGroupsFromUsage(usage);
-    const injected = injectHelperImports(code, groups);
+    const injected = injectHelperImports(code, groups, usage.helperAliases);
     return {
         ...injected,
         code: registerRuntimeClassPrefix(injected.code, groups, classPrefix, module),
@@ -203,11 +229,13 @@ export function injectNextRuntimeImports(
  *
  * @param code Transformed source code.
  * @param groups The runtime helpers the module uses.
+ * @param aliases The names the code calls a renamed helper by.
  * @returns Code plus the helper names injected by this pass.
  */
 function injectHelperImports(
     code: string,
     groups: RuntimeHelperGroups,
+    aliases: readonly string[] = [],
 ): NextRuntimeImportInjectionResult {
     const helpers = groups.all;
     if (helpers.length === 0) {
@@ -216,8 +244,12 @@ function injectHelperImports(
 
     const hasRuntimeImport = code.includes('@csszyx/runtime');
     const missing = hasRuntimeImport
-        ? helpers.filter(helper => !importsRuntimeHelper(code, helper))
+        ? helpers.filter(
+              helper => !importsRuntimeHelper(code, helper, helperAlias(helper, aliases)),
+          )
         : helpers;
+    const specifiers = (names: readonly NextRuntimeHelper[]): string =>
+        names.map(helper => helperSpecifier(helper, aliases)).join(', ');
     if (missing.length === 0) {
         return { code, injected: [] };
     }
@@ -225,14 +257,17 @@ function injectHelperImports(
     if (groups.merge.length > 0) {
         const mergeHelpers = missing.filter(helper => groups.merge.includes(helper));
         const barrelHelpers = missing.filter(helper => groups.barrel.includes(helper));
-        let next = insertRuntimeImport(
-            code,
-            `import { ${mergeHelpers.join(', ')} } from '@csszyx/runtime/merge';\n`,
-        );
+        let next =
+            mergeHelpers.length > 0
+                ? insertRuntimeImport(
+                      code,
+                      `import { ${specifiers(mergeHelpers)} } from '@csszyx/runtime/merge';\n`,
+                  )
+                : code;
         if (barrelHelpers.length > 0) {
             next = insertRuntimeImport(
                 next,
-                `import { ${barrelHelpers.join(', ')} } from '@csszyx/runtime';\n`,
+                `import { ${specifiers(barrelHelpers)} } from '@csszyx/runtime';\n`,
             );
         }
         return { code: next, injected: missing };
@@ -241,7 +276,7 @@ function injectHelperImports(
     return {
         code: insertRuntimeImport(
             code,
-            `import { ${missing.join(', ')} } from '@csszyx/runtime';\n`,
+            `import { ${specifiers(missing)} } from '@csszyx/runtime';\n`,
         ),
         injected: missing,
     };

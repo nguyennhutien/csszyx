@@ -55,7 +55,7 @@ const FILES: Record<string, string> = {
         "import { szr, szv } from '@csszyx/runtime';",
         "const clsx = (...values) => values.filter(Boolean).join(' ');",
         "const card = szv({ base: { rounded: 'lg' }, variants: { pad: { sm: { p: 2 }, lg: { p: 8 } } } });",
-        '// A local of the helper name: the bundler renames one of the two apart.',
+        '// A local of the helper name: the engine calls the helper by another.',
         'const __szCss = value => `${value}!`;',
         'export const App = ({ on, kind, pad }) => (',
         '    <main sz={{ p: 4, mx: 2 }}>',
@@ -256,16 +256,15 @@ describe('mangle on and off over the same app', () => {
         const off = await buildVariant(false);
         const on = await buildVariant(true);
         // Every mark the compiler wrote reached the bundle pass readable. The
-        // one call left is the fixture's own `__szCss('hidden')`: a call with
-        // no annotation cannot be told from a mark a transformer stripped, so
-        // it is reported, and runs as the author wrote it.
+        // one call left is the fixture's own `__szCss('hidden')`: the module
+        // declares that name, so the engine called the helper by another, and
+        // the call is the author's, not a missed mark.
         const missed = warn.mock.calls
             .map(call => String(call[0]))
             .filter(line => line.includes('mangle-mark-missed'));
         warn.mockRestore();
-        expect(missed).toHaveLength(1);
-        expect(missed[0]).toContain('could not read 1 class string(s)');
-        expect(on.marksLeft, 'only the author call reached the minifier').toBe(1);
+        expect(missed).toEqual([]);
+        expect(on.marksLeft, 'no mark reached the minifier').toBe(0);
 
         expect(off.trees).toHaveLength(2);
         expect(Object.keys(on.map).length, 'the build mangled something').toBeGreaterThan(0);

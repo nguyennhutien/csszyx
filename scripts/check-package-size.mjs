@@ -847,8 +847,15 @@ export const SIZE_BUDGETS = [
         // and the calls a transformer stripped of their annotation), the
         // census of names left unmarked, and the `mangle-mark-missed` warning
         // (ADR 0034); the mangle passes split into named functions to keep
-        // each under the cognitive-complexity limit.
-        maxGzipBytes: 122_700,
+        // each under the cognitive-complexity limit. 123,700 on 2026-11-14,
+        // measured 123,647: the census reads strings as JavaScript lexes
+        // them, a helper the engine renamed is imported under its alias, and
+        // the walk skips the build's own output folder. 124,600, measured
+        // 124,537: each slim helper is imported by its alias on its own, a
+        // module's runtime loads are read by a forward lexer that skips
+        // comments, strings and regexes, and a variable the chunk declares
+        // under the mark helper's name is not a missed mark.
+        maxGzipBytes: 124_600,
         wrappers: ['./vite', './webpack'],
     },
     {
@@ -889,8 +896,10 @@ export const SIZE_BUDGETS = [
         subpath: './next-turbo-loader',
         // Measured 78,516. 81,800 on 2026-11-09, measured 80,197: the
         // `_` facts the transform cache replays, and finding a value in its
-        // class however its whitespace was written.
-        maxGzipBytes: 81_800,
+        // class however its whitespace was written. 82,100 on 2026-11-14,
+        // measured 81,993: each slim helper imported by its alias, and the
+        // runtime loads read by the forward lexer.
+        maxGzipBytes: 82_100,
     },
     {
         name: '@csszyx/unplugin `./next-prebuild`, loaded by Node',
@@ -899,7 +908,9 @@ export const SIZE_BUDGETS = [
         subpath: './next-prebuild',
         // Measured 68,217. 71,050 on 2026-11-08, measured 69,676: the
         // `underscore-space` sites a shard carries, and the compiler's split.
-        maxGzipBytes: 71_050,
+        // 71,550 on 2026-11-14, measured 71,457: each slim helper imported
+        // by its alias, and the runtime loads read by the forward lexer.
+        maxGzipBytes: 71_550,
     },
     {
         name: '@csszyx/unplugin `./next-watcher`, loaded by Node',
@@ -917,7 +928,12 @@ export const SIZE_BUDGETS = [
         subpath: './jest',
         // Measured 59,152. 61,650 on 2026-11-08, measured 60,428: the
         // compiler's `underscore-space` split, in the chunk this lane shares.
-        maxGzipBytes: 61_650,
+        // 61,700 on 2026-11-14, measured 61,655: a helper the engine renamed
+        // is imported under its alias, and a module that loads the runtime
+        // through `import()` gets the mangle registry. 62,500, measured
+        // 62,476: each slim helper is imported by its alias on its own, and
+        // runtime loads are read by the forward lexer.
+        maxGzipBytes: 62_500,
     },
     {
         name: '@csszyx/unplugin `./postcss`, loaded by Node',

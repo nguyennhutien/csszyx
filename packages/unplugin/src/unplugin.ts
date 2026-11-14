@@ -166,6 +166,8 @@ import {
     resetMangleSizeAccount,
 } from './mangle-size-report.js';
 import {
+    helperAlias,
+    helperSpecifier,
     registerRuntimeClassPrefix,
     runtimeHelperGroupsFromUsage,
 } from './next-runtime-injection.js';
@@ -2692,11 +2694,19 @@ function findTemplateInterpolationEnd(templateContent: string, bodyStart: number
 const ownKey = Object.prototype.hasOwnProperty;
 
 /**
+ * A method that reads a string as data, `a.includes("flex")`: its first
+ * argument is what it looks for, not a class it applies.
+ */
+const DATA_METHOD =
+    /\.\s*(?:includes|startsWith|endsWith|indexOf|lastIndexOf|has|get|test|match|search|localeCompare)\s*\($/;
+
+/**
  * Whether a quoted string inside a class-position expression is an operand
  * rather than a value the expression can produce: compared (`kind === "flex"`,
- * `"flex" !== kind`), tested with `in`, indexed (`a["flex"]`) or assigned.
- * Such a string is data; renaming it changes what the code decides, not
- * which class it applies.
+ * `"flex" !== kind`), tested with `in`, indexed (`a["flex"]`), assigned, or the
+ * first argument of a method that reads it (`a.includes("flex")`). Such a
+ * string is data; renaming it changes what the code decides, not which class
+ * it applies. A string an arrow returns (`() => "p-4"`) is a value.
  *
  * @param expr - The expression the string sits in.
  * @param start - Index of the opening quote.
@@ -2709,7 +2719,11 @@ function isOperandString(expr: string, start: number, end: number): boolean {
     let after = end;
     while (after < expr.length && /\s/.test(expr.charAt(after))) after++;
     const previous = expr[before];
+    if (previous === '>' && expr[before - 1] === '=') return false;
     if (previous === '[' || previous === '=' || previous === '<' || previous === '>') return true;
+    if (previous === '(' && DATA_METHOD.test(expr.slice(Math.max(0, before - 24), before + 1))) {
+        return true;
+    }
     const rest = expr.slice(after, after + 11);
     return /^(?:[=!]=|[<>]|in\b|instanceof\b)/.test(rest);
 }
@@ -4520,6 +4534,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         };
     }
 
+    // The folders the bundler writes this build to, as resolved paths. The
+    // walk never reads them: a previous bundle holds every class unmarked,
+    // so its census would keep each owned class out of the map. A folder
+    // named `dist` or `build`, or one `.gitignore` covers, is skipped anyway.
+    let buildOutputDirs: readonly string[] = [];
+    const isBuildOutputDir = (folder: string): boolean =>
+        buildOutputDirs.includes(path.resolve(folder));
     // Whether a file a watcher reported is one the project walk would read
     // hooks from: outside generated output and not gitignored. Rebuilt with
     // each walk, so an edit to a `.gitignore` counts from the next prescan.
@@ -5508,9 +5529,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             [(file: string) => string | null, (file: string, directory?: boolean) => boolean]
         > = [];
         const scanDir = (dir: string): void => {
-            walkProject(dir, { skipDirs: DEPENDENCY_OUTPUT_DIRS, gitignore: 'skip' }, file => {
-                visit(file.path, file.extension, !inGeneratedOutput(file.path, dir));
-            });
+            walkProject(
+                dir,
+                {
+                    skipDirs: DEPENDENCY_OUTPUT_DIRS,
+                    gitignore: 'skip',
+                    prune: isBuildOutputDir,
+                },
+                file => {
+                    visit(file.path, file.extension, !inGeneratedOutput(file.path, dir));
+                },
+            );
             queries.push([createWalkRootRelative(dir), createGitignoreQuery(dir)]);
         };
         scanDir(state.rootDir);
@@ -7456,28 +7485,37 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const groups = requiredRuntimeHelpers(output);
         let result: string | null = null;
         let current = code;
-        if (groups.merge.length > 0 && !current.includes('@csszyx/runtime/merge')) {
+        const aliases = output.helperAliases;
+        const specifiers = (names: readonly string[]): string =>
+            names.map(name => helperSpecifier(name, aliases)).join(', ');
+        // Each helper by the name the code calls it: a module's own import of
+        // `/merge` may bind other helpers, or the helper under the name the
+        // engine renamed it away from.
+        const missing = (names: readonly string[]): readonly string[] =>
+            current.includes('@csszyx/runtime')
+                ? names.filter(
+                      name => !importsRuntimeHelper(current, name, helperAlias(name, aliases)),
+                  )
+                : names;
+        const merge = missing(groups.merge);
+        if (merge.length > 0) {
             current = insertRuntimeImport(
                 current,
-                `import { ${groups.merge.join(', ')} } from '@csszyx/runtime/merge';\n`,
+                `import { ${specifiers(merge)} } from '@csszyx/runtime/merge';\n`,
             );
             result = current;
         }
-        const imports = groups.barrel;
-        const hasRuntimeImport = imports.length > 0 && current.includes('@csszyx/runtime');
-        const needed = hasRuntimeImport
-            ? imports.filter(name => !importsRuntimeHelper(current, name))
-            : imports;
+        const needed = missing(groups.barrel);
         if (needed.length === 0) return result;
 
         const existingImport = findRuntimeImportClause(current);
         if (existingImport) {
             return current.replace(
                 existingImport.statement,
-                `${existingImport.prefixWithBody}, ${needed.join(', ')} } from '@csszyx/runtime'`,
+                `${existingImport.prefixWithBody}, ${specifiers(needed)} } from '@csszyx/runtime'`,
             );
         }
-        const importStatement = `import { ${needed.join(', ')} } from '@csszyx/runtime';\n`;
+        const importStatement = `import { ${specifiers(needed)} } from '@csszyx/runtime';\n`;
         return insertRuntimeImport(current, importStatement);
     }
 
@@ -7548,9 +7586,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         return insertRuntimeImport(transformedCode, `import '${THEME_GROUPS_VIRTUAL_ID}';\n`);
     }
 
-    /** Matches an import/re-export from a package whose runtime helpers read the mangle map. */
-    const MANGLE_RUNTIME_CONSUMER_RE = /from\s*['"](?:csszyx|@csszyx\/runtime)['"]/;
-
     /**
      * Bundler lane this instance is running under, recorded by each lane's
      * entry hook. Gates the mangle-runtime injection: `virtual:`-prefixed
@@ -7591,7 +7626,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (
             !manglingEnabled ||
             !shouldProcessSource(id) ||
-            !MANGLE_RUNTIME_CONSUMER_RE.test(transformedCode) ||
+            // Any runtime entry, not only the main one: `/split` decodes a
+            // token through the registry too, and a module that loads before
+            // any other installs it read the original names
+            // (`pick('z', 'padding')` gave '' while the module loaded).
+            !loadsCsszyxRuntime(transformedCode) ||
             transformedCode.includes(MANGLE_RUNTIME_VIRTUAL_ID)
         ) {
             return null;
@@ -8112,6 +8151,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     announceActiveParser();
                     const root = compiler.context || process.cwd();
                     state.rootDir = root;
+                    const output = compiler.options?.output?.path;
+                    buildOutputDirs = output ? [path.resolve(root, output)] : [];
                     // A rebuild an edit to the config, or to a module it
                     // imports, started reads it again; the dead-class report
                     // of this compile then follows it.
@@ -8240,6 +8281,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     announceActiveParser();
                     const root = config.root || process.cwd();
                     state.rootDir = root;
+                    buildOutputDirs = [path.resolve(root, config.build?.outDir ?? 'dist')];
                     await loadProjectDiagnosticPolicy(root);
                     // Vite has already normalized `resolve.alias` into its array
                     // form here, which is also the form this reads — taking it
@@ -8958,13 +9000,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
          * @param code Rendered chunk source.
          * @returns Rewritten chunk, or null when nothing changed.
          */
-        renderChunk(code: string) {
-            const shouldMangle = manglingEnabled && Object.keys(state.mangleMap).length > 0;
-            const rewritten = rewriteCodeAsset(code, shouldMangle);
-            // `map: null` declares that csszyx produced no mapping for this
-            // pass, which is honest: the rewrite is a plain text substitution
-            // and the previous hook chain never described it either.
-            return rewritten === code ? null : { code: rewritten, map: null };
+        renderChunk: {
+            // Ahead of every other plugin's `renderChunk`: a minifier that ran
+            // first would drop the annotations and rename the helper, so no
+            // mark could be inlined or counted as missed.
+            order: 'pre',
+            handler(code: string) {
+                const shouldMangle = manglingEnabled && Object.keys(state.mangleMap).length > 0;
+                const rewritten = rewriteCodeAsset(code, shouldMangle);
+                // `map: null` declares that csszyx produced no mapping for this
+                // pass, which is honest: the rewrite is a plain text substitution
+                // and the previous hook chain never described it either.
+                return rewritten === code ? null : { code: rewritten, map: null };
+            },
         },
 
         /**

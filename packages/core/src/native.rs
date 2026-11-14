@@ -331,6 +331,9 @@ pub struct NativeTransformMetadata {
     pub uses_bool_class: bool,
     /// Whether the result calls the runtime class-mark helper `__szCss`.
     pub uses_class_mark: bool,
+    /// The names the code calls a renamed helper by (`_szMerge$1`); absent
+    /// when it renamed none, so a result carries no array it does not need.
+    pub helper_aliases: Option<Vec<String>>,
     /// Producer identity for cache safety.
     pub producer: String,
     /// Whether native AST budget protection fired.
@@ -500,6 +503,8 @@ impl From<TransformResult> for NativeTransformResult {
                 uses_unit_var: result.metadata.uses_unit_var,
                 uses_bool_class: result.metadata.uses_bool_class,
                 uses_class_mark: result.metadata.uses_class_mark,
+                helper_aliases: Some(result.metadata.helper_aliases)
+                    .filter(|aliases| !aliases.is_empty()),
                 producer: producer_to_js(result.metadata.producer).to_string(),
                 ast_budget_exceeded: result.metadata.ast_budget_exceeded,
                 timings: NativeTransformTimings::from(result.metadata.timings),

@@ -4752,6 +4752,13 @@ export interface SourceTransformResult {
     usesBoolClass: boolean;
     /** Whether the code calls the `__szCss` class-mark helper. */
     usesClassMark: boolean;
+    /**
+     * The names the code calls a helper by where the file spells the
+     * helper's own (`_szMerge$1` for `_szMerge`), so a binding of that name
+     * never takes the call; the helper is imported `as` its alias. Absent
+     * when the code calls every helper by its own name.
+     */
+    helperAliases?: readonly string[];
     /** Classes generated from sz syntax. */
     classes: Set<string>;
     /** Raw className/class strings collected for Tailwind discovery only. */

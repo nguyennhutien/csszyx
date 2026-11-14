@@ -518,7 +518,7 @@ function fromNativeResult(
             where: 'decodeEngineSpans',
         });
     }
-    return {
+    const mapped: SourceTransformResult = {
         code: result.code,
         transformed: result.metadata.transformed,
         usesSzvPick: (result.metadata as { usesSzvPick?: boolean }).usesSzvPick ?? false,
@@ -554,6 +554,11 @@ function fromNativeResult(
         ),
         cssVariableMap: aggregateCssVariableMap(result.cssVariableMap ?? []),
     };
+    // Only a file that renamed a helper carries the field: every result
+    // otherwise keeps the shape it had, which the transform cost gate counts.
+    const aliases = result.metadata.helperAliases;
+    if (aliases !== undefined) mapped.helperAliases = aliases;
+    return mapped;
 }
 
 /**

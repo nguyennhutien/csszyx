@@ -204,6 +204,8 @@ export interface NativeTransformResult {
         usesBoolClass?: boolean;
         /** Whether the emitted code calls the __szCss class-mark helper. */
         usesClassMark?: boolean;
+        /** The names the emitted code calls a renamed helper by (`_szMerge$1`). */
+        helperAliases?: string[];
         /** Producer identity for cache safety. */
         producer: 'rust';
         /** Whether native AST budget protection fired. */

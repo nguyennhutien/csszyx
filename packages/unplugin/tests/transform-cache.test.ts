@@ -374,7 +374,7 @@ describe('transform cache', () => {
         expect(readdirSync(cacheRoot).sort()).toEqual(['.gitignore', `${key}.json`]);
         const content = readFileSync(entryFile(cacheRoot, key), 'utf8');
 
-        expect(content).toContain('"version":24');
+        expect(content).toContain('"version":25');
         expect(readTransformCache(cacheRoot, input())).not.toBeNull();
     });
 

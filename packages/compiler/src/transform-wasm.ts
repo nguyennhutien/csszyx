@@ -80,6 +80,7 @@ interface WasmResultJson {
         uses_unit_var: boolean;
         uses_bool_class: boolean;
         uses_class_mark: boolean;
+        helper_aliases?: string[];
     };
 }
 
@@ -422,7 +423,7 @@ function fromWasmResult(
             where: 'decodeEngineSpans',
         });
     }
-    return {
+    const mapped: SourceTransformResult = {
         code: result.code,
         transformed: result.metadata.transformed,
         usesSzvPick: result.metadata.uses_szv_pick,
@@ -453,6 +454,11 @@ function fromWasmResult(
         ),
         cssVariableMap: aggregateCssVariableMap(result.css_variable_map ?? []),
     };
+    // Only a file that renamed a helper carries the field: every result
+    // otherwise keeps the shape it had, which the transform cost gate counts.
+    const aliases = result.metadata.helper_aliases;
+    if (aliases !== undefined) mapped.helperAliases = aliases;
+    return mapped;
 }
 
 /**

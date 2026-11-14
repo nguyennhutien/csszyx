@@ -166,6 +166,7 @@ pub(super) fn transform_file_with_table(
 ) -> TransformResult {
     let _class_prefix = super::lower::ClassPrefixScope::enter(options.class_prefix.as_deref());
     let class_mark = super::class_mark::ClassMarkScope::enter(options.mark_classes);
+    let helper_names = super::helper_names::HelperNameScope::enter(&file.source);
     let table = batch_table.table.clone();
     let table_problem = batch_table.problem.clone();
     // A pass with a table has already been told which lists cover each other.
@@ -175,6 +176,9 @@ pub(super) fn transform_file_with_table(
     // A class string marked while parsing reaches the code only when the
     // rewrite ran; a file left as written calls no helper.
     result.metadata.uses_class_mark = result.metadata.transformed && class_mark.emitted();
+    if result.metadata.transformed {
+        result.metadata.helper_aliases = helper_names.aliases();
+    }
     let lists = groups.finish();
     let removed = merge_table.take_removed();
     // A file that emitted nothing, over the AST budget for one, merges nothing.
@@ -290,6 +294,7 @@ fn transform_fast_static_ir_with_options(
             uses_unit_var: false,
             uses_bool_class: false,
             uses_class_mark: false,
+            helper_aliases: Vec::new(),
             producer: TransformProducer::Rust,
             ast_budget_exceeded: false,
             timings: TransformTimings {
@@ -512,6 +517,7 @@ fn transform_static_classes_with_options(
             uses_unit_var,
             uses_bool_class,
             uses_class_mark: false,
+            helper_aliases: Vec::new(),
             producer: TransformProducer::Rust,
             ast_budget_exceeded: parsed.ast_budget_exceeded,
             timings: TransformTimings {
@@ -1464,6 +1470,7 @@ fn noop_result(file: &TransformFile) -> TransformResult {
             uses_unit_var: false,
             uses_bool_class: false,
             uses_class_mark: false,
+            helper_aliases: Vec::new(),
             producer: TransformProducer::Rust,
             ast_budget_exceeded: false,
             timings: TransformTimings::default(),
@@ -6144,7 +6151,7 @@ mod tests {
     /// template placeholder or a `className` expression gives its text back to
     /// the template or the attribute string the plain output writes.
     fn unmark(code: &str) -> (String, Vec<String>) {
-        let call = crate::transform::class_mark::CLASS_MARK_CALL;
+        let call = "/*#__PURE__*/__szCss(";
         let mut out = String::new();
         let mut marked = Vec::new();
         let mut rest = code;
@@ -6344,5 +6351,161 @@ mod tests {
         let marked = transform_marked("export const A = () => <div className=\"p-4\" />;", true);
         assert!(!marked.metadata.uses_class_mark);
         assert!(!marked.code.contains("__szCss"));
+    }
+
+    /// A file that spells a helper's name calls that helper through the first
+    /// `name$k` the file does not spell, so a binding of the name never takes
+    /// the call; the plugin imports the helper `as` that name. A name that
+    /// only contains a helper's (`_szMergeAll`, `_sz` in `_szMerge`) is not it.
+    #[test]
+    fn a_helper_the_file_spells_is_called_through_a_name_it_does_not() {
+        /// Source, whether the build marks, calls the code makes, calls it
+        /// must not make, and the aliases the result reports.
+        type Case = (
+            &'static str,
+            bool,
+            &'static [&'static str],
+            &'static [&'static str],
+            &'static [&'static str],
+        );
+        let merge = "export const A = ({ c }) => <div className={c} sz={{ p: 4 }} />;";
+        let cases: &[Case] = &[
+            (
+                "const _szMerge = (...v) => v.join('|');\nexport const A = ({ c }) => <div className={c} sz={{ p: 4 }} />;",
+                false,
+                &["_szMerge$1("],
+                &["_szMerge(", "_sz$1"],
+                &["_szMerge$1"],
+            ),
+            // The first free name is the one taken.
+            (
+                "const _szMerge = 1, _szMerge$1 = 2;\nexport const A = ({ c }) => <div className={c} sz={{ p: 4 }} />;",
+                false,
+                &["_szMerge$2("],
+                &["_szMerge$1("],
+                &["_szMerge$2"],
+            ),
+            // A parameter named like the runtime fallback.
+            (
+                "export const A = (_sz, s) => <div sz={s} />;",
+                false,
+                &["_sz$1(s)"],
+                &["_sz(s)"],
+                &["_sz$1"],
+            ),
+            // The mark of a build that mangles, on the fast path and on the
+            // parser's.
+            (
+                "let __szCss = 1;\nexport const A = () => <i sz={{ p: 4 }} />;",
+                true,
+                &["/*#__PURE__*/__szCss$1(\"p-4\")"],
+                &["__szCss(\""],
+                &["__szCss$1"],
+            ),
+            (
+                "let __szCss = 1;\nexport const A = ({ c }) => <i className={c} sz={{ p: 4 }} />;",
+                true,
+                &["__szCss$1(\"p-4\")", "_szMerge("],
+                &["__szCss(\""],
+                &["__szCss$1"],
+            ),
+            // An identifier can spell a helper through an escape.
+            (
+                "const \\u005fszMerge = 1;\nexport const A = ({ c }) => <div className={c} sz={{ p: 4 }} />;",
+                false,
+                &["_szMerge$1("],
+                &["_szMerge("],
+                &["_szMerge$1"],
+            ),
+            // An escape of anything else renames nothing.
+            (
+                "const t = '\\u00a0\\uD800';\nexport const A = ({ c }) => <div title={t} className={c} sz={{ p: 4 }} />;",
+                false,
+                &["_szMerge("],
+                &["$1"],
+                &[],
+            ),
+            // Names that only contain a helper's name.
+            (
+                "const _szMergeAll = 1, x_szMerge = 2, __szCssX = 3;\nexport const A = ({ c }) => <div className={c} sz={{ p: 4 }} />;",
+                true,
+                &["_szMerge(", "__szCss(\""],
+                &["$1"],
+                &[],
+            ),
+            (merge, false, &["_szMerge("], &["$1"], &[]),
+        ];
+        for (source, mark, calls, absent, aliases) in cases {
+            let result = transform_marked(source, *mark);
+            for call in *calls {
+                assert!(result.code.contains(call), "{call} in {}", result.code);
+            }
+            for call in *absent {
+                assert!(!result.code.contains(call), "{call} in {}", result.code);
+            }
+            assert_eq!(result.metadata.helper_aliases, *aliases, "{source}");
+            let issues = lines(&result);
+            assert!(issues.iter().all(|l| !l.contains("helper")), "{issues:?}");
+        }
+    }
+
+    /// Whatever the file spells, the names its calls go through are names
+    /// the file does not spell, each is its helper's name or that name and a
+    /// `$` suffix, and the same file gets the same names.
+    #[test]
+    fn helper_aliases_never_name_what_the_file_spells_and_repeat_exactly() {
+        const PIECES: &[&str] = &[
+            "_sz",
+            "_szMerge",
+            "_szMerge$1",
+            "_szMerge$2",
+            "_szcn",
+            "__szCss",
+            "__szCss$1",
+            "_szPart",
+            "\\u0041",
+            "$1",
+            " ",
+            "x",
+            ".",
+            "'",
+            "_",
+        ];
+        let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
+        for _ in 0..300 {
+            let mut prefix = String::from("const s = `");
+            for _ in 0..6 {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                prefix.push_str(
+                    PIECES[usize::try_from(state % PIECES.len() as u64).expect("below the length")],
+                );
+            }
+            prefix.push_str("`;\n");
+            let source = format!(
+                "{prefix}export const A = ({{ c, on }}) => <b className={{c}} sz={{[{{ m: 1 }}, on && {{ p: 2 }}]}} />;\nexport const B = ({{ s }}) => <i sz={{s}} />;"
+            );
+            let first = transform_marked(&source, true);
+            let again = transform_marked(&source, true);
+            assert_eq!(first.code, again.code, "{source}");
+            assert_eq!(first.metadata.helper_aliases, again.metadata.helper_aliases);
+            for alias in &first.metadata.helper_aliases {
+                let (helper, suffix) = alias.split_once('$').expect("an alias has a suffix");
+                assert!(
+                    super::super::helper_names::HELPERS.contains(&helper),
+                    "{alias}"
+                );
+                assert!(suffix.bytes().all(|b| b.is_ascii_digit()), "{alias}");
+                assert!(
+                    !super::super::helper_names::spells(
+                        &super::super::helper_names::identifier_text(&source),
+                        alias
+                    ),
+                    "{alias} in {source}"
+                );
+                assert!(first.code.contains(&format!("{alias}(")), "{alias} unused");
+            }
+        }
     }
 }
