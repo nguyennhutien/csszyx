@@ -1,5 +1,42 @@
 # csszyx
 
+## [0.18.1](https://github.com/nguyennhutien/csszyx/compare/v0.18.0...v0.18.1) (2026-11-14)
+
+### Bug Fixes
+
+* **vscode:** publish with the Entra token even when a PAT is set ([#433](https://github.com/nguyennhutien/csszyx/issues/433))
+* **unplugin:** read only the top level of a runtime `_sz` object ([#434](https://github.com/nguyennhutien/csszyx/issues/434))
+* **tailwind-oracle:** read `.gitignore` with the latest `ignore` ([#450](https://github.com/nguyennhutien/csszyx/issues/450))
+* **runtime:** name the setup-file route in `merge-table-missing` help ([#457](https://github.com/nguyennhutien/csszyx/issues/457))
+* **core:** merge class names across a spread that carries no class ([#459](https://github.com/nguyennhutien/csszyx/issues/459))
+* **core:** read `null`, `undefined` and `false` branches as class-free ([#459](https://github.com/nguyennhutien/csszyx/issues/459))
+* type project breakpoints and `szv` selections under every package manager ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **runtime:** keep the `szv` selection type mutable ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **compiler:** type `snapStrictness` on `SzProps` ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **unplugin:** import `SzProps` for breakpoints in `theme.d.ts` ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **unplugin:** augment `csszyx` in the generated theme declaration ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **core:** lower grid line names and name only one outer bracket pair in `bracketed-value` ([#461](https://github.com/nguyennhutien/csszyx/issues/461))
+* **unplugin:** emit the webpack manifest from the parent compilation only ([#462](https://github.com/nguyennhutien/csszyx/issues/462))
+* warn when an `_` in an `sz` value styles a space, and keep the one migrate should keep ([#463](https://github.com/nguyennhutien/csszyx/issues/463))
+* warn when an `_` in an `sz` value styles a space ([#463](https://github.com/nguyennhutien/csszyx/issues/463))
+* **migrate:** keep the `_` the project's Tailwind keeps in an arbitrary value ([#463](https://github.com/nguyennhutien/csszyx/issues/463))
+* scan every module the build lowers in `check`, and follow `.gitignore` in the sz walk ([#464](https://github.com/nguyennhutien/csszyx/issues/464))
+* **cli:** scan every module the build lowers in `csszyx check` ([#464](https://github.com/nguyennhutien/csszyx/issues/464))
+* lower `.cts`, `.mts` and `.cjs` modules in the Next scan and jest ([#464](https://github.com/nguyennhutien/csszyx/issues/464))
+* skip what `.gitignore` covers in the sz walk and `check`, and read what `@source` names ([#464](https://github.com/nguyennhutien/csszyx/issues/464))
+* read whitespace as Unicode White_Space in the runtime `transform`, as the engine does ([#471](https://github.com/nguyennhutien/csszyx/issues/471))
+* name a colour object member other than `color` and `op` instead of dropping it ([#468](https://github.com/nguyennhutien/csszyx/issues/468))
+* ask each stylesheet under its own prefix when the MCP tools check an `_` ([#467](https://github.com/nguyennhutien/csszyx/issues/467))
+* **mcp-server:** show the classes under the project's prefix, or say they are not its ([#466](https://github.com/nguyennhutien/csszyx/issues/466))
+* **unplugin:** emit the webpack manifest only when `build.emitManifest` asks for it ([#469](https://github.com/nguyennhutien/csszyx/issues/469))
+* rename only the class strings the compiler marks in a mangle build ([#475](https://github.com/nguyennhutien/csszyx/issues/475))
+* **core:** update oxc and keep lone-surrogate strings at runtime ([#478](https://github.com/nguyennhutien/csszyx/issues/478))
+* **core:** keep sibling classes and css scans whole around a lone surrogate ([#478](https://github.com/nguyennhutien/csszyx/issues/478))
+
+### Performance
+
+* load the template adapters' kit only for a template file ([#443](https://github.com/nguyennhutien/csszyx/issues/443))
+
 ## [0.18.0](https://github.com/nguyennhutien/csszyx/compare/v0.17.2...v0.18.0) (2026-11-03)
 
 ### ⚠ BREAKING CHANGES
