@@ -53,3 +53,42 @@ describe('markClasses across artifacts', () => {
         expect(transformWasm(SOURCE, options).code).toBe(transformRust(SOURCE, options).code);
     });
 });
+
+describe.each(ENGINES)('a helper the file spells (%s)', (_name, transform) => {
+    it('is called through a name the file does not spell', () => {
+        // `_szMerge` merges a dynamic class name with the sz classes; a local
+        // of that name would take a call made by that name.
+        const source = [
+            "const _szMerge = (...v) => v.join('|');",
+            'export const A = ({ c }) => <div className={c} sz={{ p: 4 }} />;',
+        ].join('\n');
+        const result = transform(source, { filename: 'probe.tsx' });
+        expect(result.code).toContain('_szMerge$1(c, ');
+        expect(result.code).not.toContain('_szMerge(c, ');
+        expect(result.helperAliases).toEqual(['_szMerge$1']);
+        expect((result.issues ?? []).map(issue => issue.code)).toEqual(['class-precedence']);
+    });
+
+    it.each([
+        ['NBSP', ' '],
+        ['ideographic space', '　'],
+        ['BOM', '﻿'],
+        ['line separator', ' '],
+    ])('reads a name beside a %s as spelled', (_label, sep) => {
+        // JS parses each as whitespace, so the parameter binds `_szMerge`.
+        const source = `export const make = (${sep}_szMerge) => ({ c }) => <div className={c} sz={{ p: 4 }} />;`;
+        const result = transform(source, { filename: 'probe.tsx' });
+        expect(result.code).toContain('_szMerge$1(c, ');
+        expect(result.helperAliases).toEqual(['_szMerge$1']);
+    });
+
+    it('reports no alias for a file that spells no helper', () => {
+        const result = transform(
+            'export const A = ({ c }) => <div className={c} sz={{ p: 4 }} />;',
+            {
+                filename: 'probe.tsx',
+            },
+        );
+        expect(result.helperAliases).toBeUndefined();
+    });
+});

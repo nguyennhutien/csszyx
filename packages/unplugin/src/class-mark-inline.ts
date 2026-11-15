@@ -253,7 +253,26 @@ function namesHelper(code: string, start: number): boolean {
  * declaration (`function __szCss(`), not a member of another object, and not
  * the start of a string's text.
  */
-const HELPER_CALL = /__szCss(?:\$\d+)?\s*\(/g;
+const HELPER_CALL = /(__szCss(?:\$\d+)?)\s*\(/g;
+
+/**
+ * A `const`, `let` or `var` binding of the helper's name, or of a `$<n>` form
+ * of it. The engine calls the helper through a name the module does not spell
+ * and the import binds it, so a name the chunk declares this way is the
+ * author's, renamed or not by the bundler. The runtime's own declaration is a
+ * `function`, and calls to it stay counted.
+ */
+const HELPER_DECLARATION = /(?:^|[^\w$.])(?:const|let|var)\s+(__szCss(?:\$\d+)?)\s*=/g;
+
+/**
+ * The helper-like names the chunk declares as variables.
+ *
+ * @param code - Chunk text.
+ * @returns Each declared name.
+ */
+function declaredHelperNames(code: string): ReadonlySet<string> {
+    return new Set(Array.from(code.matchAll(HELPER_DECLARATION), match => match[1]));
+}
 
 /** How far back the context of a helper call is read: the annotation, `function`. */
 const CALL_CONTEXT = 32;
@@ -267,9 +286,11 @@ const CALL_CONTEXT = 32;
  * @returns The count.
  */
 function unannotatedCalls(code: string): number {
+    const declared = declaredHelperNames(code);
     let count = 0;
     for (const match of code.matchAll(HELPER_CALL)) {
         const at = match.index;
+        if (declared.has(match[1])) continue;
         const before = code.charAt(at - 1);
         if (/[\w$."'`]/.test(before)) continue;
         const context = code.slice(Math.max(0, at - CALL_CONTEXT), at).trimEnd();
@@ -277,6 +298,25 @@ function unannotatedCalls(code: string): number {
         count++;
     }
     return count;
+}
+
+/** What a mark can follow: the start of an expression, as every place the engine writes one. */
+const EXPRESSION_START = new Set(['(', ',', '?', ':', '{', '[', '=', '&', '|', '>']);
+
+/**
+ * Whether the annotation at `at` sits where an expression starts. A mark is
+ * a call the engine writes as an argument, a property value, a branch or a
+ * placeholder; the same text after a word or inside a string's words is that
+ * string's text, and is never rewritten.
+ *
+ * @param code - Source or chunk text.
+ * @param at - Index of the annotation.
+ * @returns True at the start of the text or after an expression start.
+ */
+function atExpressionStart(code: string, at: number): boolean {
+    let before = at - 1;
+    while (before >= 0 && /\s/.test(code.charAt(before))) before--;
+    return before < 0 || EXPRESSION_START.has(code.charAt(before));
 }
 
 /**
@@ -294,7 +334,9 @@ function replaceClassMarks(code: string, replace: (classes: string) => string): 
     let missed = 0;
     let at = code.indexOf(ANNOTATION);
     while (at !== -1) {
-        const argument = readCallee(code, at + ANNOTATION.length);
+        const argument = atExpressionStart(code, at)
+            ? readCallee(code, at + ANNOTATION.length)
+            : null;
         if (argument !== null) {
             const literal = readStringLiteral(code, argument);
             CALL_CLOSE.lastIndex = literal?.end ?? 0;
@@ -307,6 +349,8 @@ function replaceClassMarks(code: string, replace: (classes: string) => string): 
             }
             missed++;
         } else if (namesHelper(code, at + ANNOTATION.length)) {
+            // Not inlined, wherever it sits: a mark the pass will not read is
+            // left to the runtime, and said.
             missed++;
         }
         at = code.indexOf(ANNOTATION, at + ANNOTATION.length);
@@ -415,15 +459,110 @@ function addWords(names: Set<string>, text: string, separator: RegExp): void {
 
 /**
  * The value of each string literal and each template's text in `code`, read
- * left to right. Comments and regular expressions are not told apart, so a
- * quote inside one can pair with the wrong one; what that misreads is only
- * more names, as the runs above still read every byte.
+ * twice: once as JavaScript lexes it, past comments and regular expressions
+ * and through each placeholder's own code, and once from quote to quote. A
+ * `/` the first reading misjudges loses only the strings up to its line's
+ * end, which the second still reads; and a quote in a comment the second
+ * pairs wrongly, the first reads past. Reading a value twice adds no name.
+ *
+ * Cost: linear in the text; placeholders nest on a stack, not the call stack.
  *
  * @param code - Module text.
- * @returns The values, in order.
+ * @returns The values, in order, the first reading's before the second's.
  */
 function stringValues(code: string): string[] {
     const values: string[] = [];
+    lexStrings(code, values);
+    quoteToQuote(code, values);
+    return values;
+}
+
+/**
+ * Read each string and template text as JavaScript lexes the code.
+ *
+ * @param code - Module text.
+ * @param values - Where each value goes.
+ */
+function lexStrings(code: string, values: string[]): void {
+    // The brace depth of each open placeholder, innermost last.
+    const placeholders: number[] = [];
+    let at = 0;
+    while (at < code.length) at = lexToken(code, at, values, placeholders);
+}
+
+/**
+ * Read the token at `at` for {@link lexStrings}.
+ *
+ * @param code - Module text.
+ * @param at - Where the token starts.
+ * @param values - Where each value goes.
+ * @param placeholders - The brace depth of each open placeholder.
+ * @returns Where reading goes on.
+ */
+function lexToken(code: string, at: number, values: string[], placeholders: number[]): number {
+    const char = code[at];
+    if (char === '"' || char === "'") {
+        const literal = readStringLiteral(code, at);
+        if (literal === null) return at + 1;
+        values.push(literal.value);
+        return literal.end;
+    }
+    if (char === '`') return readPiece(code, at + 1, values, placeholders);
+    if (char === '/') {
+        const past = skipCommentOrRegex(code, at);
+        return past === at ? at + 1 : past;
+    }
+    if (placeholders.length > 0 && (char === '{' || char === '}')) {
+        return placeholderBrace(code, at, values, placeholders);
+    }
+    return at + 1;
+}
+
+/**
+ * A brace inside an open placeholder: one that closes it resumes the
+ * template's text, any other moves the depth.
+ *
+ * @param code - Module text.
+ * @param at - Index of the brace.
+ * @param values - Where each value goes.
+ * @param placeholders - The brace depth of each open placeholder.
+ * @returns Where reading goes on.
+ */
+function placeholderBrace(
+    code: string,
+    at: number,
+    values: string[],
+    placeholders: number[],
+): number {
+    const depth = placeholders.pop() as number;
+    if (code[at] === '}' && depth === 0) return readPiece(code, at + 1, values, placeholders);
+    placeholders.push(code[at] === '{' ? depth + 1 : depth - 1);
+    return at + 1;
+}
+
+/**
+ * Read a template's text from `from`, opening a placeholder where it stops at one.
+ *
+ * @param code - Module text.
+ * @param from - Where the text starts.
+ * @param values - Where each value goes.
+ * @param placeholders - The brace depth of each open placeholder.
+ * @returns Where reading goes on.
+ */
+function readPiece(code: string, from: number, values: string[], placeholders: number[]): number {
+    const piece = readTemplatePiece(code, from, values);
+    if (piece.open) placeholders.push(0);
+    return piece.end;
+}
+
+/**
+ * Read each quoted string and template text from quote to quote, nothing
+ * told apart: the reading that never misjudges a `/`.
+ *
+ * @param code - Module text.
+ * @param values - Where each value goes.
+ */
+function quoteToQuote(code: string, values: string[]): void {
     let at = 0;
     while (at < code.length) {
         const char = code[at];
@@ -440,11 +579,133 @@ function stringValues(code: string): string[] {
         }
         at++;
     }
-    return values;
+}
+
+/** A character after which a `/` begins a regular expression, not a division. */
+const REGEX_AFTER = new Set([
+    '(',
+    ',',
+    '=',
+    ':',
+    '[',
+    '!',
+    '&',
+    '|',
+    '?',
+    '{',
+    '}',
+    ';',
+    '+',
+    '-',
+    '*',
+    '%',
+    '~',
+    '^',
+]);
+
+/** A keyword after which a `/` begins a regular expression. */
+const REGEX_AFTER_WORD =
+    /(?:^|[^\w$])(?:return|typeof|case|do|else|in|of|new|delete|void|throw|yield|await)$/;
+
+/**
+ * The index past the comment or regular expression a `/` begins, or `at`
+ * itself when it is a division. A regular expression ends on its line; one
+ * that does not is read as reaching the line's end, so no `/` is scanned twice.
+ *
+ * @param code - Module text.
+ * @param at - Index of the `/`.
+ * @returns Where reading goes on.
+ */
+function skipCommentOrRegex(code: string, at: number): number {
+    const next = code[at + 1];
+    if (next === '/') return lineEnd(code, at);
+    if (next === '*') {
+        const close = code.indexOf('*/', at + 2);
+        return close < 0 ? code.length : close + 2;
+    }
+    if (!regexStarts(code, at)) return at;
+    let inClass = false;
+    for (let cursor = at + 1; cursor < code.length; cursor++) {
+        const char = code[cursor];
+        if (char === '\n' || char === '\r') return cursor;
+        if (char === '\\') cursor++;
+        else if (char === '[') inClass = true;
+        else if (char === ']') inClass = false;
+        else if (char === '/' && !inClass) return cursor + 1;
+    }
+    return code.length;
 }
 
 /**
- * The index after a template placeholder's closing brace.
+ * The index of the line break after `at`, or the text's end.
+ *
+ * @param code - Module text.
+ * @param at - Where to look from.
+ * @returns That index.
+ */
+function lineEnd(code: string, at: number): number {
+    let cursor = at;
+    while (cursor < code.length && code[cursor] !== '\n' && code[cursor] !== '\r') cursor++;
+    return cursor;
+}
+
+/**
+ * Whether the `/` at `at` begins a regular expression, read from the
+ * character before it.
+ *
+ * @param code - Module text.
+ * @param at - Index of the `/`.
+ * @returns True after an operator, an opening bracket or a keyword.
+ */
+function regexStarts(code: string, at: number): boolean {
+    let before = at - 1;
+    while (before >= 0 && /\s/.test(code.charAt(before))) before--;
+    if (before < 0) return true;
+    const char = code.charAt(before);
+    if (REGEX_AFTER.has(char)) return true;
+    return (
+        /[\w$]/.test(char) && REGEX_AFTER_WORD.test(code.slice(Math.max(0, before - 9), before + 1))
+    );
+}
+
+/**
+ * Read one piece of a template's text, up to its closing backtick or the
+ * next `${`.
+ *
+ * @param code - Module text.
+ * @param start - Index after the backtick or the placeholder's `}`.
+ * @param values - Where the piece goes.
+ * @returns The index after what ended it, and whether a placeholder opened.
+ */
+function readTemplatePiece(
+    code: string,
+    start: number,
+    values: string[],
+): { end: number; open: boolean } {
+    let text = '';
+    let at = start;
+    while (at < code.length) {
+        const char = code[at];
+        if (char === '`' || (char === '$' && code[at + 1] === '{')) {
+            values.push(text);
+            return char === '`' ? { end: at + 1, open: false } : { end: at + 2, open: true };
+        }
+        if (char === '\\') {
+            const escaped = readEscape(code, at + 1);
+            text += escaped?.value ?? '';
+            at = escaped?.end ?? at + 2;
+            continue;
+        }
+        text += char;
+        at++;
+    }
+    values.push(text);
+    return { end: at, open: false };
+}
+
+/**
+ * The index after a template placeholder's closing brace, counting braces
+ * only: the quote-to-quote reading's guess.
  *
  * @param code - Module text.
  * @param start - Index after the `${`.
@@ -470,29 +731,10 @@ function skipPlaceholder(code: string, start: number): number {
  * @returns The index after the closing backtick, or the end of the text.
  */
 function readTemplateText(code: string, start: number, values: string[]): number {
-    let text = '';
     let at = start;
-    while (at < code.length) {
-        const char = code[at];
-        if (char === '`') {
-            values.push(text);
-            return at + 1;
-        }
-        if (char === '\\') {
-            const escaped = readEscape(code, at + 1);
-            text += escaped?.value ?? '';
-            at = escaped?.end ?? at + 2;
-            continue;
-        }
-        if (char === '$' && code[at + 1] === '{') {
-            values.push(text);
-            text = '';
-            at = skipPlaceholder(code, at + 2);
-            continue;
-        }
-        text += char;
-        at++;
+    for (;;) {
+        const piece = readTemplatePiece(code, at, values);
+        if (!piece.open) return piece.end;
+        at = skipPlaceholder(code, piece.end);
     }
-    values.push(text);
-    return at;
 }

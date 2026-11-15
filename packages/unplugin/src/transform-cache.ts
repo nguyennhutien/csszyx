@@ -48,7 +48,10 @@ import { sha256Of } from './content-digest.js';
 // 24: a mangle build marks each class string the engine emits (`markClasses`
 // in the key) and reports the helper it calls (`usesClassMark`); a schema-23
 // entry would resurrect the flag as `undefined` and leave `__szCss` unimported.
-const CACHE_SCHEMA_VERSION = 24;
+// 25: the names the code calls a renamed helper by (`helperAliases`); a
+// schema-24 entry would import the helper under its own name, which the calls
+// no longer use.
+const CACHE_SCHEMA_VERSION = 25;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'rust' | 'wasm';
@@ -420,6 +423,7 @@ export type ScalarFields = Pick<
     | 'usesUnitVar'
     | 'usesBoolClass'
     | 'usesClassMark'
+    | 'helperAliases'
 >;
 
 /**
@@ -446,6 +450,7 @@ export function scalarFieldsOf(result: ScalarFields): ScalarFields {
         usesUnitVar: result.usesUnitVar,
         usesBoolClass: result.usesBoolClass,
         usesClassMark: result.usesClassMark,
+        helperAliases: result.helperAliases,
     };
 }
 

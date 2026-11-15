@@ -3291,12 +3291,21 @@ fn dynamic_szv_replacement(
         let value = &source[it.value_span.start as usize..it.value_span.end as usize];
         let dimension = super::szv_precompile::json_string_literal(&it.dimension);
         return (
-            format!("__szvPick1({table_ident}, {dimension}, {value})"),
+            format!(
+                "{}({table_ident}, {dimension}, {value})",
+                super::helper_names::local("__szvPick1")
+            ),
             true,
         );
     }
     let text = &source[span.start as usize..span.end as usize];
-    (format!("__szvPick({table_ident}, {text})"), false)
+    (
+        format!(
+            "{}({table_ident}, {text})",
+            super::helper_names::local("__szvPick")
+        ),
+        false,
+    )
 }
 
 /// Whether the single-dimension picker reproduces the full picker for one

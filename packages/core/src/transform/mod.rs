@@ -21,6 +21,9 @@ pub(crate) mod generated;
 pub(crate) mod global_var_aliases;
 #[cfg(feature = "native-engine")]
 pub mod global_var_usages;
+// Read by `rewrite`, which builds without the engine too.
+#[allow(dead_code)]
+pub(crate) mod helper_names;
 mod ir;
 #[cfg(feature = "native-engine")]
 mod lone_surrogate;

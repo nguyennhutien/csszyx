@@ -135,6 +135,12 @@ pub struct TransformMetadata {
     /// Whether the result calls the runtime class-mark helper `__szCss`.
     #[serde(default)]
     pub uses_class_mark: bool,
+    /// The names the code calls a helper by where the file spells the
+    /// helper's own: `_szMerge$1` for `_szMerge`. The import of each is
+    /// written `helper as alias`; a helper not listed keeps its name.
+    /// Left out of the JSON when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub helper_aliases: Vec<String>,
     /// Producer identity for cache safety.
     pub producer: TransformProducer,
     /// Whether native AST budget protection fired.

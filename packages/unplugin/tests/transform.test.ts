@@ -278,6 +278,18 @@ describe('mangleCodeClassesSync — Pass 2 (ternary className expressions)', () 
             'className:a?"constructor":"toString c"',
         ],
         [
+            // A string a method reads is data, like one compared.
+            'a string a method tests',
+            'className:a.includes("flex")?"p-4":a.startsWith( "p-4" )?"flex":"rounded-xl"',
+            'className:a.includes("flex")?"c":a.startsWith( "p-4" )?"z":"d"',
+        ],
+        [
+            // `=>` returns its string; it compares nothing.
+            'a string an arrow returns',
+            'className:r(on?(()=>"p-4")():"flex",x=>"rounded-xl")',
+            'className:r(on?(()=>"c")():"z",x=>"d")',
+        ],
+        [
             'a template placeholder comparing a class name',
             'className:`flex ${kind==="flex"?"p-4":""}`',
             'className:`z ${kind==="flex"?"c":""}`',

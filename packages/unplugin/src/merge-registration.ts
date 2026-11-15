@@ -23,6 +23,7 @@ import path from 'node:path';
 import type { EngineMergeTable } from '@csszyx/compiler';
 import { type DeadClassFinding, type DeadClassSite, findDeadSzClasses } from './dead-class.js';
 import { insertAfterUseDirective } from './directive-prologue.js';
+import { walkJsLiterals } from './js-lexer.js';
 import {
     createMergeSignatureTable,
     ENGINE_MERGE_TABLE_FORMAT,
@@ -213,12 +214,38 @@ export function callsSzcn(source: string, usage: { usesSzcn?: boolean }): boolea
     return usage.usesSzcn === true || /\bszcn\s*\(/.test(source);
 }
 
+/** Whether a text names the csszyx runtime through any of its entries, quoted. */
+const NAMES_RUNTIME_RE = /['"](?:csszyx|@csszyx\/runtime)(?:\/[\w-]+)?['"]/;
+
+/** A string literal that is the csszyx runtime's specifier, quotes included. */
+const RUNTIME_SPECIFIER_RE = /^['"](?:csszyx|@csszyx\/runtime)(?:\/[\w-]+)?['"]$/;
+
+/** The longest runtime specifier, quoted: `'@csszyx/runtime/'` and an entry name. */
+const MAX_SPECIFIER_LENGTH = 48;
+
+/** A `require` or `import` call's callee, at the end of the text before its `(`. */
+const LOADING_CALLEE_RE = /(?:^|[^\w$.])(?:require|import)$/;
+
+/** The word before a specifier that loads it: `from`, or `import` in `import 'x'`. */
+const LOADING_WORD_RE = /(?:^|[^\w$.])(?:from|import)$/;
+
 /**
- * The csszyx runtime's specifier, through any of its entries, quoted.
+ * Whether the code that ends at `previous` loads the specifier after it:
+ * `from` in an import or re-export, `import` in a side-effect import, or the
+ * `(` of a `require(` or `import(` call.
  *
- * Linear: a fixed prefix, one optional segment of word characters, a quote.
+ * @param code - The module's code.
+ * @param previous - Index of the last code character before the specifier.
+ * @returns True for a load.
  */
-const RUNTIME_SPECIFIER_RE = /['"](?:csszyx|@csszyx\/runtime)(?:\/[\w-]+)?['"]/g;
+function loadsSpecifierAfter(code: string, previous: number): boolean {
+    if (code.charAt(previous) !== '(') {
+        return LOADING_WORD_RE.test(code.slice(Math.max(0, previous - 6), previous + 1));
+    }
+    let callee = previous;
+    while (callee > 0 && /\s/.test(code.charAt(callee - 1))) callee--;
+    return LOADING_CALLEE_RE.test(code.slice(Math.max(0, callee - 8), callee));
+}
 
 /**
  * Whether a module loads the csszyx runtime, so it is the one that imports
@@ -229,18 +256,29 @@ const RUNTIME_SPECIFIER_RE = /['"](?:csszyx|@csszyx\/runtime)(?:\/[\w-]+)?['"]/g
  * caller reaches `szcn` through a module that loads the runtime, and one
  * registration there reaches them all, since the runtime keeps one table.
  *
+ * A specifier counts in code only, read by {@link walkJsLiterals}: one in a
+ * comment or a string is data, and a comment between `import(` and the
+ * specifier, as a bundler's magic comment, is skipped. A wrong read costs one
+ * registration the module did not need; a missed one, every renamed class the
+ * runtime is asked for. Cost: one linear pass, only over a module that names
+ * the runtime.
+ *
  * @param code - The module's code, transformed, so the imports the compiler
  *        injected are seen too.
  * @returns True when the module imports the runtime.
  */
 export function loadsCsszyxRuntime(code: string): boolean {
-    for (const match of code.matchAll(RUNTIME_SPECIFIER_RE)) {
-        // What stands before the specifier: `from` in an import or re-export,
-        // `require(` in CommonJS. A string that merely spells the name is data.
-        const before = code.slice(Math.max(0, match.index - 12), match.index).trimEnd();
-        if (before.endsWith('from') || before.endsWith('require(')) return true;
-    }
-    return false;
+    return (
+        NAMES_RUNTIME_RE.test(code) &&
+        walkJsLiterals(
+            code,
+            literal =>
+                literal.kind === 'string' &&
+                literal.end - literal.start <= MAX_SPECIFIER_LENGTH &&
+                RUNTIME_SPECIFIER_RE.test(code.slice(literal.start, literal.end)) &&
+                loadsSpecifierAfter(code, literal.previous),
+        )
+    );
 }
 
 /**

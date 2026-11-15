@@ -206,17 +206,20 @@ describe('transform hook branch edges', () => {
         );
     });
 
-    it('does not re-import an already-imported unit-var helper', async () => {
+    it('imports a helper the module spells once more, under the name its calls use', async () => {
         const { root, transform } = await boot({ build: {} });
         const result = (await transform(
             "import { __szUnitVar } from '@csszyx/runtime';\nconst B = ({ms}) => <div sz={{ duration: ms }} />;",
             path.join(root, 'src/DynUnit2.tsx'),
         )) as { code: string } | null;
         expect(result).not.toBeNull();
-        // The compiled call site remains, but no second import is added:
-        // exactly one import clause names the helper (the pre-existing one).
-        expect(result?.code).toContain('__szUnitVar(');
-        expect(result?.code.match(/import\s*\{[^}]*__szUnitVar[^}]*\}/g)).toHaveLength(1);
+        // The module spells the helper's name, so the compiled call goes
+        // through an alias, merged into the clause the module already has.
+        expect(result?.code).toContain('__szUnitVar$1(ms, ');
+        expect(result?.code).not.toContain('__szUnitVar(');
+        expect(result?.code.match(/import\s*\{[^}]*__szUnitVar[^}]*\}/g)).toEqual([
+            'import { __szUnitVar , __szUnitVar as __szUnitVar$1 }',
+        ]);
     });
 
     it('injects the szcn and szPart helpers for an array/szv sz prop', async () => {

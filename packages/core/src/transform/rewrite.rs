@@ -6,6 +6,8 @@
 
 use string_wizard::{MagicString, UpdateOptions};
 
+use super::helper_names::local;
+
 use super::{
     class_mark::{mark_class_literal, marking},
     css_var_planner::apply_css_variable_mangling,
@@ -309,7 +311,8 @@ fn rewrite_array_sz_attribute(
         if let Some(span) = part.dynamic_span {
             let expression = &source[span.start as usize..span.end as usize];
             arguments.push(format!(
-                "_szPart({})",
+                "{}({})",
+                local("_szPart"),
                 rebuild_variant_keys(expression, &part.dynamic_key_path)
             ));
             continue;
@@ -340,7 +343,7 @@ fn rewrite_array_sz_attribute(
         wrap_class_attribute(
             magic,
             &ir.class_attributes[class_index],
-            "className={_szcn(",
+            &format!("className={{{}(", local("_szcn")),
             &format!(", {rest})}}"),
         );
         magic.remove(
@@ -352,7 +355,7 @@ fn rewrite_array_sz_attribute(
             magic,
             attribute.attribute_span.start as usize,
             attribute.attribute_span.end as usize,
-            format!("className={{_szcn({rest})}}"),
+            format!("className={{{}({rest})}}", local("_szcn")),
         );
     }
 }
@@ -430,7 +433,7 @@ fn rewrite_static_sz_with_existing_class(
         wrap_class_attribute(
             magic,
             class_attribute,
-            "className={_szMerge(",
+            &format!("className={{{}(", local("_szMerge")),
             &format!(", {next})}}"),
         );
     } else {
@@ -561,7 +564,7 @@ fn rewrite_ternary_sz_attribute(
         wrap_class_attribute(
             magic,
             class_attribute,
-            "className={_szMerge(",
+            &format!("className={{{}(", local("_szMerge")),
             &format!(", {merged})}}"),
         );
         magic.remove(
@@ -647,8 +650,8 @@ fn rewrite_runtime_fallback_sz_attribute(
         wrap_class_attribute(
             magic,
             class_attribute,
-            "className={_szMerge(",
-            &format!(", _sz({expression_source}))}}"),
+            &format!("className={{{}(", local("_szMerge")),
+            &format!(", {}({expression_source}))}}", local("_sz")),
         );
         magic.remove(
             whitespace_start(source, only_attribute.attribute_span.start as usize),
@@ -658,7 +661,7 @@ fn rewrite_runtime_fallback_sz_attribute(
         magic.update_with(
             only_attribute.attribute_span.start as usize,
             only_attribute.attribute_span.end as usize,
-            format!("className={{_sz({expression_source})}}"),
+            format!("className={{{}({expression_source})}}", local("_sz")),
             UpdateOptions {
                 overwrite: true,
                 ..UpdateOptions::default()
@@ -956,7 +959,8 @@ fn conditional_expression_source(source: &str, ternary: &super::StaticTernaryIr)
     // The key names the class for the runtime to look up; it is never marked.
     if let Some(key) = &ternary.bool_class_key {
         return format!(
-            "__szBoolClass({expression}, {}, {consequent})",
+            "{}({expression}, {}, {consequent})",
+            local("__szBoolClass"),
             js_string_literal(key)
         );
     }
@@ -987,20 +991,23 @@ fn dynamic_style_value_source(source: &str, prop: &DynamicCssVarIr) -> String {
     match prop.category {
         DynamicCssVarCategory::Spacing => {
             format!(
-                "__szSpacingVar({expression}, {})",
+                "{}({expression}, {})",
+                local("__szSpacingVar"),
                 js_string_literal(&prop.key)
             )
         }
-        DynamicCssVarCategory::Color => format!("__szColorVar({expression})"),
+        DynamicCssVarCategory::Color => format!("{}({expression})", local("__szColorVar")),
         DynamicCssVarCategory::Angle => {
             format!(
-                "__szUnitVar({expression}, \"deg\", {})",
+                "{}({expression}, \"deg\", {})",
+                local("__szUnitVar"),
                 js_string_literal(&prop.key)
             )
         }
         DynamicCssVarCategory::Duration => {
             format!(
-                "__szUnitVar({expression}, \"ms\", {})",
+                "{}({expression}, \"ms\", {})",
+                local("__szUnitVar"),
                 js_string_literal(&prop.key)
             )
         }

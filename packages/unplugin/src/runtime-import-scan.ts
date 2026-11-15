@@ -12,54 +12,60 @@
  */
 
 /**
- * Matches one `import|export { … } from '@csszyx/runtime'` clause with a
- * SINGLE bounded group. One `[^{}]*` between literal braces is linear (verified
+ * Matches one `import|export { … } from '@csszyx/runtime'` clause, or one from
+ * `@csszyx/runtime/merge`, where the slim merge helpers live, with a SINGLE
+ * bounded group. One `[^{}]*` between literal braces is linear (verified
  * safe by recheck); the quadratic form only appeared when a second open run sat
  * on the other side of an inner needle.
  */
 const RUNTIME_IMPORT_CLAUSE_RE =
-    /(?:import|export)\s+\{([^{}]*)\}\s*from\s*['"]@csszyx\/runtime['"]/g;
+    /(?:import|export)\s+\{([^{}]*)\}\s*from\s*['"]@csszyx\/runtime(?:\/merge)?['"]/g;
 
 /**
- * Split an import clause body into its imported names. An import clause is
- * comma-separated specifiers; the imported (outer) name of `a as b` is `a`.
+ * Split an import clause body into its specifiers. An import clause is
+ * comma-separated specifiers; `a as b` imports `a` and binds `b`.
  *
  * @param clauseBody - The text between the `{` and `}` of an import clause.
- * @returns The imported names in the clause.
+ * @returns Each specifier's imported name and the local name it binds.
  */
-function clauseNames(clauseBody: string): string[] {
-    const names: string[] = [];
+function clauseSpecifiers(clauseBody: string): Array<{ imported: string; local: string }> {
+    const specifiers: Array<{ imported: string; local: string }> = [];
     for (const part of clauseBody.split(',')) {
-        const trimmed = part.trim();
-        if (!trimmed) {
+        // A single split of a short specifier is linear.
+        const tokens = part.trim().split(/\s+/);
+        if (!tokens[0]) {
             continue;
         }
-        // `name` or `name as alias` — the bound-to name is the first token.
-        // A single split of a short specifier is linear.
-        const spaceAt = trimmed.search(/\s/);
-        names.push(spaceAt === -1 ? trimmed : trimmed.slice(0, spaceAt));
+        const local = tokens.length === 3 && tokens[1] === 'as' ? tokens[2] : tokens[0];
+        specifiers.push({ imported: tokens[0], local });
     }
-    return names;
+    return specifiers;
 }
 
 /**
  * Whether `code` already imports (or re-exports) `helper` from
- * `@csszyx/runtime`. Exact-name equivalent of the old
+ * `@csszyx/runtime` or its `/merge` entry. Exact-name equivalent of the old
  * `\bHELPER\b`-in-clause regex — `_sz` never matches inside `_szMerge` or
  * `__szColorVar` there (no word boundary), and exact comparison agrees.
  *
  * @param code - Module source.
  * @param helper - Helper name to look for.
+ * @param local - The name the code calls it by, when the engine renamed it:
+ *        only an import bound to that name counts.
  * @returns True when the helper is imported from `@csszyx/runtime`.
  */
-export function importsRuntimeHelper(code: string, helper: string): boolean {
+export function importsRuntimeHelper(code: string, helper: string, local?: string): boolean {
     RUNTIME_IMPORT_CLAUSE_RE.lastIndex = 0;
     for (
         let match = RUNTIME_IMPORT_CLAUSE_RE.exec(code);
         match;
         match = RUNTIME_IMPORT_CLAUSE_RE.exec(code)
     ) {
-        if (clauseNames(match[1]).includes(helper)) {
+        const found = clauseSpecifiers(match[1]).some(
+            specifier =>
+                specifier.imported === helper && (local === undefined || specifier.local === local),
+        );
+        if (found) {
             return true;
         }
     }

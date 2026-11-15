@@ -121,10 +121,23 @@ describe('inlineClassMarks', () => {
         // to the runtime, and reported, never renamed on a guess.
         ['an unannotated call', 'x = __szCss("p-4")'],
         ['an unannotated call that opens the chunk', '__szCss("p-4")'],
-        ['a local function of the same name', 'const __szCss = s => s; __szCss("p-4")'],
         ['an unannotated renamed import', 'x = __szCss$1("p-4")'],
+        [
+            "an unannotated renamed import beside the author's own helper",
+            'const __szCss = s => s; __szCss("hidden"); x = __szCss$1("p-4")',
+        ],
     ])('counts %s as missed and leaves it', (_case, code) => {
         expect(inlineClassMarks(code, MAP)).toEqual({ code, inlined: 0, missed: 1 });
+    });
+
+    it.each([
+        // The engine calls the helper through a name the module does not
+        // spell, so a name the chunk declares is the author's, not the helper.
+        ['a const', 'const __szCss = s => s; __szCss("p-4")'],
+        ['a let after another statement', 'f(); let __szCss = g; __szCss("p-4")'],
+        ['a var renamed by the bundler', 'var __szCss$2 = s => s; __szCss$2("p-4")'],
+    ])('does not count calls to %s of the same name', (_case, code) => {
+        expect(inlineClassMarks(code, MAP)).toEqual({ code, inlined: 0, missed: 0 });
     });
 
     it('does not count the helper declared, exported or named in text', () => {
@@ -166,6 +179,12 @@ describe('inlineClassMarks', () => {
     });
 
     it.each([
+        // The text of a string, not code: a mark always sits where an
+        // expression starts, after `(`, `,`, `:`, `?`, `{`, `[`, `=`, `&`, `|`
+        // or `>`.
+        ['a string that holds the mark as text', `t('see /*#__PURE__*/__szCss("p-4") here')`],
+        ['a template that holds the mark as text', 't(`see /*#__PURE__*/__szCss("p-4")`)'],
+        ['a mark after a keyword', 'return /*#__PURE__*/__szCss("p-4")'],
         ['an argument that is not a literal', '/*#__PURE__*/__szCss(cls)'],
         ['a template argument', '/*#__PURE__*/__szCss(`p-4`)'],
         ['a second argument', '/*#__PURE__*/__szCss("p-4", x)'],
@@ -293,6 +312,41 @@ describe('collectUnmarkedNames', () => {
         // A line continuation, and a placeholder holding braces of its own.
         expect(names('cn(`a\\\nb p-4`)').has('p-4')).toBe(true);
         expect(names('cn(`${f({ a: 1 })} hover:m-2`)').has('hover:m-2')).toBe(true);
+    });
+
+    it.each([
+        ['a quote in a block comment', "/* it's */ const c = \"before:content-['x']\";"],
+        ['a quote in a line comment', "// it's\nconst c = \"before:content-['x']\";"],
+        ['a quote in a regular expression', "const r = /'/g; const c = \"before:content-['x']\";"],
+        ['a slash in a regex class', "const r = /[/']/; const c = \"before:content-['x']\";"],
+        ['an escaped slash in a regex', "const r = /\\/'/; const c = \"before:content-['x']\";"],
+        ['a regex that starts the text', "/'/.test(v); const c = \"before:content-['x']\";"],
+        ['a block comment left open', "const c = \"before:content-['x']\"; /* it's"],
+        ['a brace in a placeholder string', "cn(`${on ? '}' : b} before:content-['x']`)"],
+        ['a template in a placeholder', "cn(`${`${'}'}`} before:content-['x']`)"],
+    ])('reads a class holding a quote past %s', (_case, code) => {
+        // Its runs break on the quotes, so only its string's value holds it whole.
+        expect(names(code).has("before:content-['x']")).toBe(true);
+    });
+
+    it('still reads every string when a division reads like a regex', () => {
+        // `a++ / 2` and a `/` with no close on its line are not regular
+        // expressions; the strings after them are read either way.
+        expect(
+            names('x = a++ / 2; c = "before:content-[\'x\']";').has("before:content-['x']"),
+        ).toBe(true);
+        expect(names("f(/'\nc = \"before:content-['x']\";").has("before:content-['x']")).toBe(true);
+    });
+
+    it('reads a deep nest of templates in linear time', () => {
+        const depth = 20_000;
+        const code = `${'`${'.repeat(depth)}"before:content-['x']"${'}`'.repeat(depth)}`;
+        const started = performance.now();
+        expect(names(code).has("before:content-['x']")).toBe(true);
+        expect(
+            names(`${'(/['.repeat(depth)}\n"before:content-['x']"`).has("before:content-['x']"),
+        ).toBe(true);
+        expect(performance.now() - started).toBeLessThan(1000);
     });
 
     it('does not read the classes inside a mark', () => {

@@ -12,8 +12,8 @@
 
 use std::cell::Cell;
 
-/// The call a marked class string is wrapped in.
-pub const CLASS_MARK_CALL: &str = "/*#__PURE__*/__szCss(";
+/// The annotation before the call a marked class string is wrapped in.
+pub const CLASS_MARK_ANNOTATION: &str = "/*#__PURE__*/";
 
 #[derive(Clone, Copy, Default)]
 struct MarkState {
@@ -79,7 +79,10 @@ pub fn mark_class_literal(literal: String) -> String {
             emitted: true,
             ..state
         });
-        format!("{CLASS_MARK_CALL}{literal})")
+        format!(
+            "{CLASS_MARK_ANNOTATION}{}({literal})",
+            super::helper_names::local("__szCss")
+        )
     })
 }
 
