@@ -70,6 +70,10 @@ pub mod transformer;
 /// Native Rust transform contract.
 pub mod transform;
 
+/// JavaScript character classes the engine reads text by.
+#[cfg(any(feature = "native-engine", feature = "migrate"))]
+pub(crate) mod js_text;
+
 /// Mangle map checksum module for SSR/CSR integrity.
 pub mod mangle;
 

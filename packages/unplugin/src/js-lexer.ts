@@ -128,6 +128,11 @@ function isSpace(char: string): boolean {
  *          when no comment opens here.
  */
 function commentEnd(text: string, index: number): number {
+    // A hashbang (`#!/usr/bin/env node`) is a line comment at the very start.
+    if (index === 0 && text.startsWith('#!')) {
+        const close = text.indexOf('\n');
+        return close === -1 ? text.length : close;
+    }
     if (text.charAt(index) !== '/') return -1;
     const next = text.charAt(index + 1);
     if (next === '/') {
@@ -137,6 +142,33 @@ function commentEnd(text: string, index: number): number {
     if (next !== '*') return -1;
     const close = text.indexOf('*/', index + 2);
     return close === -1 ? text.length : close + 2;
+}
+
+/** A line terminator, as ECMA-262 lists them. */
+const LINE_TERMINATOR = /[\n\r\u2028\u2029]/;
+
+/**
+ * The first character of code at or after `from`, past whitespace and
+ * comments, and whether a line terminator stands before it, so a reader can
+ * tell where automatic semicolon insertion ends a statement. Costs the length
+ * of the run it skips.
+ *
+ * @param text - The text.
+ * @param from - Index to read from; 0 also skips a hashbang.
+ * @returns The index of that character, or the text's length, and whether a
+ *          line terminator came first.
+ */
+export function codeAfter(text: string, from: number): { index: number; lineBreak: boolean } {
+    let index = from;
+    let lineBreak = false;
+    while (index < text.length) {
+        const space = isSpace(text.charAt(index));
+        const end = space ? index + 1 : commentEnd(text, index);
+        if (end === -1) break;
+        lineBreak ||= LINE_TERMINATOR.test(text.slice(index, end));
+        index = end;
+    }
+    return { index, lineBreak };
 }
 
 /**

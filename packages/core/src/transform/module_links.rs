@@ -24,6 +24,7 @@ use super::parser::source_type_for_path;
 use super::registry_entries::{registry_entries, RegistryEntry};
 use super::source_walk::SourceWalk;
 use super::TransformFile;
+use crate::js_text::is_js_whitespace;
 
 /// One name a module exports without declaring it.
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize)]
@@ -557,11 +558,6 @@ fn window(source: &str, from: usize, to: usize) -> &str {
     source
         .get(source.ceil_char_boundary(from)..source.floor_char_boundary(to))
         .unwrap_or("")
-}
-
-/// The whitespace a JavaScript `\s` matches.
-const fn is_js_whitespace(c: char) -> bool {
-    c.is_whitespace() || c == '\u{feff}'
 }
 
 /// Text without leading JavaScript whitespace.

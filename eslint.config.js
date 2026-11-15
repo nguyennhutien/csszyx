@@ -28,6 +28,9 @@ export default [
             // Private AI-docs tree (gitignored): may hold third-party source
             // samples that are not part of any tsconfig project.
             '.agent/**',
+            // Agent worktrees are checked out here: a second copy of the repo
+            // doubles what `eslint .` parses and runs it out of heap.
+            '.claude/**',
             '**/dist/**',
             // Where `tsc -b` emits, since it stopped sharing dist with the
             // bundler. Declaration output belongs to no tsconfig project, so

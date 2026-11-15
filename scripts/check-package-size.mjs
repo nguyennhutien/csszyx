@@ -854,8 +854,10 @@ export const SIZE_BUDGETS = [
         // 124,537: each slim helper is imported by its alias on its own, a
         // module's runtime loads are read by a forward lexer that skips
         // comments, strings and regexes, and a variable the chunk declares
-        // under the mark helper's name is not a missed mark.
-        maxGzipBytes: 124_600,
+        // under the mark helper's name is not a missed mark. 124,950 on
+        // 2026-11-15, measured 124,672: a directive ends where JavaScript
+        // ends its statement, read past comments by the shared lexer.
+        maxGzipBytes: 124_950,
         wrappers: ['./vite', './webpack'],
     },
     {
@@ -898,8 +900,10 @@ export const SIZE_BUDGETS = [
         // `_` facts the transform cache replays, and finding a value in its
         // class however its whitespace was written. 82,100 on 2026-11-14,
         // measured 81,993: each slim helper imported by its alias, and the
-        // runtime loads read by the forward lexer.
-        maxGzipBytes: 82_100,
+        // runtime loads read by the forward lexer. 82,700 on 2026-11-15,
+        // measured 82,416: a directive ends where JavaScript ends its
+        // statement, read past comments by the shared lexer.
+        maxGzipBytes: 82_700,
     },
     {
         name: '@csszyx/unplugin `./next-prebuild`, loaded by Node',
@@ -910,7 +914,12 @@ export const SIZE_BUDGETS = [
         // `underscore-space` sites a shard carries, and the compiler's split.
         // 71,550 on 2026-11-14, measured 71,457: each slim helper imported
         // by its alias, and the runtime loads read by the forward lexer.
-        maxGzipBytes: 71_550,
+        // 71,650, measured 71,552: the import injection reads the whole
+        // directive prologue, so it finds a `'use client'` after another
+        // directive. 72,200 on 2026-11-15, measured 71,889: a directive
+        // ends where JavaScript ends its statement, read past comments by the
+        // shared lexer.
+        maxGzipBytes: 72_200,
     },
     {
         name: '@csszyx/unplugin `./next-watcher`, loaded by Node',
@@ -932,8 +941,12 @@ export const SIZE_BUDGETS = [
         // is imported under its alias, and a module that loads the runtime
         // through `import()` gets the mangle registry. 62,500, measured
         // 62,476: each slim helper is imported by its alias on its own, and
-        // runtime loads are read by the forward lexer.
-        maxGzipBytes: 62_500,
+        // runtime loads are read by the forward lexer. 62,650, measured
+        // 62,564: the import injection reads the whole directive prologue.
+        // 63,200 on 2026-11-15, measured 62,898: a directive ends where
+        // JavaScript ends its statement, read past comments by the shared
+        // lexer.
+        maxGzipBytes: 63_200,
     },
     {
         name: '@csszyx/unplugin `./postcss`, loaded by Node',

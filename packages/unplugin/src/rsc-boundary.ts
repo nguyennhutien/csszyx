@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import type { CsszyxError } from '@csszyx/compiler/errors';
 
 import { diagnosticError } from './diagnostic-message.js';
+import { readDirectivePrologue } from './directive-prologue.js';
 import { normalizePathSeparators } from './path-normalization.js';
 
 const SERVER_DIRECTIVE_RE = /^['"]use server['"];?$/;
@@ -62,7 +63,7 @@ export interface RSCModuleRecord {
  * @returns true when the module has a top-level `'use server'` directive
  */
 export function hasUseServerDirective(code: string): boolean {
-    for (const statement of readDirectivePrologue(code)) {
+    for (const { statement } of readDirectivePrologue(code)) {
         if (SERVER_DIRECTIVE_RE.test(statement)) {
             return true;
         }
@@ -81,7 +82,7 @@ export function hasUseServerDirective(code: string): boolean {
  * @returns true when the module has a top-level `'use client'` directive
  */
 export function hasUseClientDirective(code: string): boolean {
-    for (const statement of readDirectivePrologue(code)) {
+    for (const { statement } of readDirectivePrologue(code)) {
         if (CLIENT_DIRECTIVE_RE.test(statement)) {
             return true;
         }
@@ -336,101 +337,6 @@ function walkRSCGraph(
     }
 
     return null;
-}
-
-/**
- * Find the closing quote for one directive literal.
- *
- * @param code Module source.
- * @param start Opening-quote offset.
- * @param quote Directive quote style.
- * @returns Closing-quote offset, or -1 when unterminated.
- */
-function findDirectiveQuoteEnd(code: string, start: number, quote: string): number {
-    let escaped = false;
-    for (let index = start + 1; index < code.length; index++) {
-        const char = code[index];
-        if (escaped) {
-            escaped = false;
-        } else if (char === '\\') {
-            escaped = true;
-        } else if (char === quote) {
-            return index;
-        }
-    }
-    return -1;
-}
-
-/**
- * Consume whitespace and an optional semicolon after a directive literal.
- *
- * @param code Module source.
- * @param start Offset immediately after the closing quote.
- * @returns Offset immediately after the directive statement.
- */
-function findDirectiveStatementEnd(code: string, start: number): number {
-    let end = start;
-    while (end < code.length && /[ \t\r\n]/.test(code[end])) {
-        end++;
-    }
-    return code[end] === ';' ? end + 1 : end;
-}
-
-/**
- * Reads the top-level directive prologue without requiring a full parser.
- *
- * @param code module source
- * @returns normalized directive statements
- */
-function readDirectivePrologue(code: string): string[] {
-    const out: string[] = [];
-    let i = readCodePoint(code, 0) === 0xfeff ? 1 : 0;
-
-    while (i < code.length) {
-        i = skipWhitespaceAndComments(code, i);
-        const quote = code[i];
-        if (quote !== '"' && quote !== "'") {
-            break;
-        }
-
-        const quoteEnd = findDirectiveQuoteEnd(code, i, quote);
-        if (quoteEnd === -1) {
-            break;
-        }
-        const end = findDirectiveStatementEnd(code, quoteEnd + 1);
-        out.push(code.slice(i, end).trim());
-        i = end;
-    }
-
-    return out;
-}
-
-/**
- * Advances over whitespace and comments while reading the directive prologue.
- *
- * @param code module source
- * @param start starting offset
- * @returns first non-whitespace/comment offset
- */
-function skipWhitespaceAndComments(code: string, start: number): number {
-    let i = start;
-    while (i < code.length) {
-        while (i < code.length && /\s/.test(code[i])) {
-            i++;
-        }
-        if (code.startsWith('//', i)) {
-            const next = code.indexOf('\n', i + 2);
-            i = next === -1 ? code.length : next + 1;
-            continue;
-        }
-        if (code.startsWith('/*', i)) {
-            const next = code.indexOf('*/', i + 2);
-            i = next === -1 ? code.length : next + 2;
-            continue;
-        }
-        break;
-    }
-    return i;
 }
 
 /**

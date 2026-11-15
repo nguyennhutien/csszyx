@@ -25,6 +25,7 @@ use super::parser::{parse_errors, source_type_for_path};
 use super::recovery::SourceLines;
 use super::source_walk::SourceWalk;
 use super::TransformFile;
+use crate::js_text::is_js_whitespace;
 
 /// What one record reports.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -403,12 +404,6 @@ fn custom_property_at(argument: &str) -> Option<&str> {
         .unwrap_or(rest.len());
     let name = &rest[..end];
     (name.len() > 2 && name.starts_with("--")).then_some(name)
-}
-
-/// Whether JavaScript's `\s` matches `c`: Unicode white space without U+0085,
-/// plus U+FEFF.
-const fn is_js_whitespace(c: char) -> bool {
-    c == '\u{feff}' || (c.is_whitespace() && c != '\u{85}')
 }
 
 #[cfg(test)]

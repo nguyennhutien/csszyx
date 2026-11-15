@@ -341,15 +341,6 @@ fn is_js_decimal_literal(text: &str) -> bool {
     mantissa_ok && exponent_ok
 }
 
-/// JavaScript's `WhiteSpace` and `LineTerminator` characters outside the
-/// U+2000..U+200A run, which `Number()` trims. They are not Rust's
-/// `char::is_whitespace`: JavaScript includes the byte-order mark and
-/// excludes U+0085.
-const JS_WHITESPACE: &[char] = &[
-    '\t', '\n', '\u{000B}', '\u{000C}', '\r', ' ', '\u{00A0}', '\u{1680}', '\u{2028}', '\u{2029}',
-    '\u{202F}', '\u{205F}', '\u{3000}', '\u{FEFF}',
-];
-
 /// Where a `class` attribute splits: ASCII whitespace (tab, line feed, form
 /// feed, carriage return, space), as a browser splits one and as the runtime's
 /// `HTML_CLASS_SPACE` reads it. Migrate reads a class list the DOM applies as
@@ -361,9 +352,9 @@ pub const fn is_class_space(character: char) -> bool {
     matches!(character, '\t' | '\n' | '\u{000C}' | '\r' | ' ')
 }
 
-pub fn is_js_whitespace(character: char) -> bool {
-    JS_WHITESPACE.contains(&character) || ('\u{2000}'..='\u{200A}').contains(&character)
-}
+/// Re-exported for the migrate modules, which read values as `Number()` and
+/// the source as JavaScript does.
+pub use crate::js_text::is_js_whitespace;
 
 /// One Tailwind utility read as an sz prop and value.
 #[derive(Clone, Debug, PartialEq, serde::Serialize)]

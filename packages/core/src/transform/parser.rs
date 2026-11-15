@@ -805,10 +805,9 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
                     };
                     let class_name = lower_static_sz_object(&static_object).join(" ");
                     entries.push(SzsSlotEntryIr {
-                        emit_text: super::class_mark::mark_class_literal(format!(
-                            "\"{}\"",
-                            escape_json_string(&class_name)
-                        )),
+                        emit_text: super::class_mark::mark_class_literal(
+                            super::szv_precompile::json_string_literal(&class_name),
+                        ),
                         class_name,
                         key,
                     });
@@ -2414,24 +2413,6 @@ fn static_szs_object(object: &ObjectExpression<'_>) -> Option<StaticSzObject> {
         );
     }
     Some(StaticSzObject { properties })
-}
-
-/// Minimal JSON string-body escape (backslash, quote, control chars) so the
-/// emitted `szs` value text is byte-identical to `JSON.stringify` in the JS
-/// engines for the class strings the lowering can produce.
-fn escape_json_string(value: &str) -> String {
-    let mut escaped = String::with_capacity(value.len());
-    for ch in value.chars() {
-        match ch {
-            '\\' => escaped.push_str("\\\\"),
-            '"' => escaped.push_str("\\\""),
-            '\n' => escaped.push_str("\\n"),
-            '\r' => escaped.push_str("\\r"),
-            '\t' => escaped.push_str("\\t"),
-            _ => escaped.push(ch),
-        }
-    }
-    escaped
 }
 
 fn jsx_element_name(name: &JSXElementName<'_>) -> String {
@@ -6235,7 +6216,7 @@ fn string_value_span(span: Span, source: &str) -> TextSpan {
 #[cfg(test)]
 mod tests {
     use super::{
-        escape_json_string, parse_source_shell, parse_source_shell_with_budget,
+        parse_source_shell, parse_source_shell_with_budget,
         parse_source_shell_with_budget_and_statics, parse_source_shell_with_registries,
         source_type_for_path, string_value_span, DroppedKeyReason, MAX_CATALOG_BRANCH_EXTRAS,
         MAX_CATALOG_DEPTH,
@@ -8892,10 +8873,6 @@ export const C = ({ styles }) => <div sz={styles} />;
         assert!(entry.class_name.contains("hover:p-1"));
         assert!(entry.class_name.contains("[z-index:2]"));
         assert!(entry.emit_text.contains("\\\\"));
-        assert_eq!(
-            escape_json_string("quote=\" line\nreturn\rtab\t slash\\"),
-            "quote=\\\" line\\nreturn\\rtab\\t slash\\\\"
-        );
         assert_eq!(
             string_value_span(Span::new(0, 3), "raw"),
             super::TextSpan { start: 0, end: 3 }
