@@ -206,6 +206,16 @@ jobs:
               - 'packages/core/**'
               - 'packages/e2e/**'
               - 'playground/**'
+              # The E2E job also runs `pnpm check:mangle-shipped`, which reads
+              # the docs app's build: its plugin config, its dependencies (a
+              # framework bump edits this package.json, and the refine step
+              # below counts it only when the change is code), the gate and
+              # the job that runs it. Docs content does not move the gate.
+              - 'apps/docs/astro.config.mjs'
+              - 'apps/docs/package.json'
+              - 'scripts/check-mangle-shipped.mjs'
+              - 'scripts/check-mangle-shipped.test.mjs'
+              - '.github/workflows/ci.yml'
             # Cross-process locking and atomic filesystem behavior need real
             # Windows/macOS runners. Keep this filter narrow so unrelated
             # TypeScript changes do not consume the platform matrix.

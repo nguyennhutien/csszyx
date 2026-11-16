@@ -3284,8 +3284,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // have no matching CSS — silently collapsing szv-driven layouts in
     // `vite serve` only. Forced off for `command === 'serve'` below
     // (configResolved), so dev always uses readable class names that match the
-    // dev CSS. `let` because the command is only known at configResolved.
-    let manglingEnabled = options.production?.mangle === true;
+    // dev CSS. `let` because the command is only known at configResolved, and
+    // decided again at each one from `mangleRequested`: a host can resolve one
+    // instance for two commands (`astro build` serves for its content sync,
+    // then builds), and a flag latched by the first would decide the second.
+    const mangleRequested = options.production?.mangle === true;
+    let manglingEnabled = mangleRequested;
     // The census maps original names to tokens, so a build that renames nothing
     // has nothing to map. It follows the RENAMING, not one feature: class
     // mangling and variable mangling are separate switches, and a dev server
@@ -3310,6 +3314,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     // good: `closeBundle` is where the count of unlisted advisories prints,
     // and a server never reaches it. Knowing we are serving is what keeps the
     // advisory list from being suppressed with nothing said in its place.
+    // Set by each resolution, like `manglingEnabled`.
     let serving = false;
     // Marked class calls the bundle pass could not read, so they run at
     // runtime instead; reported once the build has rendered every chunk.
@@ -8140,9 +8145,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 // bundled mangle-runtime module now DELIVERS the map through
                 // the JS bundle, which the HTML lane's absence in webpack dev
                 // used to prevent by accident.
-                if (compiler.options?.mode === 'development') {
-                    manglingEnabled = false;
-                }
+                manglingEnabled = mangleRequested && compiler.options?.mode !== 'development';
                 if (manglingEnabled) {
                     applyWebpackMangleRuntimeEntry(compiler);
                 }
@@ -8297,11 +8300,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                         : undefined;
                     stylesheetImportCandidates = stylesheetImportResolver?.candidates;
                     // Never mangle in a dev server — the runtime mangle map would
-                    // not match the un-mangled dev CSS. See `manglingEnabled` above.
-                    if (config.command === 'serve') {
-                        manglingEnabled = false;
-                        serving = true;
-                    }
+                    // not match the un-mangled dev CSS. Decided from this
+                    // resolution alone; see `manglingEnabled` above.
+                    serving = config.command === 'serve';
+                    manglingEnabled = mangleRequested && !serving;
                     // `vite build --watch` is out of scope for mangling: the map
                     // is settled from a prescan that runs once per process, and a
                     // rebuild triggered by an edit cannot repeat it, so the second
