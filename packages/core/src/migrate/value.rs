@@ -341,16 +341,9 @@ fn is_js_decimal_literal(text: &str) -> bool {
     mantissa_ok && exponent_ok
 }
 
-/// Where a `class` attribute splits: ASCII whitespace (tab, line feed, form
-/// feed, carriage return, space), as a browser splits one and as the runtime's
-/// `HTML_CLASS_SPACE` reads it. Migrate reads a class list the DOM applies as
-/// written, so a NEL or an NBSP joins two names into one class that styles
-/// nothing, and migrating it into sz keys would add styling the page never
-/// had. Not [`is_js_whitespace`] either: that set holds a byte-order mark,
-/// which would cut a class holding one in two.
-pub const fn is_class_space(character: char) -> bool {
-    matches!(character, '\t' | '\n' | '\u{000C}' | '\r' | ' ')
-}
+/// Re-exported for the migrate modules; the engine splits an authored
+/// `className` by the same rule.
+pub use crate::js_text::is_class_space;
 
 /// Re-exported for the migrate modules, which read values as `Number()` and
 /// the source as JavaScript does.

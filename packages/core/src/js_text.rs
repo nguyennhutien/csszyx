@@ -9,6 +9,19 @@ pub const fn is_js_whitespace(c: char) -> bool {
     c == '\u{feff}' || (c.is_whitespace() && c != '\u{85}')
 }
 
+/// Where a `class` attribute splits: ASCII whitespace (tab, line feed, form
+/// feed, carriage return, space), as a browser splits one and as the runtime's
+/// `HTML_CLASS_SPACE` reads it. Migrate reads a class list the DOM applies as
+/// written, so a NEL or an NBSP joins two names into one class that styles
+/// nothing, and migrating it into sz keys would add styling the page never
+/// had. The engine splits an authored `className` it merges `sz` into the
+/// same way, so such a class stays one class. An `sz` value is not a class
+/// list the DOM reads: it splits on Unicode White_Space. Not [`is_js_whitespace`] either: that set holds a byte-order mark,
+/// which would cut a class holding one in two.
+pub const fn is_class_space(character: char) -> bool {
+    matches!(character, '\t' | '\n' | '\u{000C}' | '\r' | ' ')
+}
+
 #[cfg(test)]
 mod tests {
     use super::is_js_whitespace;

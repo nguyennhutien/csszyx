@@ -26,6 +26,8 @@ pub mod global_var_usages;
 pub(crate) mod helper_names;
 mod ir;
 #[cfg(feature = "native-engine")]
+pub(crate) mod jsx_text;
+#[cfg(feature = "native-engine")]
 mod lone_surrogate;
 pub mod lower;
 pub mod merge;
