@@ -847,7 +847,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
             Some(JSXAttributeValue::StringLiteral(value)) => (
                 StaticSzObject::empty(),
                 string_value_span(value.span, self.source),
-                Some(jsx_string_text(value, self.source).to_owned()),
+                Some(jsx_string_text(value, self.source).into_owned()),
                 true,
                 Vec::new(),
                 Vec::new(),
@@ -1290,7 +1290,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         let (value_span, value, expression_span) = match &attr.value {
             Some(JSXAttributeValue::StringLiteral(value)) => (
                 string_value_span(value.span, self.source),
-                jsx_string_text(value, self.source).to_owned(),
+                jsx_string_text(value, self.source).into_owned(),
                 None,
             ),
             Some(JSXAttributeValue::ExpressionContainer(container)) => {
@@ -1895,7 +1895,7 @@ impl<'p> CsszyxIrVisitor<'_, '_, 'p> {
         let Some(JSXAttributeValue::StringLiteral(value)) = &attr.value else {
             return Err(UnsupportedRecoveryIr::NonLiteral);
         };
-        let mode = match jsx_string_text(value, self.source) {
+        let mode = match jsx_string_text(value, self.source).as_ref() {
             "csr" => RecoveryMode::Csr,
             "dev-only" => RecoveryMode::DevOnly,
             other => return Err(UnsupportedRecoveryIr::UnknownMode(other.to_string())),
@@ -6166,12 +6166,13 @@ fn string_literal_text<'a>(expression: &Expression<'a>) -> Option<&'a str> {
     }
 }
 
-/// The text of a JSX attribute string, read from the source. oxc keeps the raw
-/// text there and decodes no character reference, so the value is the source
-/// text between the quotes and cannot hold a lone surrogate.
-fn jsx_string_text<'s>(literal: &StringLiteral<'_>, source: &'s str) -> &'s str {
+/// The value of a JSX attribute string as the JSX transform reads it: the
+/// source text between the quotes, with its character references decoded
+/// (`&#32;` is a space), since oxc keeps that text raw. It cannot hold a lone
+/// surrogate.
+fn jsx_string_text<'s>(literal: &StringLiteral<'_>, source: &'s str) -> std::borrow::Cow<'s, str> {
     let span = string_value_span(literal.span, source);
-    &source[span.start as usize..span.end as usize]
+    super::jsx_text::decode_jsx_attribute_text(&source[span.start as usize..span.end as usize])
 }
 
 fn static_value_from_unary_expression(

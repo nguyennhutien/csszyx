@@ -371,7 +371,14 @@ fn key_spelled(key: &PropertyKey<'_>) -> Option<Spelled> {
 /// beside it still reads; a custom property name is ASCII and never holds one.
 fn attribute_strings<'b>(attribute: &JSXAttribute<'b>) -> Vec<Cow<'b, str>> {
     match &attribute.value {
-        Some(JSXAttributeValue::StringLiteral(literal)) => vec![scan_text(literal.value)],
+        // oxc keeps an attribute string raw; JSX decodes its references.
+        Some(JSXAttributeValue::StringLiteral(literal)) => {
+            let text = scan_text(literal.value);
+            vec![match super::jsx_text::decode_jsx_attribute_text(&text) {
+                Cow::Borrowed(_) => text,
+                Cow::Owned(decoded) => Cow::Owned(decoded),
+            }]
+        }
         Some(JSXAttributeValue::ExpressionContainer(container)) => match &container.expression {
             JSXExpression::StringLiteral(literal) => vec![scan_text(literal.value)],
             // An untagged template with a malformed escape does not parse, so
@@ -617,6 +624,14 @@ mod tests {
 
         assert_eq!(usages.len(), 1);
         assert_eq!(usages[0].name, "--js");
+    }
+
+    /// JSX decodes `&#45;` in an attribute string, so the page reads `--gap`.
+    #[test]
+    fn reads_a_jsx_attribute_string_as_jsx_decodes_it() {
+        let source = "const A = () => <i className=\"p-[var(&#45;&#45;gap)]\" />;";
+
+        assert_eq!(names(source), vec!["--gap"]);
     }
 
     #[test]

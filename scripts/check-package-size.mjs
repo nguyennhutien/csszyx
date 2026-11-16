@@ -547,7 +547,23 @@ export const SIZE_BUDGETS = [
         // bracketed value, a variable `animationDelay` written as `var()` and
         // a bracketed closed-enum value reported once cost the 290 bytes
         // together; not measured apart. ~300 bytes of headroom.
-        maxGzipBytes: 587_100,
+        //
+        // Raised from 587,100 on 2026-11-16: a JSX attribute string is read
+        // as JSX reads it, its character references decoded with oxc's own
+        // table of 253 names (every JSX transform measured decodes exactly
+        // those). It costs 5,298 gzip -9 bytes (581,558 without, 586,856 with,
+        // same build); this script reads 589,256. A 253-row table of our own
+        // saved ~1 KB and a six-name subset ~3.8 KB but read 247 names
+        // differently from every JSX transform. ~300 bytes of headroom.
+        //
+        // Raised from 589,550 the same day, after review: a lone surrogate
+        // reference is kept one reference at a time instead of leaving the
+        // whole attribute raw, a class is written as an attribute string only
+        // when JSX reads it back unchanged, and an authored class name is split
+        // at ASCII whitespace. 1,126 gzip -9 bytes over the first fix (586,856
+        // to 587,982, same build), 145 of them the control-character check;
+        // this script reads 590,368. ~280 bytes of headroom.
+        maxGzipBytes: 590_650,
     },
     // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
     // bundles from the compiler's source, unminified, and that every editor

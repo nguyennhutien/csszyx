@@ -13,7 +13,8 @@ const ATTRIBUTE = ' className=';
 /**
  * A `className` value the engine writes when the class is known at build
  * time: `{undefined}` for no class, a `"…"` string, or a `{"…"}` JavaScript
- * string when the class holds a `"`. A runtime call does not match.
+ * string when an attribute string would not read back as the class (a `"`, a
+ * `&…;` JSX would decode, a control character). A runtime call does not match.
  */
 const STATIC_VALUE = /\{undefined\}|"[^"]*"|\{"(?:[^"\\]|\\.)*"\}/y;
 
@@ -52,7 +53,7 @@ export function findEmittedClassName(code: string): EmittedClassName | null {
  */
 function decode(value: string): string {
     if (value === '{undefined}') return '';
-    // A class string with a `"` in it is written as a JavaScript string,
-    // which the engine serialises as JSON.
+    // An attribute string reads back as written (the engine writes one only
+    // then); any other class is a JavaScript string, serialised as JSON.
     return value.startsWith('"') ? value.slice(1, -1) : JSON.parse(value.slice(1, -1));
 }

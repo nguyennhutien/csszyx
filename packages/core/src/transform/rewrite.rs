@@ -437,9 +437,12 @@ fn rewrite_static_sz_with_existing_class(
             &format!(", {next})}}"),
         );
     } else {
+        // A browser splits an authored class list at ASCII whitespace only, so
+        // `x&nbsp;y` is one class and stays one.
         let existing_classes = class_attribute
             .value
-            .split_whitespace()
+            .split(crate::js_text::is_class_space)
+            .filter(|class_name| !class_name.is_empty())
             .map(ToString::to_string)
             .collect::<Vec<_>>();
         // On one element `sz` wins: the class name loses what its classes cover.
@@ -1030,7 +1033,9 @@ fn overwrite_attribute(magic: &mut MagicString<'_>, span: super::TextSpan, class
             "className={{({})}}",
             mark_class_literal(js_string_literal(class_name))
         )
-    } else if class_name.contains('"') {
+    } else if !super::jsx_text::fits_jsx_attribute_string(class_name) {
+        // A `"` would end the attribute string, and a `&…;` JSX would decode
+        // into another class: a JavaScript string is read as written.
         format!("className={{{}}}", js_string_literal(class_name))
     } else {
         format!("className=\"{class_name}\"")
@@ -1116,6 +1121,35 @@ mod tests {
 
     fn rewrite(source: &str) -> Result<String, StaticRewriteUnsupported> {
         rewrite_static_sz_attributes(source, "/repo/src/App.tsx", &parse(source))
+    }
+
+    /// JSX decodes an attribute string once more, so a class whose text
+    /// holds `&…;` after the build read it is written as a JavaScript string.
+    #[test]
+    fn a_class_jsx_would_decode_again_is_written_as_a_javascript_string() {
+        assert_eq!(
+            rewrite("export const A = () => <div sz=\"p-4&#32;m-2\" />;").unwrap(),
+            "export const A = () => <div className=\"p-4 m-2\" />;"
+        );
+        assert_eq!(
+            rewrite("export const A = () => <div sz=\"content-['&amp;lt;']\" />;").unwrap(),
+            "export const A = () => <div className={\"content-['&lt;']\"} />;"
+        );
+        assert_eq!(
+            rewrite("export const A = () => <div sz=\"[&amp;_p]:m-2\" />;").unwrap(),
+            "export const A = () => <div className=\"[&_p]:m-2\" />;"
+        );
+    }
+
+    /// An authored class joined by a no-break space is one class to the
+    /// browser, so merging `sz` into it keeps it one.
+    #[test]
+    fn an_authored_class_joined_by_a_no_break_space_stays_one_class() {
+        assert_eq!(
+            rewrite("export const A = () => <div className=\"x&nbsp;y\" sz={{ p: 4 }} />;")
+                .unwrap(),
+            "export const A = () => <div className=\"x\u{a0}y p-4\" />;"
+        );
     }
 
     #[test]
