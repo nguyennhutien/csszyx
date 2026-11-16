@@ -14,7 +14,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { escapeUnsafeChars } from '../../core/tests/helpers/sz-fuzz.js';
 import { PROPERTY_MAP } from '../src/sz-key-tables.js';
-import { __resetSzWarnDedupForTests, transform } from '../src/transform-core.js';
+import {
+    __resetSzWarnDedupForTests,
+    GRID_TRACK_KEYWORDS,
+    transform,
+} from '../src/transform-core.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 import { szReportedCodes } from './helpers/sz-console-line.js';
 
@@ -152,6 +156,15 @@ describe.each(LANES)('a grid template written with underscores — %s', (_name, 
         [{ gridCols: 'main_layout' }, 'grid-cols-main_layout'],
     ])('%j writes %s', (sz, className) => {
         expect(lower(sz)).toEqual({ className, kinds: [] });
+    });
+
+    // Each track keyword alone decides the value, so a keyword one lane's
+    // table drops leaves that lane writing the bare class.
+    it.each([...GRID_TRACK_KEYWORDS])('brackets a template whose only track is `%s`', keyword => {
+        expect(lower({ gridCols: `main_${keyword}` })).toEqual({
+            className: `grid-cols-[main_${keyword}]`,
+            kinds: [],
+        });
     });
 });
 

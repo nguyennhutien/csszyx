@@ -4,14 +4,55 @@
  * for the safelist. `csszyx check` reads through the second, so a module the
  * transform lowers must always pass it too.
  */
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
-import { fileMayContainSafelistableSz, moduleMayHoldSz } from '../src/sz-marker.js';
+import {
+    fileMayContainSafelistableSz,
+    JSX_CLASS_ATTRIBUTE,
+    JSX_CLASS_NAME_ATTRIBUTE,
+    JSX_SZ_ATTRIBUTE,
+    JSX_SZS_ATTRIBUTE,
+    jsxAttributes,
+    moduleMayHoldSz,
+} from '../src/sz-marker.js';
+
+/** The cases the engine's `jsx_attributes` runs too, offsets in UTF-16 units. */
+const SHARED_CASES: Array<{
+    case: string;
+    text: string;
+    name: 'sz' | 'szs' | 'class' | 'className';
+    found: number[][];
+}> = JSON.parse(
+    readFileSync(
+        new URL('../../core/tests/fixtures/jsx-attribute-cases.json', import.meta.url),
+        'utf8',
+    ),
+);
+
+/** Each pattern, by the name the shared cases give. */
+const PATTERNS = {
+    sz: JSX_SZ_ATTRIBUTE,
+    szs: JSX_SZS_ATTRIBUTE,
+    class: JSX_CLASS_ATTRIBUTE,
+    className: JSX_CLASS_NAME_ATTRIBUTE,
+};
+
+describe('jsxAttributes', () => {
+    it.each(SHARED_CASES.map(c => [c.case, c] as const))('%s', (_case, { text, name, found }) => {
+        expect(jsxAttributes(text, PATTERNS[name]).map(at => [at.start, at.value])).toEqual(found);
+    });
+});
 
 describe('moduleMayHoldSz', () => {
     it.each([
         ['an sz attribute', '<div sz={{ p: 4 }} />'],
         ['an szs attribute', '<Card szs={{ body: { p: 4 } }} />'],
+        // JSX allows whitespace around an attribute's `=`.
+        ['an sz attribute with space around its `=`', '<div sz = {{ p: 4 }} />'],
+        ['an sz attribute with a line break before its `=`', '<div sz\n={{ p: 4 }} />'],
+        ['an szs attribute with space around its `=`', '<Card szs = {{ body: { p: 4 } }} />'],
         ['an sz key', 'const p = { sz: { p: 4 } };'],
         ['a spaced sz key', '<Card szs = {{ sz : { p: 4 } }} />'],
         ['an sz string', 'const p = { sz: "p-4" };'],

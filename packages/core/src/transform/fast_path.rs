@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use crate::js_text::{has_jsx_attribute, jsx_attributes, starts_jsx_name};
+
 use super::{
     JsxOpeningElementIr, SourceIr, StaticSzObject, StaticSzProperty, StaticSzValue, SzAttributeIr,
     TextSpan, TransformFile,
@@ -83,9 +85,10 @@ pub fn triage_source(file: &TransformFile) -> FastPathTriage {
     // `szs` on a SIBLING element was invisible to it: the file fast-pathed on
     // the sibling's `sz` alone and shipped the raw `szs` prop, silently
     // dropping the slot override (field-reported — the parser lanes always
-    // rewrite it). Bail file-wide like the catalog markers above; the
-    // substring test does not match an already-compiled `szsc=` prop.
-    if file.source.contains("szs=") {
+    // rewrite it). Bail file-wide like the catalog markers above, on the
+    // attribute however its `=` is spaced; an already-compiled `szsc=` prop
+    // is another name.
+    if has_jsx_attribute(&file.source, "szs") {
         return FastPathTriage::NeedsParser(FastPathBailout {
             filename: file.filename.clone(),
             reason: FastPathBailoutReason::ContainsSzMarker,
@@ -192,38 +195,29 @@ fn non_code_ranges(source: &str) -> Option<Vec<(usize, usize)>> {
     Some(ranges)
 }
 
-/// True when any attribute-boundary `sz` marker starts inside a non-code range.
+/// True when any `sz` attribute starts inside a non-code range.
 fn any_sz_marker_in_ranges(source: &str, ranges: &[(usize, usize)]) -> bool {
-    if ranges.is_empty() {
-        return false;
-    }
-    let mut search_from = 0;
-    while let Some(relative_start) = source[search_from..].find("sz=") {
-        let index = search_from + relative_start;
-        if is_attribute_boundary(source, index)
-            && ranges
+    !ranges.is_empty()
+        && jsx_attributes(source, "sz").any(|(index, _)| {
+            ranges
                 .iter()
                 .any(|(start, end)| index >= *start && index < *end)
-        {
-            return true;
-        }
-        search_from = index + 3;
-    }
-    false
+        })
 }
 
 fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
     let source_len = u32::try_from(file.source.len()).ok()?;
     let mut ir = SourceIr::empty(file.filename.clone(), source_len);
-    let mut search_from = 0;
     let mut found = false;
     let sz_attribute_count = count_sz_attributes(&file.source);
 
-    while let Some(relative_start) = file.source[search_from..].find("sz={{") {
-        let attribute_start = search_from + relative_start;
-        if !is_attribute_boundary(&file.source, attribute_start) {
-            search_from = attribute_start + 2;
-            continue;
+    for (attribute_start, value_start) in jsx_attributes(&file.source, "sz") {
+        // Only `sz={{` is read here; a spaced `=` or another value is the
+        // parser's.
+        if value_start != attribute_start + "sz=".len()
+            || !file.source[value_start..].starts_with("{{")
+        {
+            return None;
         }
         found = true;
 
@@ -232,12 +226,12 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
         let opening = &file.source[opening_start..opening_end];
         // No `szs=` check here: `triage_source` already bailed file-wide on
         // that marker before this walk runs, so no opening can contain it.
-        if opening.contains("class=")
-            || opening.contains("className=")
+        if has_jsx_attribute(opening, "class")
+            || has_jsx_attribute(opening, "className")
             || opening.contains("szRecover")
             || opening.contains("data-sz-recovery-token")
             || opening.contains("{...")
-            || opening.matches("sz={{").count() != 1
+            || jsx_attributes(opening, "sz").count() != 1
         {
             return None;
         }
@@ -288,8 +282,6 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
             element_name: element_name(opening)?,
             hoisted_dynamic_css_vars: Vec::new(),
         });
-
-        search_from = attribute_end;
     }
 
     if found && !ir.sz_attributes.is_empty() && ir.sz_attributes.len() == sz_attribute_count {
@@ -303,18 +295,11 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
 /// `<span sz />` is not lowered here, so it must make the count disagree and
 /// send the file to the parser, which reports it.
 fn count_sz_attributes(source: &str) -> usize {
-    let mut count = 0;
-    let mut search_from = 0;
-    while let Some(relative_start) = source[search_from..].find("sz") {
-        let index = search_from + relative_start;
-        if (source[index + 2..].starts_with('=') && is_attribute_boundary(source, index))
-            || is_bare_sz_attribute(source, index)
-        {
-            count += 1;
-        }
-        search_from = index + 2;
-    }
-    count
+    jsx_attributes(source, "sz").count()
+        + source
+            .match_indices("sz")
+            .filter(|(index, _)| is_bare_sz_attribute(source, *index))
+            .count()
 }
 
 /// Whether the `sz` at `index` is an attribute with no value: the name ends
@@ -323,7 +308,7 @@ fn count_sz_attributes(source: &str) -> usize {
 /// path, never a wrong transform.
 fn is_bare_sz_attribute(source: &str, index: usize) -> bool {
     let rest = &source[index + 2..];
-    is_attribute_boundary(source, index)
+    starts_jsx_name(source, index)
         && rest.starts_with(|ch: char| ch.is_whitespace() || ch == '/' || ch == '>')
         && rest
             .trim_start()
@@ -416,13 +401,6 @@ fn is_identifier_key(key: &str) -> bool {
     };
     (first.is_ascii_alphabetic() || first == '_' || first == '$')
         && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '$')
-}
-
-fn is_attribute_boundary(source: &str, index: usize) -> bool {
-    source[..index]
-        .chars()
-        .next_back()
-        .is_some_and(|ch| ch.is_whitespace() || ch == '<')
 }
 
 /// Index just past the string or brace group that opens at `index`, or

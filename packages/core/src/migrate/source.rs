@@ -34,6 +34,7 @@ use super::verdict::{
     Judge, ServedAnswers, TableVerdict, TableVerdicts, UnderscoreAnswers, UnderscoreQuestion,
     UnderscoreQuestions,
 };
+use crate::js_text::has_jsx_attribute;
 
 /// Options for the source transformation.
 #[derive(Clone, Copy, Debug, Default)]
@@ -214,24 +215,10 @@ fn unchanged_result(source: &str) -> TransformResult {
     }
 }
 
-/// Whether `source` holds an `sz` attribute: the word `sz`, then `=` (not
-/// `==`) with any JavaScript whitespace before it, as JSX allows
-/// (`sz={{…}}`, `sz = {{…}}`). One pass over each `sz` in the text.
-fn has_sz_attribute(source: &str) -> bool {
-    source.match_indices("sz").any(|(at, _)| {
-        let starts_word = source[..at]
-            .chars()
-            .next_back()
-            .is_none_or(|before| !is_word_char(before));
-        let rest = source[at + 2..].trim_start_matches(is_js_whitespace);
-        starts_word && rest.starts_with('=') && !rest[1..].starts_with('=')
-    })
-}
-
 /// A file with no `className`, `sz` attribute or `cva` in it cannot need
 /// anything, so it is not parsed. In keys-only mode only `sz` matters.
 fn fast_path_result(source: &str, keys_only: bool) -> Option<TransformResult> {
-    let has_sz = has_sz_attribute(source);
+    let has_sz = has_jsx_attribute(source, "sz");
     if (keys_only && !has_sz)
         || (!has_sz && !source.contains("className") && !source.contains("cva"))
     {

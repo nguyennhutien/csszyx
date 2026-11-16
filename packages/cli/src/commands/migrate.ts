@@ -15,6 +15,11 @@ import {
     migrateRustHtml,
     RustMigrateUnavailableError,
 } from '@csszyx/compiler/migrate';
+import {
+    hasJsxAttribute,
+    JSX_CLASS_NAME_ATTRIBUTE,
+    JSX_SZ_ATTRIBUTE,
+} from '@csszyx/tailwind-oracle';
 import fg from 'fast-glob';
 
 import {
@@ -721,18 +726,19 @@ function recordFailedMigration(
     summary.warnings.push(`Could not migrate ${relative}: ${reason}`);
 }
 
-// An attribute by name: JSX and HTML both allow whitespace around its `=`,
-// so `sz = {{…}}` is one too. `\b` keeps `xclass` from reading as `class`;
-// `==` is a comparison, not an attribute.
+// HTML allows whitespace around an attribute's `=`, so `class = "…"` is one
+// too. `\b` keeps `xclass` from reading as `class`; `==` is a comparison. A
+// JSX attribute is read by `hasJsxAttribute`, the reader the build gates on.
 const HTML_CLASS_ATTRIBUTE = /\bclass\s*=(?!=)/;
-const CLASS_NAME_ATTRIBUTE = /\bclassName\s*=(?!=)/;
-const SZ_ATTRIBUTE = /\bsz\s*=(?!=)/;
 
 /** Checks whether a source file contains attributes relevant to the selected mode. */
 function hasMigrationAttributes(source: string, isHtml: boolean, keysOnly: boolean): boolean {
     if (isHtml) return HTML_CLASS_ATTRIBUTE.test(source);
-    if (keysOnly) return SZ_ATTRIBUTE.test(source);
-    return CLASS_NAME_ATTRIBUTE.test(source) || SZ_ATTRIBUTE.test(source);
+    if (keysOnly) return hasJsxAttribute(source, JSX_SZ_ATTRIBUTE);
+    return (
+        hasJsxAttribute(source, JSX_CLASS_NAME_ATTRIBUTE) ||
+        hasJsxAttribute(source, JSX_SZ_ATTRIBUTE)
+    );
 }
 
 /** Aggregates one changed transformation result. */

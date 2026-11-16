@@ -563,7 +563,14 @@ export const SIZE_BUDGETS = [
         // at ASCII whitespace. 1,126 gzip -9 bytes over the first fix (586,856
         // to 587,982, same build), 145 of them the control-character check;
         // this script reads 590,368. ~280 bytes of headroom.
-        maxGzipBytes: 590_650,
+        //
+        // Raised from 590,650 on 2026-11-16, measured 590,670: one reader of
+        // a JSX attribute by name for the fast path and migrate, which reads
+        // whitespace around `=` (a spaced `className` got a second one, a
+        // spaced `sz` shipped raw). `str::match_indices`; `memchr::memmem`
+        // was ten times faster on 1.76 MB of source but added 1,457 gzip -9
+        // bytes, for about 0.01 ms a file. ~30 bytes of headroom.
+        maxGzipBytes: 590_700,
     },
     // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
     // bundles from the compiler's source, unminified, and that every editor
@@ -873,7 +880,10 @@ export const SIZE_BUDGETS = [
         // under the mark helper's name is not a missed mark. 124,950 on
         // 2026-11-15, measured 124,672: a directive ends where JavaScript
         // ends its statement, read past comments by the shared lexer.
-        maxGzipBytes: 124_950,
+        // 125,000 on 2026-11-16, measured 124,986: the transform and hot
+        // update gates read an `sz`/`szs` attribute whatever the whitespace
+        // around its `=`, one exported regex per name so only those two ship.
+        maxGzipBytes: 125_000,
         wrappers: ['./vite', './webpack'],
     },
     {
@@ -1014,8 +1024,10 @@ export const SIZE_BUDGETS = [
         // Measured 58,492. 60,300 on 2026-11-11, measured 59,994 with the
         // other 0.18.1 changes merged (59,923 alone): the runtime reads
         // whitespace as the engine does (White_Space trim and strip, and the
-        // two class-list separators).
-        maxGzipBytes: 60_300,
+        // two class-list separators). 60,350 on 2026-11-16, measured 60,306:
+        // the grid track keywords are exported, so the parity test walks the
+        // set the engine's table is generated from.
+        maxGzipBytes: 60_350,
     },
     {
         name: '@csszyx/compiler `./migrate`, loaded by Node',

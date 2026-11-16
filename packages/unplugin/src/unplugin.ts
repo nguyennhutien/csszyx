@@ -6585,11 +6585,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // bring the staleness back.
         refreshSzvRegistryEntry(file, fileContent);
 
-        if (
-            !fileContent.includes('sz=') &&
-            !fileContent.includes('szs=') &&
-            !/\bsz\s*:\s*["'{]/.test(fileContent)
-        ) {
+        // The transform's own gate, so a hot update lowers what a build would.
+        if (!moduleMayHoldSz(fileContent)) {
             recordUntransformedHotFile(file, fileContent);
             return;
         }
