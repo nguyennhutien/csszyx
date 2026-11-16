@@ -4,7 +4,14 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { codeAfter, type JsLiteral, walkJsLiterals } from '../src/js-lexer.js';
+import {
+    codeAfter,
+    type JsLiteral,
+    maskJsComments,
+    stripJsCommentsAndLiterals,
+    walkJsLiterals,
+    walkJsTokens,
+} from '../src/js-lexer.js';
 
 /**
  * Every literal in `text`, as `kind:text@previous-char`.
@@ -26,7 +33,8 @@ describe('walkJsLiterals', () => {
     it('hands over strings, templates and regexes with the code before them', () => {
         expect(literals("f('a', `b${c}`) /* 'no' */ // 'no'\nx = /[/']+/g;")).toEqual([
             "string:'a'@(",
-            'template:`b${c}`@,',
+            'template:`b${@,',
+            'template:}`@c',
             "regex:/[/']+/@=",
         ]);
     });
@@ -45,11 +53,39 @@ describe('walkJsLiterals', () => {
         expect(literals('`a\nb` "c\\"d"')).toEqual(['template:`a\nb`@^', 'string:"c\\"d"@`']);
     });
 
-    it('ends at the text end inside an unterminated comment or literal', () => {
+    it('ends at the text end inside an unterminated literal or line comment', () => {
         expect(literals("'a")).toEqual(["string:'a@^"]);
         expect(literals('x = /re')).toEqual(['regex:/re@=']);
-        expect(literals("/* 'a'")).toEqual([]);
         expect(literals("// 'a'")).toEqual([]);
+    });
+
+    it('reads a `/*` that never closes as code, which only JSX text holds', () => {
+        // A module with an unclosed block comment does not parse, so the
+        // opener stands in JSX text, and the code after its line is read.
+        expect(literals("<p>Use /* here</p>\nimport('./a')")).toEqual([
+            'regex:/p>@<',
+            "string:'./a'@(",
+        ]);
+        expect(literals("x = 1 /* 'a'")).toEqual(["string:'a'@*"]);
+    });
+
+    it('reads a slash after a postfix `++` or `--` as division', () => {
+        expect(literals("n = i++ / 2; 'b'")).toEqual(["string:'b'@;"]);
+        expect(literals("n = i-- / 2; 'b'")).toEqual(["string:'b'@;"]);
+        // After a binary `+` it still opens a regex.
+        expect(literals("s = a + /'/.source")).toEqual(["regex:/'/@+"]);
+    });
+
+    it('ends a line comment, a string and a regex at any line terminator', () => {
+        expect(literals("// a\r'b'")).toEqual(["string:'b'@^"]);
+        expect(literals("// a\u2028'b'")).toEqual(["string:'b'@^"]);
+        expect(literals("#!node\r'a'")).toEqual(["string:'a'@^"]);
+        expect(literals("'a\r'b'")).toEqual(["string:'a@^", "string:'b'@a"]);
+        expect(literals("x = /a\u2029'b'")).toEqual(['regex:/a@=', "string:'b'@a"]);
+        // A string may hold U+2028 and U+2029, and a backslash continues it
+        // over CRLF.
+        expect(literals("'a\u2028b' 'c'")).toEqual(["string:'a\u2028b'@^", "string:'c'@'"]);
+        expect(literals("'a\\\r\nb' 'c'")).toEqual(["string:'a\\\r\nb'@^", "string:'c'@'"]);
     });
 
     it('stops the walk when the visitor says so', () => {
@@ -85,9 +121,154 @@ describe('codeAfter', () => {
         ['\r;', 0, 1, true],
         ['#!/bin/node\n;', 0, 12, true],
         ['a #!b', 1, 2, false],
-        ['  /* open', 0, 9, false],
+        // A `/*` that never closes is code.
+        ['  /* open', 0, 2, false],
         ['   ', 1, 3, false],
     ])('reads %j from %i to %i, line break %s', (text, from, index, lineBreak) => {
         expect(codeAfter(text, from)).toEqual({ index, lineBreak });
+    });
+});
+
+/**
+ * Every token in `text`, comments included, as `kind:text@previous-char`.
+ *
+ * @param text - Module text.
+ * @returns One entry per token.
+ */
+function tokens(text: string): string[] {
+    const seen: string[] = [];
+    walkJsTokens(text, token => {
+        const before = token.previous < 0 ? '^' : text.charAt(token.previous);
+        seen.push(`${token.kind}:${text.slice(token.start, token.end)}@${before}`);
+        return false;
+    });
+    return seen;
+}
+
+describe('walkJsTokens', () => {
+    it('hands over comments too, which leave the code before the next token as it was', () => {
+        expect(tokens("f(/* a */ 'b') // c\n'd'")).toEqual([
+            'comment:/* a */@(',
+            "string:'b'@(",
+            'comment:// c@)',
+            "string:'d'@)",
+        ]);
+    });
+
+    it('lexes the code in a placeholder, templates and braces nested', () => {
+        expect(tokens("`a${ f('x', `/*${y}*/`) }b` /* c */")).toEqual([
+            'template:`a${@^',
+            "string:'x'@(",
+            'template:`/*${@,',
+            'template:}*/`@y',
+            'template:}b`@)',
+            'comment:/* c */@`',
+        ]);
+        expect(tokens("`${ {a: '}'}.a }x` 'y'")).toEqual([
+            'template:`${@^',
+            "string:'}'@:",
+            'template:}x`@a',
+            "string:'y'@`",
+        ]);
+        // A `}` with no placeholder open is code.
+        expect(tokens("} 'a'")).toEqual(["string:'a'@}"]);
+        // An escaped backtick or `\${` neither ends the template nor opens a placeholder.
+        expect(tokens("`a\\`b\\${c}` 'd'")).toEqual(['template:`a\\`b\\${c}`@^', "string:'d'@`"]);
+    });
+
+    it('stops the walk when the visitor says so', () => {
+        expect(walkJsTokens('/* a */ /* b */', () => true)).toBe(true);
+    });
+
+    it('reads a hashbang as a comment, and `#!` elsewhere as code', () => {
+        expect(tokens("#!/usr/bin/env node\n'a'")).toEqual([
+            'comment:#!/usr/bin/env node@^',
+            "string:'a'@^",
+        ]);
+        expect(tokens('#!node')).toEqual(['comment:#!node@^']);
+        expect(tokens("x #! 'a'")).toEqual(["string:'a'@!"]);
+    });
+});
+
+describe('walkJsTokens cost', () => {
+    /**
+     * The fastest of three walks over `text`.
+     *
+     * @param text - Module text.
+     * @returns Milliseconds.
+     */
+    function fastest(text: string): number {
+        let best = Number.POSITIVE_INFINITY;
+        for (let run = 0; run < 3; run++) {
+            const start = performance.now();
+            walkJsTokens(text, () => false);
+            best = Math.min(best, performance.now() - start);
+        }
+        return best;
+    }
+
+    // Each worst case is 400 KB of one shape the walk keeps state for; the
+    // control is the same size of plain code and strings.
+    const fill = (unit: string): string => unit.repeat(Math.ceil(400_000 / unit.length));
+    const control = fill("const a = f('x', b);\n");
+
+    it.each([
+        ['placeholders opened and never closed', fill('`${')],
+        ['placeholders nested in templates', `${fill('`a${')}${fill('}b`')}`],
+        ['closing braces with no placeholder open', fill('}')],
+        ['comment openers that never close', `/*${fill('a/*')}`],
+        ['quotes that never close', fill("'a\n")],
+        ['slashes after keywords', fill('return / x ')],
+    ])('walks %s in linear time', (_case, text) => {
+        expect(fastest(text) / fastest(control)).toBeLessThan(8);
+    });
+});
+
+describe('maskJsComments', () => {
+    it('blanks every comment and keeps offsets and line breaks', () => {
+        const code = "a /* x\ny */ b // z\n'/* s */' `${/* t */1}`";
+        const masked = maskJsComments(code);
+        expect(masked).toBe("a     \n     b     \n'/* s */' `${       1}`");
+        expect(masked).toHaveLength(code.length);
+        expect(maskJsComments('no comments')).toBe('no comments');
+        // A hashbang holds no code, and stays as written.
+        expect(maskJsComments('#!/usr/bin/env node\n// x')).toBe('#!/usr/bin/env node\n    ');
+        // A `/*` in JSX text that never closes leaves the code after it.
+        const jsx = "<p>Use /* here</p>;\nexport { a } from './a';";
+        expect(maskJsComments(jsx)).toBe(jsx);
+        // Text that holds no JSX reads it as a comment to the end, as a parser does.
+        expect(maskJsComments('a /* b\n c', { jsx: false })).toBe('a     \n  ');
+        expect(maskJsComments('a /* b */ c /* d', { jsx: false })).toBe('a         c     ');
+    });
+});
+
+describe('stripJsCommentsAndLiterals', () => {
+    // Each case is a module the scanner it replaced read wrong (measured on
+    // the repository against TypeScript's parser): the fail-closed guard of
+    // the Next transform matches `sz=` / `sz: {` in this text.
+    it.each([
+        [
+            'a hashbang, whose slashes read as a regex',
+            '#!/usr/bin/env node\nconst fixture = "<div sz={{ p: 4 }} />";',
+            'const fixture = ;',
+        ],
+        [
+            'a template inside a placeholder',
+            "const s = `${JSON.stringify(`x`)}`; const schema = { sz: { type: 'object' } };",
+            'const s = JSON.stringify(); const schema = { sz: { type: } };',
+        ],
+        [
+            'a template whose text spells a prop',
+            "const t = `sz={{ p: ${padding}, bg: '${palette}-500' }}`;",
+            'const t = paddingpalette;',
+        ],
+    ])('reads %s', (_case, code, out) => {
+        expect(stripJsCommentsAndLiterals(code).replaceAll(/\s+/g, ' ').trim()).toBe(out);
+    });
+
+    it('keeps only code: placeholders stay, their template text goes', () => {
+        expect(stripJsCommentsAndLiterals("x = 'sz={{}}'; /* sz= */ `a${ sz }b` + /sz=/;")).toBe(
+            'x = ;   sz  + ;',
+        );
     });
 });

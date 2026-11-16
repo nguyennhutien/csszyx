@@ -69,6 +69,9 @@ pnpm check:tracked-symlinks
 echo "[verify-like-ci] Raw NUL byte guard (binary-flipped source files)..."
 pnpm check:no-nul-bytes
 
+echo "[verify-like-ci] Shared text scanner guard (no private comment/string skippers)..."
+pnpm check:shared-scanners
+
 echo "[verify-like-ci] Checking the documented warning messages still exist in source..."
 pnpm check:warning-docs
 

@@ -4,6 +4,7 @@ import { ensureRustTransformAvailable } from '@csszyx/compiler/engine';
 import { transformRustUnrendered, transformWasmUnrendered } from '@csszyx/compiler/internal';
 import type { ResolvedCrossModuleEntries } from './cross-module-registry.js';
 import { diagnosticError } from './diagnostic-message.js';
+import { stripJsCommentsAndLiterals } from './js-lexer.js';
 import { withCrossModuleStatics } from './next-cross-module.js';
 import { projectRelative } from './path-case.js';
 import { normalizePathSeparators } from './path-normalization.js';
@@ -147,138 +148,13 @@ function hasSzSyntax(source: string): boolean {
     // The fail-closed guard only fires when the compiler returned a
     // pass-through result, so we are looking for sz syntax that the parser
     // should have caught. Real sz props live in JSX attributes (`sz={...}`)
-    // or in object-literal positions (`sz: {...}`, `sz: "..."`); they never
-    // live inside comments or string literals. Stripping comments and
-    // strings before the pattern match prevents `// sz=` annotations and
-    // `'text with sz=...'` payloads from spuriously tripping the guard.
-    const cleaned = stripJsCommentsAndStrings(source);
-    return /\bsz\s*=/.test(cleaned) || /\bsz\s*:\s*[{"']/.test(cleaned);
-}
-
-/**
- *
- * @param source
- */
-function stripJsCommentsAndStrings(source: string): string {
-    let out = '';
-    let index = 0;
-    const length = source.length;
-    while (index < length) {
-        const char = source[index];
-        const peek = index + 1 < length ? source[index + 1] : '';
-
-        if (char === '/' && peek === '/') {
-            index = skipLineComment(source, index);
-            continue;
-        }
-        if (char === '/' && peek === '*') {
-            index = skipBlockComment(source, index);
-            continue;
-        }
-        if (char === '/' && isRegexLiteralStart(out)) {
-            index = skipRegexLiteral(source, index);
-            continue;
-        }
-        if (char === '"' || char === "'" || char === '`') {
-            index = skipQuotedSource(source, index, char);
-            continue;
-        }
-
-        out += char;
-        index++;
-    }
-    return out;
-}
-
-/**
- * Skips a line comment without consuming its newline.
- *
- * @param source
- * @param start
- * @returns Next source offset.
- */
-function skipLineComment(source: string, start: number): number {
-    const newline = source.indexOf('\n', start + 2);
-    return newline === -1 ? source.length : newline;
-}
-
-/**
- * Skips a block comment, including its closing delimiter when present.
- *
- * @param source
- * @param start
- * @returns Next source offset.
- */
-function skipBlockComment(source: string, start: number): number {
-    const close = source.indexOf('*/', start + 2);
-    return close === -1 ? source.length : close + 2;
-}
-
-/**
- * Skips a regex literal, escaped characters, character classes, and flags.
- *
- * @param source
- * @param start
- * @returns Next source offset.
- */
-function skipRegexLiteral(source: string, start: number): number {
-    let index = start + 1;
-    let inCharClass = false;
-    while (index < source.length) {
-        const current = source[index];
-        if (current === '\\' && index + 1 < source.length) {
-            index += 2;
-            continue;
-        }
-        if (current === '[') {
-            inCharClass = true;
-        } else if (current === ']') {
-            inCharClass = false;
-        } else if (current === '/' && !inCharClass) {
-            return skipRegexFlags(source, index + 1);
-        }
-        index++;
-    }
-    return index;
-}
-
-/**
- * Skips ASCII regex flags after a closing delimiter.
- *
- * @param source
- * @param start
- * @returns Next source offset.
- */
-function skipRegexFlags(source: string, start: number): number {
-    let index = start;
-    while (/[a-z]/i.test(source[index] ?? '')) index++;
-    return index;
-}
-
-/**
- * Skips a quoted string or template literal with escape handling.
- *
- * @param source
- * @param start
- * @param quote
- * @returns Next source offset.
- */
-function skipQuotedSource(source: string, start: number, quote: string): number {
-    let index = start + 1;
-    while (index < source.length && source[index] !== quote) {
-        index += source[index] === '\\' && index + 1 < source.length ? 2 : 1;
-    }
-    return index + 1;
-}
-
-/**
- *
- * @param emitted
- */
-function isRegexLiteralStart(emitted: string): boolean {
-    const trimmed = emitted.trimEnd();
-    const previous = trimmed.length > 0 ? trimmed.charAt(trimmed.length - 1) : undefined;
-    return previous === undefined || /[({[=:;,!&|?+\-*%^~<>]/.test(previous);
+    // or in object-literal positions (`sz: {...}`); they never live inside
+    // comments or string literals. Stripping comments and strings before the
+    // pattern match prevents `// sz=` annotations and `'text with sz=...'`
+    // payloads from spuriously tripping the guard. A string value
+    // (`sz: "p-4"`) is stripped with its quotes, so it is not matched.
+    const cleaned = stripJsCommentsAndLiterals(source);
+    return /\bsz\s*=/.test(cleaned) || /\bsz\s*:\s*\{/.test(cleaned);
 }
 
 /**

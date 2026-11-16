@@ -5,6 +5,7 @@ import type { CsszyxError } from '@csszyx/compiler/errors';
 
 import { diagnosticError } from './diagnostic-message.js';
 import { readDirectivePrologue } from './directive-prologue.js';
+import { maskJsComments } from './js-lexer.js';
 import { normalizePathSeparators } from './path-normalization.js';
 
 const SERVER_DIRECTIVE_RE = /^['"]use server['"];?$/;
@@ -347,7 +348,7 @@ function walkRSCGraph(
  */
 function findRuntimeImports(code: string): Array<{ source: string; symbols: string[] }> {
     const imports: Array<{ source: string; symbols: string[] }> = [];
-    const scanCode = stripCommentsForImportScan(code);
+    const scanCode = maskJsComments(code);
     const dynamicImportRe = /import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 
     for (const { clause, source } of findStaticImports(scanCode)) {
@@ -617,10 +618,13 @@ function readRuntimeImportSymbols(source: string, clause: string): string[] {
  * the linear-scan equivalence test; the module graph consumes it via
  * {@link createRSCModuleRecord}.
  *
- * @param code - Module source.
+ * @param source - Module source.
  * @returns Local (`.`/`/`) import specifiers, in the legacy pass order.
  */
-export function findLocalImportSources(code: string): string[] {
+export function findLocalImportSources(source: string): string[] {
+    // A commented-out import is no edge: comments are blanked first, offsets
+    // and lines kept, as for the runtime import scan.
+    const code = maskJsComments(source);
     const out: string[] = [];
     // Static `import … '<spec>'` and `export … from '<spec>'` are line-scoped:
     // the old regexes used `.`, which never crosses a newline. Scanning each
@@ -1075,116 +1079,4 @@ function splitAsciiWhitespace(value: string): string[] {
         }
     }
     return parts;
-}
-
-/**
- * Removes comments before regex import scanning while preserving strings and
- * line positions for readable error output.
- *
- * @param code module source
- * @returns source with comments replaced by whitespace
- */
-function stripCommentsForImportScan(code: string): string {
-    let out = '';
-    let i = 0;
-    let quote: '"' | "'" | '`' | null = null;
-    let escaped = false;
-
-    while (i < code.length) {
-        const ch = code[i];
-        const next = code[i + 1];
-
-        if (quote) {
-            out += ch;
-            ({ quote, escaped } = advanceQuotedImportScan(ch, quote, escaped));
-            i++;
-            continue;
-        }
-
-        if (ch === '"' || ch === "'" || ch === '`') {
-            quote = ch;
-            out += ch;
-            i++;
-            continue;
-        }
-
-        if (ch === '/' && next === '/') {
-            const masked = maskLineComment(code, i);
-            out += masked.value;
-            i = masked.end;
-            continue;
-        }
-
-        if (ch === '/' && next === '*') {
-            const masked = maskBlockComment(code, i);
-            out += masked.value;
-            i = masked.end;
-            continue;
-        }
-
-        out += ch;
-        i++;
-    }
-
-    return out;
-}
-
-/**
- * Advances quote and escape state for one character inside a string.
- *
- * @param character - Current source character.
- * @param quote - Active quote delimiter.
- * @param escaped - Whether the current character is escaped.
- * @returns Updated quote and escape state.
- */
-function advanceQuotedImportScan(
-    character: string,
-    quote: '"' | "'" | '`',
-    escaped: boolean,
-): { quote: '"' | "'" | '`' | null; escaped: boolean } {
-    if (escaped) return { quote, escaped: false };
-    if (character === '\\') return { quote, escaped: true };
-    return { quote: character === quote ? null : quote, escaped: false };
-}
-
-/** Masked comment fragment and the next source offset. */
-interface MaskedComment {
-    end: number;
-    value: string;
-}
-
-/**
- * Replaces a line comment with spaces without consuming its newline.
- *
- * @param code - Module source.
- * @param start - Slash offset.
- * @returns Masked comment and next source offset.
- */
-function maskLineComment(code: string, start: number): MaskedComment {
-    const newline = code.indexOf('\n', start + 2);
-    const end = newline === -1 ? code.length : newline;
-    return { end, value: ' '.repeat(end - start) };
-}
-
-/**
- * Replaces a block comment with whitespace while preserving newlines.
- *
- * @param code - Module source.
- * @param start - Slash offset.
- * @returns Masked comment and next source offset.
- */
-function maskBlockComment(code: string, start: number): MaskedComment {
-    let end = start + 2;
-    while (end < code.length) {
-        if (code.charAt(end) === '*' && code.charAt(end + 1) === '/') {
-            end += 2;
-            break;
-        }
-        end += 1;
-    }
-    let value = '';
-    for (let index = start; index < end; index += 1) {
-        value += code.charAt(index) === '\n' ? '\n' : ' ';
-    }
-    return { end, value };
 }

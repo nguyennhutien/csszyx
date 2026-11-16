@@ -41,6 +41,7 @@ import path from 'node:path';
 
 import { szDiagnosticError } from '@csszyx/compiler';
 import ignore from 'ignore';
+import { cssCommentEnd, cssOpaqueEnd, cssStringEnd } from './css-comments.js';
 
 /**
  * Dependency and framework output directories. No walk reads a source from
@@ -843,34 +844,6 @@ const IMPORTING_AT_RULES = ['@import', '@reference'] as const;
 const AT_RULE_SPACE = new Set([' ', '\t', '\n', '\r']);
 
 /**
- * Where a quoted string ends.
- *
- * @param css - The stylesheet.
- * @param open - Index of the opening quote.
- * @returns The index of the closing quote, or the text's length when there is
- *          none; a backslash escapes the character after it.
- */
-function stringEnd(css: string, open: number): number {
-    const quote = css[open];
-    let index = open + 1;
-    while (index < css.length && css[index] !== quote) index += css[index] === '\\' ? 2 : 1;
-    return Math.min(index, css.length);
-}
-
-/**
- * Where a block comment ends.
- *
- * @param css - The stylesheet.
- * @param open - Index of its `/*`.
- * @returns The index just past its `*\/`, or the text's length when it is
- *          never closed.
- */
-function commentEnd(css: string, open: number): number {
-    const close = css.indexOf('*/', open + 2);
-    return close === -1 ? css.length : close + 2;
-}
-
-/**
  * Where the first parameter of an at-rule starts, past spaces and comments.
  *
  * @param css - The stylesheet.
@@ -882,7 +855,7 @@ function paramStart(css: string, from: number): number {
     for (;;) {
         while (index < css.length && AT_RULE_SPACE.has(css[index] as string)) index++;
         if (!css.startsWith('/*', index)) return index;
-        index = commentEnd(css, index);
+        index = cssCommentEnd(css, index);
     }
 }
 
@@ -917,8 +890,10 @@ function importingRuleParam(css: string, ruleEnd: number): { target: string | nu
     const start = paramStart(css, ruleEnd);
     const quote = css[start];
     if (quote !== '"' && quote !== "'") return { target: null, end: start };
-    const close = stringEnd(css, start);
-    return { target: close < css.length ? css.slice(start + 1, close) : null, end: close + 1 };
+    const end = cssStringEnd(css, start);
+    // A string a line break or the end of the text cut off names no target.
+    const closed = end - 1 > start && css[end - 1] === quote;
+    return { target: closed ? css.slice(start + 1, end - 1) : null, end };
 }
 
 /**
@@ -940,12 +915,9 @@ function importedSpecifiers(css: string): string[] {
     while (index < css.length) {
         const char = css[index];
         const ruleEnd = char === '@' ? importingRuleEnd(css, index) : -1;
-        if (char === '/' && css[index + 1] === '*') {
-            index = commentEnd(css, index);
-        } else if (char === '"' || char === "'") {
-            index = stringEnd(css, index) + 1;
-        } else if (char === '\\') {
-            index += 2;
+        const opaque = cssOpaqueEnd(css, index);
+        if (opaque !== -1) {
+            index = opaque;
         } else if (ruleEnd !== -1) {
             const param = importingRuleParam(css, ruleEnd);
             if (param.target !== null) found.push(param.target);

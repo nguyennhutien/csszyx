@@ -134,6 +134,37 @@ describe('csszyx scan-collisions', () => {
         expect(out).toContain('"box"');
     });
 
+    it('reads a comment opener inside a string as text', async () => {
+        // A `/*` in `content` used to open a comment that ran to the next
+        // `*/`, hiding every selector in between.
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const cwd = projectWith({
+            'src/a.css': 'a::before { content: "/*" }\n.ab { color: red }\n/* .zz */',
+        });
+
+        await scanCollisions({ cwd });
+
+        const out = log.mock.calls.map(c => c.join(' ')).join('\n');
+        expect(out).toContain('mangleExclude: ["ab"]');
+    });
+
+    it('keeps an escaped selector, and reads a last-line comment or an open url() to the end', async () => {
+        const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const cwd = projectWith({
+            'src/a.scss': '.ab\\:x { color: red }\n// .zz',
+            'src/b.css': '.cd { background: url(a.png }\n.ef {}',
+        });
+
+        await scanCollisions({ cwd });
+
+        const out = log.mock.calls.map(c => c.join(' ')).join('\n');
+        expect(out).toContain('"ab"');
+        expect(out).not.toContain('"zz"');
+        expect(out).toContain('"cd"');
+        // A `url(` that never closes stays as written, as it did before.
+        expect(out).toContain('"ef"');
+    });
+
     it('reads SCSS parent-selector classes (`&.x`)', async () => {
         const log = vi.spyOn(console, 'log').mockImplementation(() => {});
         const cwd = projectWith({

@@ -38,6 +38,7 @@ import {
     readCsszyxFileConfig,
 } from './diagnostic-policy.js';
 import type { DiagnosticPolicyInput } from './diagnostic-policy-inputs.js';
+import { maskJsComments } from './js-lexer.js';
 import { hasModuleSyntax, isModulePackage } from './module-syntax.js';
 import { samePath } from './path-case.js';
 
@@ -254,79 +255,6 @@ async function importConfig(file: string, importModule: ModuleImporter): Promise
 }
 
 /**
- * Where a quoted string ends.
- *
- * @param text - Source text.
- * @param open - Index of the opening quote.
- * @returns The index just past the closing quote, or the text's length when
- *          the string is never closed.
- */
-function quotedEnd(text: string, open: number): number {
-    const quote = text[open];
-    let i = open + 1;
-    while (i < text.length) {
-        const char = text[i];
-        // An escape carries the character after it, a quote included.
-        i += char === '\\' ? 2 : 1;
-        if (char === quote) break;
-    }
-    return Math.min(i, text.length);
-}
-
-/**
- * The comment that starts at an index outside a string, if one does.
- *
- * A line comment runs to its newline, which stays in the code; a block comment
- * runs past its `*\/` and leaves one space behind, so the tokens either side
- * stay apart. Either one left open runs to the end of the text.
- *
- * @param text - Source text.
- * @param i - Index outside any string.
- * @returns Where the code resumes and what stands in for the comment, or null
- *          when no comment starts here.
- */
-function commentAt(text: string, i: number): { end: number; blank: string } | null {
-    const pair = text.slice(i, i + 2);
-    if (pair === '//') {
-        const end = text.indexOf('\n', i);
-        return { end: end === -1 ? text.length : end, blank: '' };
-    }
-    if (pair === '/*') {
-        const end = text.indexOf('*/', i + 2);
-        return { end: end === -1 ? text.length : end + 2, blank: ' ' };
-    }
-    return null;
-}
-
-/**
- * The code of a JavaScript or TypeScript file with its comments blanked out,
- * strings kept whole, so a `//` inside a URL is not read as a comment.
- *
- * @param text - Source text.
- * @returns The text without comments.
- */
-function withoutComments(text: string): string {
-    let out = '';
-    let i = 0;
-    while (i < text.length) {
-        const char = text[i] as string;
-        const comment = commentAt(text, i);
-        if (comment !== null) {
-            i = comment.end;
-            out += comment.blank;
-        } else if (char === "'" || char === '"' || char === '`') {
-            const end = quotedEnd(text, i);
-            out += text.slice(i, end);
-            i = end;
-        } else {
-            out += char;
-            i++;
-        }
-    }
-    return out;
-}
-
-/**
  * The file `csszyx init` 0.17 and earlier wrote: plugin options typed with
  * `CsszyxConfig`, in TypeScript syntax even into `csszyx.config.js`. Matched
  * on the code with comments removed and whitespace squeezed out around
@@ -374,7 +302,7 @@ function hasBalancedBraces(body: string): boolean {
  */
 export function isLegacyInitTemplate(text: string): boolean {
     if (text.length > OLD_INIT_TEMPLATE_MAX_LENGTH) return false;
-    const code = withoutComments(text)
+    const code = maskJsComments(text, { jsx: false })
         .replace(/\s+/g, ' ')
         .replace(/ ?([,:;={}]) ?/g, '$1')
         .trim();
@@ -490,7 +418,7 @@ function loadFailure(error: unknown, file: string): { reason: string; renameTo?:
  */
 function looksLikeTypeScript(file: string): boolean {
     try {
-        const code = withoutComments(readFileSync(file, 'utf8'));
+        const code = maskJsComments(readFileSync(file, 'utf8'), { jsx: false });
         return TYPESCRIPT_SYNTAX.some(syntax => syntax.test(code));
     } catch {
         return false;
