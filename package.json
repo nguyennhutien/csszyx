@@ -64,6 +64,7 @@
     "check:no-nul-bytes": "node --test scripts/validate-no-nul-bytes.test.mjs && node scripts/validate-no-nul-bytes.mjs",
     "check:shared-scanners": "node --test scripts/check-shared-scanners.test.mjs && node scripts/check-shared-scanners.mjs",
     "check:package-size": "node --test scripts/check-package-size.test.mjs && node scripts/check-package-size.mjs",
+    "check:mangle-shipped": "node --test scripts/check-mangle-shipped.test.mjs && node scripts/check-mangle-shipped.mjs",
     "check:package-license": "node --test scripts/build-tests/package-license.test.mjs",
     "check:warning-docs": "node --test scripts/validate-warning-docs.test.mjs && node scripts/validate-warning-docs.mjs",
     "check:undocumented-warnings": "node --test scripts/validate-undocumented-warnings.test.mjs && node scripts/validate-undocumented-warnings.mjs",

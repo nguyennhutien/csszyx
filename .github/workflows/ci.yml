@@ -771,7 +771,8 @@ jobs:
   # Next.js-SSR, vanilla HTML). Slower than the unit job because it has
   # to build the workspace first and install playwright browsers, so
   # gated more tightly on `runtime_critical` paths — pure CLI / docs /
-  # adapter changes don't trigger it.
+  # adapter changes don't trigger it; the docs app's config and dependencies
+  # do, because the mangle shipped gate below reads its build.
   e2e:
     name: E2E
     needs: detect-changes
@@ -829,6 +830,13 @@ jobs:
       # turbo would be even faster — Phase 4 candidate.
       - name: Build workspace
         run: pnpm build
+
+      # Every app that sets `production.mangle: true` must ship the map through
+      # its lane's channel. Reads the output the build above wrote, so a lane
+      # that drops mangling fails here even while the app builds and its pages
+      # render: `astro build` did, unnoticed, from 2026-06-26 to 2026-11-16.
+      - name: Mangle shipped gate
+        run: pnpm check:mangle-shipped
 
       - name: Install Playwright browsers
         run: pnpm --filter @csszyx/e2e exec playwright install --with-deps chromium

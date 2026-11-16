@@ -291,6 +291,11 @@ node scripts/check-changed-sonar.mjs
 echo "[verify-like-ci] Package size gate (user-shipped gzip budgets)..."
 pnpm check:package-size
 
+# Same reason: every app that sets `production.mangle: true` must ship the map
+# its lane delivers, read from the output the build above wrote.
+echo "[verify-like-ci] Mangle shipped gate (apps that set production.mangle)..."
+pnpm check:mangle-shipped
+
 # Allocations of the engine's diagnostic path, counted as V8 young-generation
 # collections of fixed workloads against a clean control: they repeat run to
 # run, so a budget rather than a timing. Reads the compiler dist the build
