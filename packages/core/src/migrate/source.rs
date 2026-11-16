@@ -214,10 +214,24 @@ fn unchanged_result(source: &str) -> TransformResult {
     }
 }
 
-/// A file with no `className`, `sz=` or `cva` in it cannot need anything,
-/// so it is not parsed. In keys-only mode only `sz=` matters.
+/// Whether `source` holds an `sz` attribute: the word `sz`, then `=` (not
+/// `==`) with any JavaScript whitespace before it, as JSX allows
+/// (`sz={{…}}`, `sz = {{…}}`). One pass over each `sz` in the text.
+fn has_sz_attribute(source: &str) -> bool {
+    source.match_indices("sz").any(|(at, _)| {
+        let starts_word = source[..at]
+            .chars()
+            .next_back()
+            .is_none_or(|before| !is_word_char(before));
+        let rest = source[at + 2..].trim_start_matches(is_js_whitespace);
+        starts_word && rest.starts_with('=') && !rest[1..].starts_with('=')
+    })
+}
+
+/// A file with no `className`, `sz` attribute or `cva` in it cannot need
+/// anything, so it is not parsed. In keys-only mode only `sz` matters.
 fn fast_path_result(source: &str, keys_only: bool) -> Option<TransformResult> {
-    let has_sz = source.contains("sz=");
+    let has_sz = has_sz_attribute(source);
     if (keys_only && !has_sz)
         || (!has_sz && !source.contains("className") && !source.contains("cva"))
     {
@@ -763,5 +777,25 @@ mod tests {
             &options,
         );
         assert!(control.changed);
+    }
+
+    /// JSX allows whitespace around an attribute's `=`, so keys-only mode
+    /// reads `sz = {{…}}` like `sz={{…}}`.
+    #[test]
+    fn keys_only_reads_an_sz_attribute_with_space_around_its_equals_sign() {
+        let options = TransformOptions {
+            keys_only: true,
+            ..TransformOptions::default()
+        };
+        for jsx in [
+            "export const A = () => <div sz = {{ fontWeight: 'bold' }} />;",
+            "export const A = () => <div sz\n=\n{{ fontWeight: 'bold' }} />;",
+        ] {
+            let result = transform_source(jsx, "A.tsx", &options);
+            assert!(result.changed, "{jsx:?} was left as it was");
+            assert!(result.code.contains("weight:"), "{:?}", result.code);
+        }
+        assert!(fast_path_result("const isz = 1; a == b;", true).is_some());
+        assert!(fast_path_result("if (sz == null) {}", true).is_some());
     }
 }

@@ -168,27 +168,35 @@ pub fn transform_html_source(source: &str, options: &HtmlTransformOptions) -> Tr
     }
 }
 
-/// Every `class=<quote>…<quote>` attribute, as `\bclass="([^"]*)"` finds
-/// them, replaced left to right without overlap.
+/// Every `class=<quote>…<quote>` attribute, as `\bclass\s*=\s*"([^"]*)"`
+/// finds them, replaced left to right without overlap. HTML allows ASCII
+/// whitespace around the `=`, so `class = "…"` is the same attribute.
 fn replace_class_attributes(text: &str, quote: char, state: &mut HtmlState<'_>) -> String {
-    let opener = format!("class={quote}");
+    const NAME: &str = "class";
     let bytes = text.as_bytes();
     let mut output = String::with_capacity(text.len());
     let mut cursor = 0;
     let mut search_from = 0;
 
-    while let Some(found) = text[search_from..].find(&opener) {
+    while let Some(found) = text[search_from..].find(NAME) {
         let start = search_from + found;
+        search_from = start + 1;
         // `\b` before `class`: the previous character is not a word character.
-        let word_before = start > 0 && is_word_byte(bytes[start - 1]);
-        let value_start = start + opener.len();
-        let Some(value_len) = text[value_start..].find(quote) else {
-            break;
-        };
-        if word_before {
-            search_from = start + 1;
+        if start > 0 && is_word_byte(bytes[start - 1]) {
             continue;
         }
+        let Some(value) = text[start + NAME.len()..]
+            .trim_start_matches(is_class_space)
+            .strip_prefix('=')
+            .map(|rest| rest.trim_start_matches(is_class_space))
+            .and_then(|rest| rest.strip_prefix(quote))
+        else {
+            continue;
+        };
+        let value_start = text.len() - value.len();
+        let Some(value_len) = value.find(quote) else {
+            break;
+        };
         let value_end = value_start + value_len;
         let end = value_end + quote.len_utf8();
         output.push_str(&text[cursor..start]);
@@ -284,5 +292,27 @@ mod tests {
         }
         let control = transform_html_source("<div class=\"p-4 m-2\"></div>", &options);
         assert!(control.changed);
+    }
+
+    /// HTML allows whitespace around an attribute's `=`.
+    #[test]
+    fn reads_a_class_attribute_with_space_around_its_equals_sign() {
+        let options = HtmlTransformOptions::default();
+        for html in [
+            "<div class = \"flex p-4\">x</div>",
+            "<div class\n=\t'flex p-4'>x</div>",
+        ] {
+            let result = transform_html_source(html, &options);
+            assert!(result.changed, "{html:?} was left as it was");
+            assert!(!result.code.contains("class"), "{:?}", result.code);
+        }
+        // Another attribute that only holds the word stays as it was.
+        for html in [
+            "<div data-xclass = \"flex\">x</div>",
+            "<div classy = \"flex\">x</div>",
+        ] {
+            let result = transform_html_source(html, &options);
+            assert!(!result.changed, "{html:?} became {:?}", result.code);
+        }
     }
 }

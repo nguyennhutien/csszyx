@@ -721,11 +721,18 @@ function recordFailedMigration(
     summary.warnings.push(`Could not migrate ${relative}: ${reason}`);
 }
 
+// An attribute by name: JSX and HTML both allow whitespace around its `=`,
+// so `sz = {{…}}` is one too. `\b` keeps `xclass` from reading as `class`;
+// `==` is a comparison, not an attribute.
+const HTML_CLASS_ATTRIBUTE = /\bclass\s*=(?!=)/;
+const CLASS_NAME_ATTRIBUTE = /\bclassName\s*=(?!=)/;
+const SZ_ATTRIBUTE = /\bsz\s*=(?!=)/;
+
 /** Checks whether a source file contains attributes relevant to the selected mode. */
 function hasMigrationAttributes(source: string, isHtml: boolean, keysOnly: boolean): boolean {
-    if (isHtml) return source.includes('class=');
-    if (keysOnly) return source.includes('sz=');
-    return source.includes('className=') || source.includes('sz=');
+    if (isHtml) return HTML_CLASS_ATTRIBUTE.test(source);
+    if (keysOnly) return SZ_ATTRIBUTE.test(source);
+    return CLASS_NAME_ATTRIBUTE.test(source) || SZ_ATTRIBUTE.test(source);
 }
 
 /** Aggregates one changed transformation result. */
