@@ -192,35 +192,43 @@ describe('walkJsTokens', () => {
 
 describe('walkJsTokens cost', () => {
     /**
-     * The fastest of three walks over `text`.
+     * How much longer the walk over `large` takes than the walk over `small`.
+     * The two are walked in turn, after one walk of each to warm the JIT, and
+     * each keeps its fastest time, so a stretch of load on the machine slows
+     * both sides instead of one.
      *
-     * @param text - Module text.
-     * @returns Milliseconds.
+     * @param small - Module text.
+     * @param large - The same shape, longer.
+     * @returns The ratio of the fastest walks.
      */
-    function fastest(text: string): number {
-        let best = Number.POSITIVE_INFINITY;
-        for (let run = 0; run < 3; run++) {
-            const start = performance.now();
-            walkJsTokens(text, () => false);
-            best = Math.min(best, performance.now() - start);
+    function growth(small: string, large: string): number {
+        const best = [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY];
+        for (let run = 0; run < 8; run++) {
+            [small, large].forEach((text, side) => {
+                const start = performance.now();
+                walkJsTokens(text, () => false);
+                if (run > 0) best[side] = Math.min(best[side], performance.now() - start);
+            });
         }
-        return best;
+        return best[1] / best[0];
     }
 
-    // Each worst case is 400 KB of one shape the walk keeps state for; the
-    // control is the same size of plain code and strings.
-    const fill = (unit: string): string => unit.repeat(Math.ceil(400_000 / unit.length));
-    const control = fill("const a = f('x', b);\n");
+    // Each worst case is one shape the walk keeps state for, walked at 250 KB
+    // and at four times that. A linear walk takes about four times as long, a
+    // quadratic one sixteen; the bound sits between them. The shape is its own
+    // control: set against plain code instead, the cost a shape has per byte
+    // read as growth, and a loaded runner pushed it past the bound.
+    const fill = (unit: string, size: number): string => unit.repeat(Math.ceil(size / unit.length));
 
-    it.each([
-        ['placeholders opened and never closed', fill('`${')],
-        ['placeholders nested in templates', `${fill('`a${')}${fill('}b`')}`],
-        ['closing braces with no placeholder open', fill('}')],
-        ['comment openers that never close', `/*${fill('a/*')}`],
-        ['quotes that never close', fill("'a\n")],
-        ['slashes after keywords', fill('return / x ')],
-    ])('walks %s in linear time', (_case, text) => {
-        expect(fastest(text) / fastest(control)).toBeLessThan(8);
+    it.each<[string, (size: number) => string]>([
+        ['placeholders opened and never closed', size => fill('`${', size)],
+        ['placeholders nested in templates', size => `${fill('`a${', size)}${fill('}b`', size)}`],
+        ['closing braces with no placeholder open', size => fill('}', size)],
+        ['comment openers that never close', size => `/*${fill('a/*', size)}`],
+        ['quotes that never close', size => fill("'a\n", size)],
+        ['slashes after keywords', size => fill('return / x ', size)],
+    ])('walks %s in linear time', (_case, shape) => {
+        expect(growth(shape(250_000), shape(1_000_000))).toBeLessThan(8);
     });
 });
 
