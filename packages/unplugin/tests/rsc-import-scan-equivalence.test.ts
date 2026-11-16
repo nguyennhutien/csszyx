@@ -52,7 +52,6 @@ const CORPUS = [
     "export { a } from 'external';",
     "import a from './a'; import b from './b';",
     "import a from './a'; export { z } from './z';",
-    "// import x from './commented';",
     "const s = 'not an import ./nope';",
     "import{a}from'./nospace';",
     "import  a  from  './extra-space';",
@@ -98,6 +97,22 @@ describe('rsc local-import scan equivalence (new vs legacy regexes)', () => {
         ]);
         expect(findLocalImportSourcesLegacy("import a from './a'; import b from './b';")).toEqual([
             './b',
+        ]);
+    });
+
+    it('reads no edge from an import in a comment, which the legacy regexes did', () => {
+        for (const code of [
+            "// import x from './commented';",
+            "/* import x from './block'; */ import y from './y';",
+            "/**\n * import { a } from './doc';\n */\nexport { b } from './b';",
+            "// import('./deferred')\nconst z = 1;",
+        ]) {
+            expect(findLocalImportSourcesNew(code), code).toEqual(
+                findLocalImportSourcesLegacy(code).filter(spec => ['./y', './b'].includes(spec)),
+            );
+        }
+        expect(findLocalImportSourcesLegacy("// import x from './commented';")).toEqual([
+            './commented',
         ]);
     });
 

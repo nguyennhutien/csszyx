@@ -21,6 +21,8 @@
  * @module
  */
 
+import { cssOpaqueEnd } from './css-comments.js';
+
 /** Where a class a design system serves comes from. */
 export type ClassOrigin =
     /** Served by Tailwind itself, with any theme value and any variant. */
@@ -80,37 +82,6 @@ const MAX_CODE_POINT = 0x10ffff;
 const CUSTOM_SOURCE = /@(?:utility|plugin|config)\b/;
 
 /**
- * Index just past the comment starting at `start`.
- *
- * @param css - Stylesheet text.
- * @param start - Index of the `/` of `/*`.
- * @returns Index after `*\/`, or the end of the text.
- */
-function afterComment(css: string, start: number): number {
-    const end = css.indexOf('*/', start + 2);
-    return end === -1 ? css.length : end + 2;
-}
-
-/**
- * Index just past the string starting at `start`.
- *
- * @param css - Stylesheet text.
- * @param start - Index of the opening quote.
- * @returns Index after the closing quote, or the end of the text.
- */
-function afterString(css: string, start: number): number {
-    const quote = css[start];
-    let index = start + 1;
-    while (index < css.length) {
-        const char = css[index];
-        if (char === '\\') index += 2;
-        else if (char === quote || char === '\n') return index + 1;
-        else index += 1;
-    }
-    return css.length;
-}
-
-/**
  * Index just past an unquoted `url(...)` starting at `start`, or null when
  * `start` does not begin one.
  *
@@ -146,10 +117,9 @@ function afterUnquotedUrl(css: string, start: number): number | null {
  * @returns The index after the skipped text, or null.
  */
 function afterOpaque(css: string, index: number): number | null {
+    const end = cssOpaqueEnd(css, index);
+    if (end !== -1) return end;
     const char = css[index];
-    if (char === '/' && css[index + 1] === '*') return afterComment(css, index);
-    if (char === '"' || char === "'") return afterString(css, index);
-    if (char === '\\') return Math.min(index + 2, css.length);
     if (char === 'u' || char === 'U') return afterUnquotedUrl(css, index);
     return null;
 }

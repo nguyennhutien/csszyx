@@ -888,8 +888,15 @@ export const SIZE_BUDGETS = [
         // comparison reads facts through one helper and splits whitespace as
         // the engine does. 23,700 on 2026-11-11, measured 23,386: the
         // readings per stylesheet prefix that `csszyx migrate` and the MCP
-        // tools share (`underscore-roots.ts`).
-        maxGzipBytes: 23_700,
+        // tools share (`underscore-roots.ts`). 24,650 on 2026-11-15, measured
+        // 24,339: the config-file reader masks comments through the shared
+        // lexer. Loading the lexer by `import()` measured 23,161 here but
+        // gave it a chunk of its own, about 400 bytes more on every entry
+        // that loads it statically, for no start-up time Node could measure.
+        // 24,750 on 2026-11-16, measured 24,686: the shared lexer ends a line
+        // comment at every line terminator and reads a `/*` that never closes
+        // as JSX text.
+        maxGzipBytes: 24_750,
     },
     {
         name: '@csszyx/unplugin `./next-turbo-loader`, loaded by Node',
@@ -918,8 +925,10 @@ export const SIZE_BUDGETS = [
         // directive prologue, so it finds a `'use client'` after another
         // directive. 72,200 on 2026-11-15, measured 71,889: a directive
         // ends where JavaScript ends its statement, read past comments by the
-        // shared lexer.
-        maxGzipBytes: 72_200,
+        // shared lexer. 72,300 on 2026-11-16, measured 72,230: the shared
+        // lexer ends a line comment at every line terminator and reads a `/*`
+        // that never closes as JSX text.
+        maxGzipBytes: 72_300,
     },
     {
         name: '@csszyx/unplugin `./next-watcher`, loaded by Node',
@@ -927,8 +936,10 @@ export const SIZE_BUDGETS = [
         target: 'packages/unplugin',
         subpath: './next-watcher',
         // Measured 16,454: `createGitignoreQuery` asks about a folder too
-        // (ADR 0033).
-        maxGzipBytes: 16_500,
+        // (ADR 0033). 16,800 on 2026-11-15, measured 16,511: CSS comments and
+        // strings are skipped by one shared reader, bundled into a chunk this
+        // entry loads.
+        maxGzipBytes: 16_800,
     },
     {
         name: '@csszyx/unplugin `./jest`, loaded by Node',
@@ -945,16 +956,18 @@ export const SIZE_BUDGETS = [
         // 62,564: the import injection reads the whole directive prologue.
         // 63,200 on 2026-11-15, measured 62,898: a directive ends where
         // JavaScript ends its statement, read past comments by the shared
-        // lexer.
-        maxGzipBytes: 63_200,
+        // lexer. 63,700 on 2026-11-16, measured 63,408: comments and code
+        // are read through the shared lexer.
+        maxGzipBytes: 63_700,
     },
     {
         name: '@csszyx/unplugin `./postcss`, loaded by Node',
         kind: 'node-entry',
         target: 'packages/unplugin',
         subpath: './postcss',
-        // Measured 8,385.
-        maxGzipBytes: 8700,
+        // Measured 8,385. 8,750 on 2026-11-16, measured 8,705: the CSS reader
+        // steps over an escape outside a string, so `.a\'b` opens none.
+        maxGzipBytes: 8750,
     },
     {
         name: '@csszyx/cli `.`, loaded by Node',

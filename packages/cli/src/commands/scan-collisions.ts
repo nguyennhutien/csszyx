@@ -14,6 +14,7 @@
 
 import { sortStrings } from '@csszyx/compiler';
 import { readTextFiles } from '@csszyx/tailwind-oracle';
+import { cssOpaqueEnd } from '@csszyx/tailwind-oracle/css-comments';
 import fg from 'fast-glob';
 import { relativePosix, withPosixSeparators } from '../utils/posix-path.js';
 import { printHeader, printInfo, printSuccess, printWarn, spinner } from '../utils/terminal-ui.js';
@@ -63,57 +64,61 @@ const CLASS_SELECTOR_RE = /\.(-?[a-z_][\w-]*)/gi;
 
 /**
  * Remove the parts of a stylesheet where a `.foo` is NOT a class selector —
- * comments, `url(...)` contents, and string literals — so things like a comment
- * note (`.z`), an `@import 'theme.css'`, or `url(hero.png)` are not mistaken for
- * collision-prone class names.
+ * comments (`/* *\/`, and `//` in SCSS and Less), `url(...)` contents, and
+ * string literals — so things like a comment note (`.z`), an
+ * `@import 'theme.css'`, or `url(hero.png)` are not mistaken for
+ * collision-prone class names. Comments and strings are read by the shared
+ * CSS reader, so a `/*` inside a string opens no comment.
+ *
+ * Cost: one pass over the text; a `url(` that never closes stops the search
+ * for later ones, so the pass stays linear.
  *
  * @param css - raw stylesheet text.
- * @returns text with non-selector regions blanked out.
+ * @returns text with each non-selector region collapsed to one space.
  */
 function stripNonSelectorText(css: string): string {
-    // Block comments and `url(…)` are blanked with a linear open→close scan
-    // instead of a regex: `[\s\S]*?`/`[^)]*` re-scanned from each opener on a
-    // stylesheet missing the closer (quadratic-by-search, ReDoS-flagged). The
-    // line-comment and quoted-string strips keep their regexes — a single
-    // negated class terminated by a different character is already linear.
-    return blankSpans(blankSpans(css, '/*', '*/'), 'url(', ')', true)
-        .replace(/\/\/[^\n]*/g, ' ')
-        .replace(/'[^']*'/g, ' ')
-        .replace(/"[^"]*"/g, ' ');
+    let out = '';
+    let copied = 0;
+    let index = 0;
+    const url = { closes: true };
+    while (index < css.length) {
+        const end = nonSelectorEnd(css, index, url);
+        if (end === -1) {
+            index++;
+            continue;
+        }
+        // An escape is selector text (`.a\:b`); it is only stepped over.
+        if (css[index] !== '\\') {
+            out += `${css.slice(copied, index)} `;
+            copied = end;
+        }
+        index = end;
+    }
+    return out + css.slice(copied);
 }
 
 /**
- * Replace every `open … close` span with a single space, scanning left to
- * right. Equivalent to `.replace(/open[\s\S]*?close/g, ' ')` (shortest span,
- * one space per span) but linear — a missing `close` cannot drive a
- * quadratic re-scan.
+ * Where the non-selector text at `index` ends: a comment, a string or an
+ * escape (the shared CSS reader), a `//` comment to its line's end, or a
+ * `url(...)` to its `)`.
  *
- * @param text - Text to blank spans in.
- * @param open - Literal opening delimiter.
- * @param close - Literal closing delimiter.
- * @param caseInsensitive - Match the opener case-insensitively (e.g. `URL(`).
- * @returns Text with each span collapsed to a space.
+ * @param css - raw stylesheet text.
+ * @param index - Index to read from.
+ * @param url - Whether a `url(` can still close; cleared once one does not.
+ * @param url.closes - False after a `url(` with no `)` after it.
+ * @returns The index just past that text, or -1 when none starts here.
  */
-function blankSpans(text: string, open: string, close: string, caseInsensitive = false): string {
-    const haystack = caseInsensitive ? text.toLowerCase() : text;
-    const needle = caseInsensitive ? open.toLowerCase() : open;
-    let out = '';
-    let i = 0;
-    for (;;) {
-        const start = haystack.indexOf(needle, i);
-        if (start === -1) {
-            out += text.slice(i);
-            return out;
-        }
-        const closeAt = text.indexOf(close, start + open.length);
-        if (closeAt === -1) {
-            // No closer — the regex would not have matched; keep the rest as-is.
-            out += text.slice(i);
-            return out;
-        }
-        out += `${text.slice(i, start)} `;
-        i = closeAt + close.length;
+function nonSelectorEnd(css: string, index: number, url: { closes: boolean }): number {
+    const opaque = cssOpaqueEnd(css, index);
+    if (opaque !== -1) return opaque;
+    if (css.startsWith('//', index)) {
+        const lineEnd = css.indexOf('\n', index);
+        return lineEnd === -1 ? css.length : lineEnd;
     }
+    if (!url.closes || css.slice(index, index + 4).toLowerCase() !== 'url(') return -1;
+    const close = css.indexOf(')', index + 4);
+    url.closes = close !== -1;
+    return url.closes ? close + 1 : -1;
 }
 
 /**

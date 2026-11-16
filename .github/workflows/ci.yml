@@ -77,6 +77,12 @@ jobs:
         run: |
           node --test scripts/validate-no-nul-bytes.test.mjs
           node scripts/validate-no-nul-bytes.mjs
+      # Text read without a parse goes through one reader per language; a new
+      # private comment or string skipper drifts from it unseen.
+      - name: Reject private text scanners outside the shared readers
+        run: |
+          node --test scripts/check-shared-scanners.test.mjs
+          node scripts/check-shared-scanners.mjs
       # The warning reference page quotes build and runtime messages verbatim so
       # a reader can match what their terminal printed. Rewording a message is a
       # one-line change in any of nine packages, and nothing else notices that
