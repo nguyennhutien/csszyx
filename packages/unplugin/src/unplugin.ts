@@ -18,6 +18,7 @@ import {
     classNameEncoder,
     computeMangleChecksum,
     ensureRustTransformAvailable,
+    htmlClassNames,
     isRustTransformAvailable,
     isWasmTransformAvailable,
 } from '@csszyx/compiler/engine';
@@ -6365,52 +6366,25 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Mangle a whitespace-separated HTML class attribute value.
-     * @param classes - Original attribute value.
-     * @returns Attribute value with known classes replaced.
-     */
-    function mangleHtmlClassList(classes: string): string {
-        const output: string[] = [];
-        for (const className of classes.split(HTML_CLASS_SPACE)) {
-            if (!className) continue;
-            // Own keys only: `constructor` is a class name, not a map entry.
-            const owned = ownKey.call(state.mangleMap, className);
-            output.push(owned ? state.mangleMap[className] : className);
-        }
-        return output.join(' ');
-    }
-
-    /**
-     * Replace one double-quoted HTML class attribute.
-     * @param match - Complete matched attribute.
-     * @param classes - Captured class list.
-     * @returns Original or mangled attribute.
-     */
-    function replaceDoubleQuotedHtmlClass(match: string, classes: string): string {
-        const output = mangleHtmlClassList(classes);
-        return output !== classes ? `class="${output}"` : match;
-    }
-
-    /**
-     * Replace one single-quoted HTML class attribute.
-     * @param match - Complete matched attribute.
-     * @param classes - Captured class list.
-     * @returns Original or mangled attribute.
-     */
-    function replaceSingleQuotedHtmlClass(match: string, classes: string): string {
-        const output = mangleHtmlClassList(classes);
-        return output !== classes ? `class='${output}'` : match;
-    }
-
-    /**
-     * Mangle class attributes in one HTML asset.
+     * Mangle the class names of one HTML asset: each name of each `class`
+     * attribute the tokenizer reads (`htmlClassNames`, on the build's
+     * engine artifact), its spelling replaced so every other byte of the
+     * page stays as written.
      * @param source - HTML source.
-     * @returns HTML with known class attributes mangled.
+     * @returns HTML with known class names mangled.
      */
     function mangleHtmlClasses(source: string): string {
-        return source
-            .replace(/\bclass="([^"]*)"/g, replaceDoubleQuotedHtmlClass)
-            .replace(/\bclass='([^']*)'/g, replaceSingleQuotedHtmlClass);
+        let output = '';
+        let cursor = 0;
+        for (const { start, end, name } of htmlClassNames(source, {
+            parser: activeParser().parser,
+        })) {
+            // Own keys only: `constructor` is a class name, not a map entry.
+            if (!ownKey.call(state.mangleMap, name)) continue;
+            output += source.slice(cursor, start) + state.mangleMap[name];
+            cursor = end;
+        }
+        return cursor === 0 ? source : output + source.slice(cursor);
     }
 
     /**

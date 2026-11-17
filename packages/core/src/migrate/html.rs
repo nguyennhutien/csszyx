@@ -1,10 +1,14 @@
 //! `class="…"` to `sz="…"` in plain HTML, with the runtime's first-paint
 //! guard and script injected on request.
 //!
-//! There is no parser here, as there is none in the TypeScript: a
-//! `class="…"` or `class='…'` attribute is found by text, converted, and the
-//! classes migrate does not know stay in `class`. The guard goes before
+//! A `class` attribute is found as the HTML tokenizer finds one
+//! (`html_text`), its value decoded, converted, and the classes migrate does
+//! not know stay in `class`. The guard goes before
 //! `</head>` once, the script before `</body>` once.
+
+use std::borrow::Cow;
+
+use crate::html_text::{decode_attribute_value, html_class_attributes};
 
 use serde::{Deserialize, Deserializer};
 
@@ -13,6 +17,7 @@ use super::source::{TransformResult, TransformStats};
 use super::sz_codegen::sz_html_value;
 use super::value::is_class_space;
 use super::variant_parser::{class_name_to_sz_object_with, Lookup};
+
 use super::verdict::{Judge, ServedAnswers, TableVerdicts, UnderscoreAnswers, UnderscoreQuestions};
 
 /// Where the runtime script comes from, when it is injected at all.
@@ -68,6 +73,8 @@ pub struct HtmlTransformOptions {
     /// Handed in by the caller, as `served` is.
     #[serde(skip)]
     pub prefix: Option<String>,
+    /// The page's path, which each warning starts with, as a JSX file's do.
+    pub file_path: Option<String>,
 }
 
 impl Default for HtmlTransformOptions {
@@ -81,6 +88,7 @@ impl Default for HtmlTransformOptions {
             served: None,
             underscores: None,
             prefix: None,
+            file_path: None,
         }
     }
 }
@@ -100,6 +108,9 @@ struct HtmlState<'a> {
     transformed: u32,
     skipped: u32,
     unrecognized: Vec<String>,
+    warnings: Vec<String>,
+    /// What each warning starts with: `[path] `, or nothing.
+    warning_prefix: String,
     changed: bool,
     _source: &'a str,
 }
@@ -123,12 +134,16 @@ pub fn transform_html_source(source: &str, options: &HtmlTransformOptions) -> Tr
         transformed: 0,
         skipped: 0,
         unrecognized: Vec::new(),
+        warnings: Vec::new(),
+        warning_prefix: options
+            .file_path
+            .as_ref()
+            .map_or_else(String::new, |path| format!("[{path}] ")),
         changed: false,
         _source: source,
     };
 
-    let mut output = replace_class_attributes(source, '"', &mut state);
-    output = replace_class_attributes(&output, '\'', &mut state);
+    let mut output = replace_class_attributes(source, &mut state);
 
     if options.inject_fouc && output.contains("</head>") && !output.contains(FOUC_MARKER) {
         let guard = with_line_ending(&format!("{FOUC_CSS}\n"), eol);
@@ -149,12 +164,16 @@ pub fn transform_html_source(source: &str, options: &HtmlTransformOptions) -> Tr
     }
 
     let changed = state.changed;
-    let (transformed, skipped, unrecognized) =
-        (state.transformed, state.skipped, state.unrecognized);
+    let (transformed, skipped, unrecognized, warnings) = (
+        state.transformed,
+        state.skipped,
+        state.unrecognized,
+        state.warnings,
+    );
     TransformResult {
         code: output,
         changed,
-        warnings: Vec::new(),
+        warnings,
         stats: TransformStats {
             class_names_transformed: transformed,
             class_names_skipped: skipped,
@@ -168,53 +187,57 @@ pub fn transform_html_source(source: &str, options: &HtmlTransformOptions) -> Tr
     }
 }
 
-/// Every `class=<quote>…<quote>` attribute, as `\bclass\s*=\s*"([^"]*)"`
-/// finds them, replaced left to right without overlap. HTML allows ASCII
-/// whitespace around the `=`, so `class = "…"` is the same attribute.
-fn replace_class_attributes(text: &str, quote: char, state: &mut HtmlState<'_>) -> String {
-    const NAME: &str = "class";
-    let bytes = text.as_bytes();
+/// Every `class` attribute the tokenizer reads replaced left to right
+/// (`html_text::html_class_attributes`).
+fn replace_class_attributes(text: &str, state: &mut HtmlState<'_>) -> String {
     let mut output = String::with_capacity(text.len());
     let mut cursor = 0;
-    let mut search_from = 0;
-
-    while let Some(found) = text[search_from..].find(NAME) {
-        let start = search_from + found;
-        search_from = start + 1;
-        // `\b` before `class`: the previous character is not a word character.
-        if start > 0 && is_word_byte(bytes[start - 1]) {
+    // The line `counted_to` is on, counted on from the last warning's.
+    let (mut line, mut counted_to) = (1, 0);
+    for attribute in html_class_attributes(text) {
+        output.push_str(&text[cursor..attribute.start]);
+        if attribute.repeated {
+            // A browser reads the first `class` and drops the rest; replacing
+            // the first would make the next one the element's class.
+            line += text[counted_to..attribute.start].matches('\n').count();
+            counted_to = attribute.start;
+            state.skipped += 1;
+            let prefix = &state.warning_prefix;
+            state.warnings.push(format!(
+                "{prefix}An element on line {line} has more than one `class` attribute, and a browser reads only the first: it is left as written. Remove the others, then run migrate again."
+            ));
+            output.push_str(&text[attribute.start..attribute.end]);
+            cursor = attribute.end;
             continue;
         }
-        let Some(value) = text[start + NAME.len()..]
-            .trim_start_matches(is_class_space)
-            .strip_prefix('=')
-            .map(|rest| rest.trim_start_matches(is_class_space))
-            .and_then(|rest| rest.strip_prefix(quote))
-        else {
-            continue;
-        };
-        let value_start = text.len() - value.len();
-        let Some(value_len) = value.find(quote) else {
-            break;
-        };
-        let value_end = value_start + value_len;
-        let end = value_end + quote.len_utf8();
-        output.push_str(&text[cursor..start]);
         output.push_str(&process_class_attribute(
-            &text[start..end],
-            &text[value_start..value_end],
-            quote,
+            &text[attribute.start..attribute.end],
+            &text[attribute.value_start..attribute.value_end],
+            attribute.quote.map_or('"', char::from),
             state,
         ));
-        cursor = end;
-        search_from = end;
+        cursor = attribute.end;
     }
     output.push_str(&text[cursor..]);
     output
 }
 
-const fn is_word_byte(byte: u8) -> bool {
-    byte.is_ascii_alphanumeric() || byte == b'_'
+/// A decoded value written back inside `quote`: an `&` and the quote are the
+/// two characters that would read as something else there.
+fn escape_attribute_value(value: &str, quote: char) -> Cow<'_, str> {
+    if !value.contains(['&', quote]) {
+        return Cow::Borrowed(value);
+    }
+    let escaped_quote = if quote == '"' { "&quot;" } else { "&#39;" };
+    let mut escaped = String::with_capacity(value.len() + 8);
+    for character in value.chars() {
+        match character {
+            '&' => escaped.push_str("&amp;"),
+            c if c == quote => escaped.push_str(escaped_quote),
+            c => escaped.push(c),
+        }
+    }
+    Cow::Owned(escaped)
 }
 
 /// One `class` attribute: the converted `sz` attribute, with the classes
@@ -225,6 +248,12 @@ fn process_class_attribute(
     quote: char,
     state: &mut HtmlState<'_>,
 ) -> String {
+    // A class list holding a named reference the reader does not decode is
+    // left as written rather than read wrong.
+    let Some(class_text) = decode_attribute_value(class_text) else {
+        state.skipped += 1;
+        return matched.to_string();
+    };
     let trimmed = class_text.trim_matches(is_class_space);
     if trimmed.is_empty() {
         state.skipped += 1;
@@ -245,10 +274,12 @@ fn process_class_attribute(
     state.changed = true;
     state.transformed += 1;
 
+    let sz_value = escape_attribute_value(&sz_value, '"');
     if converted.unrecognized.is_empty() {
         return format!("sz=\"{sz_value}\"");
     }
     let remaining = converted.unrecognized.join(" ");
+    let remaining = escape_attribute_value(&remaining, quote);
     state.unrecognized.extend(converted.unrecognized);
     format!("class={quote}{remaining}{quote} sz=\"{sz_value}\"")
 }
@@ -292,6 +323,90 @@ mod tests {
         }
         let control = transform_html_source("<div class=\"p-4 m-2\"></div>", &options);
         assert!(control.changed);
+    }
+
+    /// Only a `class` the tokenizer reads is converted: one in a comment, a
+    /// script or another attribute's value is text, and a second `class` on
+    /// an element is dropped by the parser, so it stays as written.
+    #[test]
+    fn converts_only_the_class_attributes_the_tokenizer_reads() {
+        let options = HtmlTransformOptions::default();
+        for html in [
+            "<!-- <div class=\"p-4\"> --><p>x</p>",
+            "<script>var s = ' class=\"p-4\"';</script>",
+            "<a href=/class=p-4>x</a>",
+            "<p>write class=\"p-4\" here</p>",
+        ] {
+            let result = transform_html_source(html, &options);
+            assert!(!result.changed, "{html:?} became {:?}", result.code);
+        }
+        // Two `class` attributes: a browser reads the first. Converting it
+        // would leave the second as the element's class, so the element is
+        // left as written and named in a warning.
+        let html = "<p class=\"m-2\">a</p>\n<div class=\"p-4\" class=\"m-2\">x</div>";
+        let named = HtmlTransformOptions {
+            file_path: Some("src/page.html".to_string()),
+            ..HtmlTransformOptions::default()
+        };
+        let result = transform_html_source(html, &named);
+        assert!(
+            result
+                .code
+                .ends_with("<div class=\"p-4\" class=\"m-2\">x</div>"),
+            "{:?}",
+            result.code
+        );
+        assert_eq!(result.stats.class_names_skipped, 1);
+        assert_eq!(result.warnings.len(), 1, "{:?}", result.warnings);
+        assert!(
+            result.warnings[0].starts_with("[src/page.html] An element on line 2 "),
+            "{:?}",
+            result.warnings
+        );
+        // Each one names its own line, counted on from the one before.
+        let html = "<i class=a class=b></i>\n\n<i class=c class=d></i>";
+        let lines: Vec<String> = transform_html_source(html, &options).warnings;
+        assert!(lines[0].starts_with("An element on line 1 "), "{lines:?}");
+        assert!(lines[1].starts_with("An element on line 3 "), "{lines:?}");
+        // A script string that opens a quote does not hide the next element.
+        let result = transform_html_source(
+            "<script>var s = '<b class=\"';</script><p class=\"p-4\">x</p>",
+            &options,
+        );
+        assert!(
+            result
+                .code
+                .starts_with("<script>var s = '<b class=\"';</script><p sz="),
+            "{:?}",
+            result.code
+        );
+    }
+
+    /// The class list is read as the parser decodes it.
+    #[test]
+    fn converts_a_class_list_written_with_character_references() {
+        let options = HtmlTransformOptions::default();
+        let result = transform_html_source("<div class=\"p-4&#32;m-2\">x</div>", &options);
+        assert!(result.changed, "{:?}", result.code);
+        assert!(!result.code.contains("class"), "{:?}", result.code);
+        // The classes kept in `class` are written back escaped in their quote.
+        let result = transform_html_source("<div class=\"p-4 a&amp;b\">x</div>", &options);
+        assert!(
+            result.code.starts_with("<div class=\"a&amp;b\" sz="),
+            "{:?}",
+            result.code
+        );
+        let result = transform_html_source("<div class='p-4 it&#39;s'>x</div>", &options);
+        assert!(
+            result.code.starts_with("<div class='it&#39;s' sz="),
+            "{:?}",
+            result.code
+        );
+        // A named reference outside the set the reader decodes leaves the
+        // attribute as written rather than guess at it.
+        let result = transform_html_source("<div class=\"p-4&foo;m-2\">x</div>", &options);
+        assert!(!result.changed, "{:?}", result.code);
+        assert_eq!(result.stats.class_names_skipped, 1);
     }
 
     /// HTML allows whitespace around an attribute's `=`.

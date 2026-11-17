@@ -4,6 +4,7 @@ import {
     computeMangleChecksum,
     encodeClassName,
     getNativePackageName,
+    htmlClassNames,
     type NativeTransformResult,
     scanGlobalVarUsages,
     scanModuleLinks,
@@ -34,6 +35,7 @@ import type {
     GlobalVarUsageDiagnostic,
     GlobalVarUsageQuery,
 } from './global-var-diagnostics.js';
+import type { HtmlClassName } from './mangle-engine.js';
 import type { ModuleLinks, ModuleLinksFile, ModuleLinksQuery } from './module-links.js';
 import { renderThrown } from './thrown-words.js';
 import type {
@@ -666,6 +668,24 @@ export function computeMangleChecksumRust(map: Readonly<Record<string, string>>)
             entries.map(([original]) => original),
             entries.map(([, mangled]) => mangled),
         );
+    } catch (error) {
+        throw asRustUnavailable(error);
+    }
+}
+
+/**
+ * Every class name of every `class` attribute the HTML tokenizer reads, on
+ * the native engine.
+ *
+ * @internal Used by `@csszyx/unplugin`; not a stable API.
+ * @param html - HTML text.
+ * @returns Each name's spelling, in UTF-16 units, and the name it decodes to.
+ * @throws {RustTransformUnavailableError} when the native engine cannot run.
+ */
+export function htmlClassNamesRust(html: string): HtmlClassName[] {
+    try {
+        checkNativeEngine();
+        return htmlClassNames(html);
     } catch (error) {
         throw asRustUnavailable(error);
     }

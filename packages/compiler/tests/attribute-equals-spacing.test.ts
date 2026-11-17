@@ -48,6 +48,26 @@ describe.each(ENGINES)('an authored class with space around its `=` (%s)', (_nam
         expect(lower('<div sz = {{ p: 4 }} />')).toEqual(lower('<div sz={{ p: 4 }} />'));
     });
 
+    // A comment may sit between the `=` and the value; the class is still one
+    // attribute, and `sz` merges into it rather than adding a second.
+    it.each([
+        ['a block comment', 'className=/* x */"block"'],
+        ['a line comment', 'className=\n// x\n"block"'],
+    ])('merges `sz` into a class with %s after its `=`', (_case, authored) => {
+        const code = transform(`export const A = () => <div ${authored} sz={{ p: 4 }} />;\n`, {
+            filename: 'a.tsx',
+        }).code;
+        expect(code.match(/\bclassName\b/g)).toHaveLength(1);
+        expect(code).toMatch(/"block p-4"/);
+    });
+
+    // `ns:sz` is a namespaced name, not `sz`: the parser lane leaves it as
+    // written, and the fast path must not lower it either.
+    it('leaves a namespaced name that ends in `sz` as written', () => {
+        const source = 'export const A = () => <div ns:sz={{ p: 4 }} />;\n';
+        expect(transform(source, { filename: 'a.tsx' }).code).not.toMatch(/className/);
+    });
+
     it('lowers every `sz` of a file that spells them both ways', () => {
         const code = transform(
             'export const A = () => <><i sz={{ p: 4 }} /><b sz = {{ m: 2 }} /></>;\n',

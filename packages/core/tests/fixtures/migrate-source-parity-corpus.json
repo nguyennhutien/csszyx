@@ -7013,13 +7013,13 @@
    "source": "class=\"p-4\">x</div>",
    "options": {},
    "result": {
-    "code": "sz=\"p: 4\">x</div>",
-    "changed": true,
+    "code": "class=\"p-4\">x</div>",
+    "changed": false,
     "warnings": [],
     "stats": {
-     "classNamesTransformed": 1,
      "classNamesSkipped": 0,
      "classNamesSkippedComponent": 0,
+     "classNamesTransformed": 0,
      "classesUnrecognized": []
     },
     "potentiallyUnusedImports": []
@@ -7385,13 +7385,13 @@
    "source": "<div data-class=\"p-4\" class=\"m-2\">x</div>",
    "options": {},
    "result": {
-    "code": "<div data-sz=\"p: 4\" sz=\"m: 2\">x</div>",
+    "code": "<div data-class=\"p-4\" sz=\"m: 2\">x</div>",
     "changed": true,
     "warnings": [],
     "stats": {
-     "classNamesTransformed": 2,
      "classNamesSkipped": 0,
      "classNamesSkippedComponent": 0,
+     "classNamesTransformed": 1,
      "classesUnrecognized": []
     },
     "potentiallyUnusedImports": []
@@ -7458,11 +7458,13 @@
    "result": {
     "code": "<div CLASS=\"p-4\" Class=\"m-2\">x</div>",
     "changed": false,
-    "warnings": [],
+    "warnings": [
+     "An element on line 1 has more than one `class` attribute, and a browser reads only the first: it is left as written. Remove the others, then run migrate again."
+    ],
     "stats": {
-     "classNamesTransformed": 0,
-     "classNamesSkipped": 0,
+     "classNamesSkipped": 1,
      "classNamesSkippedComponent": 0,
+     "classNamesTransformed": 0,
      "classesUnrecognized": []
     },
     "potentiallyUnusedImports": []
@@ -7490,11 +7492,11 @@
    "source": "<!-- <div class=\"p-4\"> --><div class=\"m-2\">x</div>",
    "options": {},
    "result": {
-    "code": "<!-- <div sz=\"p: 4\"> --><div sz=\"m: 2\">x</div>",
+    "code": "<!-- <div class=\"p-4\"> --><div sz=\"m: 2\">x</div>",
     "changed": true,
     "warnings": [],
     "stats": {
-     "classNamesTransformed": 2,
+     "classNamesTransformed": 1,
      "classNamesSkipped": 0,
      "classNamesSkippedComponent": 0,
      "classesUnrecognized": []

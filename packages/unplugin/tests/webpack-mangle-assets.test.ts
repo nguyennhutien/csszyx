@@ -11,6 +11,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { htmlClassNames } from '@csszyx/compiler/engine';
 import { CssSyntaxError } from 'postcss';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import webpack, { type Configuration, type Stats } from 'webpack';
@@ -30,6 +31,20 @@ afterEach(() => {
     vi.mocked(mangleCSSSync).mockReset();
     for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
+
+/**
+ * A page holding `m-3` where the tokenizer reads a `class` attribute and
+ * where it reads text: a script string that opens a quote must not hide the
+ * element after it, and a class list written with a character reference is
+ * read decoded.
+ */
+const CONTEXTS_HTML =
+    '<!-- <i class="m-3"></i> -->' +
+    "<script>var s = '<b class=\"';</script>" +
+    '<b class="m-3"></b>' +
+    '<a title="x class=m-3"></a>' +
+    '<em class="m-3" class="m-3"></em>' +
+    '<q class="m-3&#32;author-kept"></q>';
 
 /**
  * Emits a synthetic HTML page and an extra JS asset (both referencing the owned
@@ -56,6 +71,17 @@ class EmitExtraAssetsPlugin {
                                 '<i class="constructor m-3"></i>',
                         ),
                     );
+                    // HTML allows whitespace around `=` and an unquoted value,
+                    // as a minifier writes one; `data-class` is another name.
+                    compilation.emitAsset(
+                        'spellings.html',
+                        new RawSource(
+                            '<b class = "m-3"></b><u class=m-3></u><s data-class="m-3"></s>',
+                        ),
+                    );
+                    // Where the tokenizer reads no attribute: a comment, a
+                    // script, another attribute's value, a second `class`.
+                    compilation.emitAsset('contexts.html', new RawSource(CONTEXTS_HTML));
                     compilation.emitAsset(
                         'unchanged.html',
                         new RawSource(
@@ -219,6 +245,29 @@ describe('webpack processAssets mangle pass', () => {
         // mangled token and nothing else.
         const aside = /<aside class=(["']?)([^"'>]+)\1><\/aside>/.exec(html);
         expect(aside?.[2]).toBe(token);
+
+        // Every spelling of the attribute HTML allows is mangled; another
+        // attribute that only ends in `class` is left as written.
+        const spellings = readFileSync(join(root, 'dist/spellings.html'), 'utf8');
+        // Read back through the reader held to parse5, whatever quoting the
+        // minifier chose.
+        expect(htmlClassNames(spellings).map(at => at.name)).toEqual([token, token]);
+        expect(spellings).toContain('data-class');
+        expect(spellings).toMatch(/data-class=["']?m-3/);
+
+        // webpack's own HTML minimizer drops the comment, the quotes a value
+        // does not need and the second `class`, so each element is read on
+        // its own.
+        const contexts = readFileSync(join(root, 'dist/contexts.html'), 'utf8');
+        const opensWithToken = (tag: string): boolean =>
+            [`<${tag} class=${token}`, `<${tag} class="${token}"`].some(
+                start => contexts.includes(`${start}>`) || contexts.includes(`${start} `),
+            );
+        expect(contexts).toContain("'<b class=\"'");
+        expect(opensWithToken('b')).toBe(true);
+        expect(contexts).toContain('title="x class=m-3"');
+        expect(opensWithToken('em')).toBe(true);
+        expect(contexts).toContain(`<q class="${token} author-kept">`);
 
         // The extra JS asset's class string is mangled too.
         const extraJs = readFileSync(join(root, 'dist/extra.js'), 'utf8');

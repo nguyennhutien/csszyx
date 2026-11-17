@@ -14,7 +14,10 @@
  * A JSX attribute by name: the name, not continuing a longer one (`data-sz`,
  * `xsz`), then JavaScript whitespace (`\s`) on both sides of an `=`, then a
  * value, which opens with `{`, `"`, `'` or `<` (an expression, a string, an
- * element); that keeps `sz == x` and `const sz = 1` out. `:` does not continue
+ * element) or with the `/` of a comment before it; that keeps `sz == x` and
+ * `const sz = 1` out. A name continues through Alphabetic and Numeric
+ * characters, `_`, `$`, `-` and the joiners ZWNJ/ZWJ, the set the engine's
+ * `char::is_alphanumeric` names. `:` does not continue
  * a name: Vue binds an attribute as `:sz` or `v-bind:sz`, and that is `sz`.
  *
  * A text scan, not a parse: an attribute spelled in a string or a comment
@@ -31,13 +34,17 @@
  * start at the name, and `\s*` backtracks over the whitespace behind it.
  */
 /** The JSX attribute `sz` ({@link jsxAttributes}). */
-export const JSX_SZ_ATTRIBUTE: RegExp = /(?<![\p{L}\p{N}_$-])sz\s*=\s*(?=[{"'<])/gu;
+export const JSX_SZ_ATTRIBUTE: RegExp =
+    /(?<![\p{Alphabetic}\p{N}\p{Join_Control}_$-])sz\s*=\s*(?=[{"'</])/gu;
 /** The JSX attribute `szs`. */
-export const JSX_SZS_ATTRIBUTE: RegExp = /(?<![\p{L}\p{N}_$-])szs\s*=\s*(?=[{"'<])/gu;
+export const JSX_SZS_ATTRIBUTE: RegExp =
+    /(?<![\p{Alphabetic}\p{N}\p{Join_Control}_$-])szs\s*=\s*(?=[{"'</])/gu;
 /** The JSX attribute `class`. */
-export const JSX_CLASS_ATTRIBUTE: RegExp = /(?<![\p{L}\p{N}_$-])class\s*=\s*(?=[{"'<])/gu;
+export const JSX_CLASS_ATTRIBUTE: RegExp =
+    /(?<![\p{Alphabetic}\p{N}\p{Join_Control}_$-])class\s*=\s*(?=[{"'</])/gu;
 /** The JSX attribute `className`. */
-export const JSX_CLASS_NAME_ATTRIBUTE: RegExp = /(?<![\p{L}\p{N}_$-])className\s*=\s*(?=[{"'<])/gu;
+export const JSX_CLASS_NAME_ATTRIBUTE: RegExp =
+    /(?<![\p{Alphabetic}\p{N}\p{Join_Control}_$-])className\s*=\s*(?=[{"'</])/gu;
 
 /** One JSX attribute {@link jsxAttributes} found. */
 export interface JsxAttributeAt {

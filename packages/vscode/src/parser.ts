@@ -16,6 +16,8 @@
  * All helpers work on plain strings so they can be unit-tested in Node.
  */
 
+import { JSX_SZ_ATTRIBUTE, jsxAttributes } from '@csszyx/tailwind-oracle/sz-marker';
+
 /**
  *
  */
@@ -163,19 +165,29 @@ function quotedSzStart(text: string, afterMarker: number, quote: '"' | "'"): SzS
 }
 
 /**
- * Find the rightmost quoted sz attribute.
+ * Every `sz` attribute in `text` the shared reader finds (`jsxAttributes`,
+ * held to the engine's by one set of cases), whatever the whitespace around
+ * its `=`, with its body described: `sz={{…}}` (JSX), `sz="{…}"` (an explicit
+ * HTML object) or `sz="a: 1"` (an implicit one). A value of any other shape
+ * is no `sz` expression the editor reads.
  *
  * @param text Source text to scan.
- * @param quote Attribute quote style.
- * @returns Marker index and opening description, or null.
+ * @returns Marker hits in text order.
  */
-function findLastQuotedSz(text: string, quote: '"' | "'"): { idx: number; start: SzStart } | null {
-    const marker = `sz=${quote}`;
-    const idx = text.lastIndexOf(marker);
-    if (idx === -1) {
-        return null;
+function szAttributeHits(text: string): MarkerHit[] {
+    const hits: MarkerHit[] = [];
+    for (const { start, value } of jsxAttributes(text, JSX_SZ_ATTRIBUTE)) {
+        const opener = text[value];
+        if (opener === '{' && text[value + 1] === '{') {
+            hits.push({
+                idx: start,
+                start: { bodyStart: value + 1, explicit: true, terminator: null, form: 'sz' },
+            });
+        } else if (opener === '"' || opener === "'") {
+            hits.push({ idx: start, start: quotedSzStart(text, value + 1, opener) });
+        }
     }
-    return { idx, start: quotedSzStart(text, idx + marker.length, quote) };
+    return hits;
 }
 
 /**
@@ -184,18 +196,9 @@ function findLastQuotedSz(text: string, quote: '"' | "'"): { idx: number; start:
  * @returns Description of the opening, or null if no sz expression is present.
  */
 function findSzStart(text: string): SzStart | null {
-    const jsx = text.lastIndexOf('sz={{');
-    const candidates = [
-        jsx === -1
-            ? null
-            : {
-                  idx: jsx,
-                  start: { bodyStart: jsx + 4, explicit: true, terminator: null, form: 'sz' },
-              },
-        findLastQuotedSz(text, '"'),
-        findLastQuotedSz(text, "'"),
-        findCsszyxCallStart(text),
-    ].filter((candidate): candidate is { idx: number; start: SzStart } => candidate !== null);
+    const candidates = [szAttributeHits(text).at(-1) ?? null, findCsszyxCallStart(text)].filter(
+        (candidate): candidate is { idx: number; start: SzStart } => candidate !== null,
+    );
     return (
         candidates.reduce<{ idx: number; start: SzStart } | null>(
             (best, candidate) => (best === null || candidate.idx > best.idx ? candidate : best),
@@ -447,48 +450,6 @@ interface MarkerHit {
 }
 
 /**
- * Find one quoted sz attribute and classify its explicit or implicit body.
- *
- * @param text Source text to scan.
- * @param from Offset to start searching from.
- * @param quote Attribute quote style.
- * @returns Marker hit or null when absent.
- */
-function findQuotedSz(text: string, from: number, quote: '"' | "'"): MarkerHit | null {
-    const marker = `sz=${quote}`;
-    const idx = text.indexOf(marker, from);
-    if (idx === -1) {
-        return null;
-    }
-    return { idx, start: quotedSzStart(text, idx + marker.length, quote) };
-}
-
-/**
- * Find the next sz expression opening at or after `from`.
- * @param text - Source text to scan.
- * @param from - Offset to start searching from.
- * @returns Hit info (source idx + start description), or null if none.
- */
-function findNextSz(text: string, from: number): MarkerHit | null {
-    const jsx = text.indexOf('sz={{', from);
-    const candidates = [
-        jsx === -1
-            ? null
-            : {
-                  idx: jsx,
-                  start: { bodyStart: jsx + 4, explicit: true, terminator: null, form: 'sz' },
-              },
-        findQuotedSz(text, from, '"'),
-        findQuotedSz(text, from, "'"),
-    ].filter((candidate): candidate is MarkerHit => candidate !== null);
-    return candidates.reduce<MarkerHit | null>(
-        (earliest, candidate) =>
-            earliest === null || candidate.idx < earliest.idx ? candidate : earliest,
-        null,
-    );
-}
-
-/**
  * Find every sz expression (JSX, HTML explicit, HTML implicit) in `text`.
  * Skips string contents so braces and terminators inside quoted values don't
  * confuse the scanner.
@@ -497,13 +458,16 @@ function findNextSz(text: string, from: number): MarkerHit | null {
  */
 export function findSzExpressions(text: string): SzExpression[] {
     const results: SzExpression[] = [];
+    // In text order; each scan resumes past the one before, so the next hit
+    // is found by moving forward, never by a search from the first.
+    const hits = szAttributeHits(text);
+    let next = 0;
     let searchFrom = 0;
 
     while (searchFrom < text.length) {
-        const hit = findNextSz(text, searchFrom);
-        if (hit === null) {
-            break;
-        }
+        while (next < hits.length && hits[next].idx < searchFrom) next++;
+        const hit = hits[next];
+        if (hit === undefined) break;
 
         const scan = hit.start.explicit
             ? scanExplicitSzExpression(text, hit)

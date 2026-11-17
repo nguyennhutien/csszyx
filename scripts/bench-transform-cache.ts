@@ -22,6 +22,7 @@ import {
     type NativeTransformResult,
     transformBatch as transformNativeBatch,
 } from '../packages/core/native/index.js';
+import { moduleMayHoldSz } from '../packages/tailwind-oracle/src/sz-marker.js';
 import {
     createTransformCacheKey,
     readTransformCache,
@@ -924,13 +925,13 @@ function cacheInput(filename: string, source: string): TransformCacheKeyInput {
 }
 
 /**
- * Match the unplugin sz gate used before compiler/cache work.
+ * The unplugin's own sz gate, so the bench measures the modules a build transforms.
  *
  * @param source source code
  * @returns true when the file should enter source transform
  */
 function hasSzProp(source: string): boolean {
-    return source.includes('sz=') || /\bsz\s*:\s*["'{]/.test(source) || source.includes('sz: "');
+    return moduleMayHoldSz(source);
 }
 
 /**

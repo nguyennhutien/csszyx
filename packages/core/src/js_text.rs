@@ -23,11 +23,13 @@ pub const fn is_class_space(character: char) -> bool {
     matches!(character, '\t' | '\n' | '\u{000C}' | '\r' | ' ')
 }
 
-/// Whether `c` continues a longer attribute name: an identifier character,
-/// or the `-` JSX names allow (`data-sz`, `xsz`). Not `:`: Vue binds an
-/// attribute as `:sz` or `v-bind:sz`, and that is still `sz`.
+/// Whether `c` continues a longer attribute name: Alphabetic or Numeric
+/// (`char::is_alphanumeric`, the set the `TypeScript` reader names as
+/// `\p{Alphabetic}\p{N}`), `_`, `$`, the joiners ZWNJ and ZWJ, or the `-`
+/// JSX names allow (`data-sz`, `xsz`). Not `:`: Vue binds an attribute as
+/// `:sz` or `v-bind:sz`, and that is still `sz`.
 fn is_jsx_name_char(c: char) -> bool {
-    c.is_alphanumeric() || matches!(c, '_' | '$' | '-')
+    c.is_alphanumeric() || matches!(c, '_' | '$' | '-' | '\u{200c}' | '\u{200d}')
 }
 
 /// Whether the text at `at` starts a JSX attribute name rather than
@@ -41,7 +43,9 @@ pub fn starts_jsx_name(text: &str, at: usize) -> bool {
 /// name starts and where its value starts. JSX allows JavaScript whitespace
 /// on both sides of the `=` (`sz = {{…}}`), and a value is a `{…}`
 /// expression, a string or an element, so it opens with `{`, `"`, `'` or
-/// `<`; that keeps `sz == x` and `const sz = 1` out.
+/// `<`; that keeps `sz == x` and `const sz = 1` out. A comment may sit
+/// before the value (`sz=/* c */"p-4"`), so `/` counts as an opener too: no
+/// JSX value starts with one, and reading one too many costs a parse.
 ///
 /// A text scan, not a parse: an attribute spelled inside a string or a
 /// comment counts too. Every caller gates or bails on the answer, where a
@@ -68,7 +72,7 @@ pub fn jsx_attributes<'a>(
             .strip_prefix('=')?
             .trim_start_matches(is_js_whitespace);
         value
-            .starts_with(['{', '"', '\'', '<'])
+            .starts_with(['{', '"', '\'', '<', '/'])
             .then(|| (start, text.len() - value.len()))
     })
 }

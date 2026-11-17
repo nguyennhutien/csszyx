@@ -74,3 +74,43 @@ describe('migrate reads an attribute whatever the space around its `=`', () => {
         expect(readFileSync(file, 'utf8')).not.toContain('fontWeight');
     });
 });
+
+describe('migrate picks an HTML page by the class names the tokenizer reads', () => {
+    // A page whose `class` attributes hold no name, or whose only `class=`
+    // is text, has nothing to convert, so it is not opened: no first-paint
+    // guard and no runtime tag are added to it.
+    it.each([
+        [
+            'empty class attributes',
+            '<html><head></head><body><div class="">x</div><p class=" ">y</p></body></html>\n',
+        ],
+        [
+            'class= only in a comment',
+            '<html><head></head><body><!-- <p class="p-4"> --></body></html>\n',
+        ],
+    ])('leaves a page with %s as written', async (_case, text) => {
+        const file = write('page.html', text);
+
+        await migrate({ cwd, injectRuntime: 'cdn' });
+
+        expect(readFileSync(file, 'utf8')).toBe(text);
+    });
+});
+
+describe('migrate names the page an HTML warning is about', () => {
+    it('starts the warning for an element with two class attributes with its file', async () => {
+        const text = '<div class="p-4" class="m-2">x</div>\n';
+        const file = write('twice.html', text);
+        const log = vi.mocked(console.log);
+
+        await migrate({ cwd });
+
+        expect(readFileSync(file, 'utf8')).toBe(text);
+        const printed = log.mock.calls.map(call => String(call[0]));
+        // The path as the file walk spells it: `/` on every platform.
+        const spelled = file.replaceAll('\\', '/');
+        expect(printed.some(line => line.includes(`[${spelled}] An element on line 1 `))).toBe(
+            true,
+        );
+    });
+});

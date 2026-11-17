@@ -676,6 +676,9 @@ importers:
       '@csszyx/compiler':
         specifier: workspace:*
         version: link:../compiler
+      '@csszyx/tailwind-oracle':
+        specifier: workspace:*
+        version: link:../tailwind-oracle
       '@csszyx/tooling-metadata':
         specifier: workspace:*
         version: link:../tooling-metadata

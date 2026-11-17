@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
+import { htmlClassNames } from '@csszyx/compiler/engine';
 import {
     type CsszyxTodoMap,
     type MigrateRustResult,
@@ -586,7 +587,10 @@ async function settleTableVerdicts<Result extends MigrateRustResult | null | und
     try {
         const redone = again.map(({ input }) =>
             input.isHtml
-                ? migrateRustHtml(input.source, htmlOptions(context))
+                ? migrateRustHtml(input.source, {
+                      ...htmlOptions(context),
+                      filePath: input.filePath,
+                  })
                 : (migrateRustBatch(
                       [{ filename: input.filePath, source: input.source }],
                       sourceOptions(context),
@@ -622,7 +626,10 @@ async function migrateHtmlFile(
 ): Promise<void> {
     let result: MigrateRustResult | undefined;
     try {
-        result = migrateRustHtml(input.source, htmlOptions(context));
+        result = migrateRustHtml(input.source, {
+            ...htmlOptions(context),
+            filePath: input.filePath,
+        });
     } catch (error) {
         if (error instanceof RustMigrateUnavailableError) throw error;
         recordFailedMigration(
@@ -726,14 +733,9 @@ function recordFailedMigration(
     summary.warnings.push(`Could not migrate ${relative}: ${reason}`);
 }
 
-// HTML allows whitespace around an attribute's `=`, so `class = "…"` is one
-// too. `\b` keeps `xclass` from reading as `class`; `==` is a comparison. A
-// JSX attribute is read by `hasJsxAttribute`, the reader the build gates on.
-const HTML_CLASS_ATTRIBUTE = /\bclass\s*=(?!=)/;
-
 /** Checks whether a source file contains attributes relevant to the selected mode. */
 function hasMigrationAttributes(source: string, isHtml: boolean, keysOnly: boolean): boolean {
-    if (isHtml) return HTML_CLASS_ATTRIBUTE.test(source);
+    if (isHtml) return htmlClassNames(source).length > 0;
     if (keysOnly) return hasJsxAttribute(source, JSX_SZ_ATTRIBUTE);
     return (
         hasJsxAttribute(source, JSX_CLASS_NAME_ATTRIBUTE) ||

@@ -1,0 +1,1096 @@
+[
+    {
+        "case": "double quotes",
+        "html": "<div class=\"p-4 m-2\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 20,
+                "value": "p-4 m-2"
+            }
+        ]
+    },
+    {
+        "case": "single quotes",
+        "html": "<div class='p-4'>x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 16,
+                "value": "p-4"
+            }
+        ]
+    },
+    {
+        "case": "no quotes, as a minifier writes it",
+        "html": "<div class=p-4>x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 14,
+                "value": "p-4"
+            }
+        ]
+    },
+    {
+        "case": "space around the =",
+        "html": "<div class = \"p-4\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 18,
+                "value": "p-4"
+            }
+        ]
+    },
+    {
+        "case": "a tab and a line break around the =",
+        "html": "<div class\t=\n\"p-4\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 18,
+                "value": "p-4"
+            }
+        ]
+    },
+    {
+        "case": "no quotes and space around the =",
+        "html": "<div class = p-4 id=a>x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 16,
+                "value": "p-4"
+            }
+        ]
+    },
+    {
+        "case": "an empty value",
+        "html": "<div class=\"\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 13,
+                "value": ""
+            }
+        ]
+    },
+    {
+        "case": "upper case",
+        "html": "<div CLASS=\"p-4\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 16,
+                "value": "p-4"
+            }
+        ]
+    },
+    {
+        "case": "mixed case",
+        "html": "<div Class=\"p-4\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 16,
+                "value": "p-4"
+            }
+        ]
+    },
+    {
+        "case": "data-class is another name",
+        "html": "<div data-class=\"p-4\">x</div>",
+        "found": []
+    },
+    {
+        "case": "xclass is another name",
+        "html": "<div xclass=\"p-4\">x</div>",
+        "found": []
+    },
+    {
+        "case": "classy is another name",
+        "html": "<div classy=\"p-4\">x</div>",
+        "found": []
+    },
+    {
+        "case": "data-class beside class",
+        "html": "<div data-class=\"a\" class=\"b\">x</div>",
+        "found": [
+            {
+                "start": 20,
+                "end": 29,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "right after a quoted value",
+        "html": "<div id=\"a\"class=\"p-4\">x</div>",
+        "found": [
+            {
+                "start": 11,
+                "end": 22,
+                "value": "p-4"
+            }
+        ]
+    },
+    {
+        "case": "after a self-closing slash",
+        "html": "<img/class=\"p-4\">",
+        "found": [
+            {
+                "start": 5,
+                "end": 16,
+                "value": "p-4"
+            }
+        ]
+    },
+    {
+        "case": "two elements",
+        "html": "<p class=\"a\"></p><p class='b'></p>",
+        "found": [
+            {
+                "start": 3,
+                "end": 12,
+                "value": "a"
+            },
+            {
+                "start": 20,
+                "end": 29,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "a value holding the other quote",
+        "html": "<div class=\"it's\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 17,
+                "value": "it's"
+            }
+        ]
+    },
+    {
+        "case": "a value with non-ASCII",
+        "html": "<div class=\"é p-4\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 18,
+                "value": "é p-4"
+            }
+        ]
+    },
+    {
+        "case": "class= inside a value is text",
+        "html": "<div class=\"a class=b\" id=x>y</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 22,
+                "value": "a class=b"
+            }
+        ]
+    },
+    {
+        "case": "a quote that never closes",
+        "html": "<div class=\"p-4>x</div>",
+        "found": []
+    },
+    {
+        "case": "an = with no value before the >",
+        "html": "<div class=>x</div>",
+        "found": []
+    },
+    {
+        "case": "an = and a space with no value",
+        "html": "<div class= >x</div>",
+        "found": []
+    },
+    {
+        "case": "an = at the end of the text",
+        "html": "<div class=",
+        "found": []
+    },
+    {
+        "case": "no class at all",
+        "html": "<div id=\"a\">x</div>",
+        "found": []
+    },
+    {
+        "case": "class= in a comment",
+        "html": "<!-- <div class=\"a\"> --><p class=\"b\"></p>",
+        "found": [
+            {
+                "start": 27,
+                "end": 36,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "a comment closed by --!>",
+        "html": "<!-- <i class=\"a\"> --!><p class=\"b\"></p>",
+        "found": [
+            {
+                "start": 26,
+                "end": 35,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "a comment that closes at once",
+        "html": "<!--><p class=\"b\"></p><!---><p class=\"c\"></p>",
+        "found": [
+            {
+                "start": 8,
+                "end": 17,
+                "value": "b"
+            },
+            {
+                "start": 31,
+                "end": 40,
+                "value": "c"
+            }
+        ]
+    },
+    {
+        "case": "a comment that never closes",
+        "html": "<!-- <p class=\"a\">",
+        "found": []
+    },
+    {
+        "case": "class= in a script string",
+        "html": "<script>var s = '<b class=\"';</script><p class=\"b\"></p>",
+        "found": [
+            {
+                "start": 41,
+                "end": 50,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "class= in a style",
+        "html": "<style>/* <i class=\"a\"> */</style><p class=b></p>",
+        "found": [
+            {
+                "start": 37,
+                "end": 44,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "a script end tag in upper case with a space",
+        "html": "<script>x</SCRIPT ><p class=b></p>",
+        "found": [
+            {
+                "start": 22,
+                "end": 29,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "a near-miss end tag inside a script",
+        "html": "<script></scripty class=\"a\"></script><p class=b></p>",
+        "found": [
+            {
+                "start": 40,
+                "end": 47,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "a script that never closes",
+        "html": "<script><p class=\"a\">",
+        "found": []
+    },
+    {
+        "case": "class= in a textarea",
+        "html": "<textarea><b class=\"a\"></textarea><p class=b></p>",
+        "found": [
+            {
+                "start": 37,
+                "end": 44,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "class= in a title",
+        "html": "<title><b class=\"a\"></title><p class=b></p>",
+        "found": [
+            {
+                "start": 31,
+                "end": 38,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "class= in an xmp",
+        "html": "<xmp><b class=\"a\"></xmp><p class=b></p>",
+        "found": [
+            {
+                "start": 27,
+                "end": 34,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "class= in a noscript",
+        "html": "<noscript><b class=\"a\"></noscript><p class=b></p>",
+        "found": [
+            {
+                "start": 37,
+                "end": 44,
+                "value": "b"
+            }
+        ],
+        "foundScriptingOff": [
+            {
+                "start": 13,
+                "end": 22,
+                "value": "a"
+            },
+            {
+                "start": 37,
+                "end": 44,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "plaintext reads the rest as text",
+        "html": "<plaintext><p class=\"a\">",
+        "found": []
+    },
+    {
+        "case": "class= in another attribute's unquoted value",
+        "html": "<a href=/class=flex class=b>x</a>",
+        "found": [
+            {
+                "start": 20,
+                "end": 27,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "class= in text",
+        "html": "<p>use class=\"a\" here</p>",
+        "found": []
+    },
+    {
+        "case": "two class attributes: the first is read",
+        "html": "<div class=\"a\" class=\"b\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 14,
+                "value": "a"
+            }
+        ]
+    },
+    {
+        "case": "a valueless class first",
+        "html": "<div class class=\"b\">x</div>",
+        "found": []
+    },
+    {
+        "case": "CLASS then class",
+        "html": "<div CLASS=\"a\" class=\"b\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 14,
+                "value": "a"
+            }
+        ]
+    },
+    {
+        "case": "an unquoted value holding = and brackets",
+        "html": "<div class=data-[state=open]:p-4>x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 32,
+                "value": "data-[state=open]:p-4"
+            }
+        ]
+    },
+    {
+        "case": "an unquoted value holding quotes and a backtick",
+        "html": "<div class=a'b`c<d>x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 18,
+                "value": "a'b`c<d"
+            }
+        ]
+    },
+    {
+        "case": "an unquoted value holding a slash",
+        "html": "<div class=a/b>x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 14,
+                "value": "a/b"
+            }
+        ]
+    },
+    {
+        "case": "an unquoted value ending the tag",
+        "html": "<img class=a/>",
+        "found": [
+            {
+                "start": 5,
+                "end": 13,
+                "value": "a/"
+            }
+        ]
+    },
+    {
+        "case": "class==a",
+        "html": "<div class==a>x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 13,
+                "value": "=a"
+            }
+        ]
+    },
+    {
+        "case": "an attribute named =class",
+        "html": "<div =class=\"a\">x</div>",
+        "found": []
+    },
+    {
+        "case": "SVG content is not raw text",
+        "html": "<svg><style><g class=\"a\"/></style></svg><p class=b></p>",
+        "found": [
+            {
+                "start": 15,
+                "end": 24,
+                "value": "a"
+            },
+            {
+                "start": 43,
+                "end": 50,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "an HTML tag ends SVG content",
+        "html": "<svg><b class=\"a\"></b></svg><p class=b></p>",
+        "found": [
+            {
+                "start": 8,
+                "end": 17,
+                "value": "a"
+            },
+            {
+                "start": 31,
+                "end": 38,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "a CDATA section in SVG",
+        "html": "<svg><![CDATA[<g class=\"a\">]]></svg><p class=b></p>",
+        "found": [
+            {
+                "start": 39,
+                "end": 46,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "CDATA outside foreign content is a bogus comment",
+        "html": "<![CDATA[<g class=\"a\">]]><p class=b></p>",
+        "found": [
+            {
+                "start": 28,
+                "end": 35,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "a self-closing svg",
+        "html": "<svg/><style><b class=\"a\"></style><p class=b></p>",
+        "found": [
+            {
+                "start": 37,
+                "end": 44,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "a doctype and a processing instruction",
+        "html": "<!DOCTYPE html><?xml x=\"class=a\"?><p class=b></p>",
+        "found": [
+            {
+                "start": 37,
+                "end": 44,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "an empty and a bogus end tag",
+        "html": "</><p class=b></p></ class=\"a\">",
+        "found": [
+            {
+                "start": 6,
+                "end": 13,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "an end tag holding class=",
+        "html": "<p></p class=\"a\"><p class=b></p>",
+        "found": [
+            {
+                "start": 20,
+                "end": 27,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "a tag that never closes",
+        "html": "<p class=\"a\" id=x",
+        "found": []
+    },
+    {
+        "case": "non-ASCII before the attribute",
+        "html": "<p title=\"日本語😀\" class=\"b\">x</p>",
+        "found": [
+            {
+                "start": 17,
+                "end": 26,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "template content",
+        "html": "<template><p class=\"a\"></p></template>",
+        "found": [
+            {
+                "start": 13,
+                "end": 22,
+                "value": "a"
+            }
+        ]
+    },
+    {
+        "case": "character references",
+        "html": "<div class=\"a&amp;b &#x27;c&#39; &lt;&gt;&quot;&apos;\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 54,
+                "value": "a&b 'c' <>\"'"
+            }
+        ]
+    },
+    {
+        "case": "a numeric reference without ;",
+        "html": "<div class=\"a&#32b\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 19,
+                "value": "a b"
+            }
+        ]
+    },
+    {
+        "case": "a C1 numeric reference",
+        "html": "<div class=\"&#x80;&#150;\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 25,
+                "value": "€–"
+            }
+        ]
+    },
+    {
+        "case": "out-of-range numeric references",
+        "html": "<div class=\"&#0;&#xD800;&#x110000;\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 35,
+                "value": "���"
+            }
+        ]
+    },
+    {
+        "case": "a named reference outside the decoded set",
+        "html": "<div class=\"a&nbsp;b\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 21,
+                "value": "a b"
+            }
+        ]
+    },
+    {
+        "case": "a bare & stays",
+        "html": "<div class=\"a & b &# &#x; &\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 28,
+                "value": "a & b &# &#x; &"
+            }
+        ]
+    },
+    {
+        "case": "an unquoted value with a reference",
+        "html": "<div class=a&#32;b>x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 18,
+                "value": "a b"
+            }
+        ]
+    },
+    {
+        "case": "an & before a letter that starts no reference",
+        "html": "<div class=\"p-4 R&D flex\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 25,
+                "value": "p-4 R&D flex"
+            }
+        ]
+    },
+    {
+        "case": "an & in an arbitrary variant",
+        "html": "<div class=\"[&a]:m-3 flex\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 26,
+                "value": "[&a]:m-3 flex"
+            }
+        ]
+    },
+    {
+        "case": "a legacy reference without ;",
+        "html": "<div class=\"a&amp b &lt c\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 26,
+                "value": "a& b < c"
+            }
+        ]
+    },
+    {
+        "case": "a legacy name followed by a letter",
+        "html": "<div class=\"a&ampb c\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 21,
+                "value": "a&ampb c"
+            }
+        ]
+    },
+    {
+        "case": "a legacy name followed by =",
+        "html": "<div class=\"a&amp=b c\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 22,
+                "value": "a&amp=b c"
+            }
+        ]
+    },
+    {
+        "case": "upper-case and other legacy names",
+        "html": "<div class=\"&AMP; &copy &copy; &nbsp;x &QUOT\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 45,
+                "value": "& © ©  x \""
+            }
+        ]
+    },
+    {
+        "case": "a legacy prefix of an unknown name",
+        "html": "<div class=\"&notit; b\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 22,
+                "value": "&notit; b",
+                "undecoded": true,
+                "names": [
+                    "b"
+                ]
+            }
+        ]
+    },
+    {
+        "case": "an unknown name with ;",
+        "html": "<div class=\"&foo; b\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 20,
+                "value": "&foo; b",
+                "undecoded": true,
+                "names": [
+                    "b"
+                ]
+            }
+        ]
+    },
+    {
+        "case": "an unknown name beside known classes",
+        "html": "<div class=\"p-4 &check;x m-2&foo;\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 34,
+                "value": "p-4 ✓x m-2&foo;",
+                "undecoded": true,
+                "names": [
+                    "p-4"
+                ]
+            }
+        ]
+    },
+    {
+        "case": "Tab and NewLine split a list",
+        "html": "<div class=\"a&Tab;b&NewLine;c &check; d\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 40,
+                "value": "a\tb\nc ✓ d",
+                "undecoded": true,
+                "names": [
+                    "a",
+                    "b",
+                    "c",
+                    "d"
+                ]
+            }
+        ]
+    },
+    {
+        "case": "every legacy name without ;",
+        "html": "<div class=\"&AElig &AMP &Aacute &Acirc &Agrave &Aring &Atilde &Auml &COPY &Ccedil &ETH &Eacute &Ecirc &Egrave &Euml &GT &Iacute &Icirc &Igrave &Iuml &LT &Ntilde &Oacute &Ocirc &Ograve &Oslash &Otilde &Ouml &QUOT &REG &THORN &Uacute &Ucirc &Ugrave &Uuml &Yacute &aacute &acirc &acute &aelig &agrave &amp &aring &atilde &auml &brvbar &ccedil &cedil &cent &copy &curren &deg &divide &eacute &ecirc &egrave &eth &euml &frac12 &frac14 &frac34 &gt &iacute &icirc &iexcl &igrave &iquest &iuml &laquo &lt &macr &micro &middot &nbsp &not &ntilde &oacute &ocirc &ograve &ordf &ordm &oslash &otilde &ouml &para &plusmn &pound &quot &raquo &reg &sect &shy &sup1 &sup2 &sup3 &szlig &thorn &times &uacute &ucirc &ugrave &uml &uuml &yacute &yen &yuml\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 736,
+                "value": "Æ & Á Â À Å Ã Ä © Ç Ð É Ê È Ë > Í Î Ì Ï < Ñ Ó Ô Ò Ø Õ Ö \" ® Þ Ú Û Ù Ü Ý á â ´ æ à & å ã ä ¦ ç ¸ ¢ © ¤ ° ÷ é ê è ð ë ½ ¼ ¾ > í î ¡ ì ¿ ï « < ¯ µ ·   ¬ ñ ó ô ò ª º ø õ ö ¶ ± £ \" » ® § ­ ¹ ² ³ ß þ × ú û ù ¨ ü ý ¥ ÿ"
+            }
+        ]
+    },
+    {
+        "case": "every legacy name with ;",
+        "html": "<div class=\"&AElig; &AMP; &Aacute; &Acirc; &Agrave; &Aring; &Atilde; &Auml; &COPY; &Ccedil; &ETH; &Eacute; &Ecirc; &Egrave; &Euml; &GT; &Iacute; &Icirc; &Igrave; &Iuml; &LT; &Ntilde; &Oacute; &Ocirc; &Ograve; &Oslash; &Otilde; &Ouml; &QUOT; &REG; &THORN; &Uacute; &Ucirc; &Ugrave; &Uuml; &Yacute; &aacute; &acirc; &acute; &aelig; &agrave; &amp; &aring; &atilde; &auml; &brvbar; &ccedil; &cedil; &cent; &copy; &curren; &deg; &divide; &eacute; &ecirc; &egrave; &eth; &euml; &frac12; &frac14; &frac34; &gt; &iacute; &icirc; &iexcl; &igrave; &iquest; &iuml; &laquo; &lt; &macr; &micro; &middot; &nbsp; &not; &ntilde; &oacute; &ocirc; &ograve; &ordf; &ordm; &oslash; &otilde; &ouml; &para; &plusmn; &pound; &quot; &raquo; &reg; &sect; &shy; &sup1; &sup2; &sup3; &szlig; &thorn; &times; &uacute; &ucirc; &ugrave; &uml; &uuml; &yacute; &yen; &yuml;\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 842,
+                "value": "Æ & Á Â À Å Ã Ä © Ç Ð É Ê È Ë > Í Î Ì Ï < Ñ Ó Ô Ò Ø Õ Ö \" ® Þ Ú Û Ù Ü Ý á â ´ æ à & å ã ä ¦ ç ¸ ¢ © ¤ ° ÷ é ê è ð ë ½ ¼ ¾ > í î ¡ ì ¿ ï « < ¯ µ ·   ¬ ñ ó ô ò ª º ø õ ö ¶ ± £ \" » ® § ­ ¹ ² ³ ß þ × ú û ù ¨ ü ý ¥ ÿ"
+            }
+        ]
+    },
+    {
+        "case": "an escaped script holding a script",
+        "html": "<script><!--<script></script><p class=a></p>--></script><p class=b></p>",
+        "found": [
+            {
+                "start": 59,
+                "end": 66,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "an escaped script ended by its end tag",
+        "html": "<script><!--</script><p class=b></p>",
+        "found": [
+            {
+                "start": 24,
+                "end": 31,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "an escaped script closed at once",
+        "html": "<script><!--><p class=a></script><p class=b></p>",
+        "found": [
+            {
+                "start": 36,
+                "end": 43,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "a double-escaped script back to escaped",
+        "html": "<script><!--<script>x</script>y</script><p class=b></p>",
+        "found": [
+            {
+                "start": 43,
+                "end": 50,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "a double-escaped script closed by -->",
+        "html": "<script><!--<script>--></script><p class=b></p>",
+        "found": [
+            {
+                "start": 35,
+                "end": 42,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "a style in foreignObject is raw text",
+        "html": "<svg><foreignObject><style><p class=a></style></foreignObject></svg><p class=b></p>",
+        "found": [
+            {
+                "start": 71,
+                "end": 78,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "a script in desc is raw text",
+        "html": "<svg><desc><script>\"<p class=a>\"</script></desc></svg><p class=b></p>",
+        "found": [
+            {
+                "start": 57,
+                "end": 64,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "a textarea in an SVG title is raw text",
+        "html": "<svg><title><textarea><i class=a></textarea></title></svg><p class=b></p>",
+        "found": [
+            {
+                "start": 61,
+                "end": 68,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "a style in a MathML mi is raw text",
+        "html": "<math><mi><style><i class=a></style></mi></math><p class=b></p>",
+        "found": [
+            {
+                "start": 51,
+                "end": 58,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "SVG inside foreignObject is foreign again",
+        "html": "<svg><foreignObject><svg><style><g class=a /></style></svg></foreignObject></svg>",
+        "found": [
+            {
+                "start": 35,
+                "end": 42,
+                "value": "a"
+            }
+        ]
+    },
+    {
+        "case": "a self-closing foreignObject stays foreign",
+        "html": "<svg><foreignObject/><style><g class=a /></style></svg>",
+        "found": [
+            {
+                "start": 31,
+                "end": 38,
+                "value": "a"
+            }
+        ]
+    },
+    {
+        "case": "an end p ends SVG content",
+        "html": "<svg></p><style><b class=a></style></svg><p class=b></p>",
+        "found": [
+            {
+                "start": 44,
+                "end": 51,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "a font with color ends SVG content",
+        "html": "<svg><font color=red><style><i class=a></style></svg><p class=b></p>",
+        "found": [
+            {
+                "start": 56,
+                "end": 63,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "SVG inside SVG closes back to SVG",
+        "html": "<svg><svg></svg><style><g class=a /></style></svg>",
+        "found": [
+            {
+                "start": 26,
+                "end": 33,
+                "value": "a"
+            }
+        ]
+    },
+    {
+        "case": "MathML inside MathML closes back to MathML",
+        "html": "<math><math></math><style><mi class=a /></style></math>",
+        "found": [
+            {
+                "start": 30,
+                "end": 37,
+                "value": "a"
+            }
+        ]
+    },
+    {
+        "case": "a font without one stays in SVG",
+        "html": "<svg><font><style><g class=a /></style></font></svg>",
+        "found": [
+            {
+                "start": 21,
+                "end": 28,
+                "value": "a"
+            }
+        ]
+    },
+    {
+        "case": "an = alone before class",
+        "html": "<div = class=b>x</div>",
+        "found": [
+            {
+                "start": 7,
+                "end": 14,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "a bogus comment in SVG",
+        "html": "<svg><!x><g class=a /></svg>",
+        "found": [
+            {
+                "start": 12,
+                "end": 19,
+                "value": "a"
+            }
+        ]
+    },
+    {
+        "case": "a CDATA section ending in a tag start",
+        "html": "<svg><![CDATA[<i ]]><style><g class=a /></style></svg>",
+        "found": [
+            {
+                "start": 30,
+                "end": 37,
+                "value": "a"
+            }
+        ]
+    },
+    {
+        "case": "a comment ending in a tag start in SVG",
+        "html": "<svg><!--<b --><style><g class=a /></style></svg>",
+        "found": [
+            {
+                "start": 25,
+                "end": 32,
+                "value": "a"
+            }
+        ]
+    },
+    {
+        "case": "an end tag starting with a digit is a bogus comment",
+        "html": "</1 title=\"><p class=a>\">",
+        "found": [
+            {
+                "start": 15,
+                "end": 22,
+                "value": "a"
+            }
+        ]
+    },
+    {
+        "case": "an end tag in foreignObject that is not its own",
+        "html": "<svg><foreignObject><b></b><style><p class=a></style></foreignObject></svg><p class=b></p>",
+        "found": [
+            {
+                "start": 78,
+                "end": 85,
+                "value": "b"
+            }
+        ]
+    },
+    {
+        "case": "a closed foreignObject returns to SVG",
+        "html": "<svg><foreignObject></foreignObject><style><g class=a /></style></svg>",
+        "found": [
+            {
+                "start": 46,
+                "end": 53,
+                "value": "a"
+            }
+        ]
+    },
+    {
+        "case": "lower-case hex references",
+        "html": "<div class=\"&#xe9; &#Xab; &#xFf;\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 33,
+                "value": "é « ÿ"
+            }
+        ]
+    }
+]

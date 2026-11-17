@@ -104,6 +104,35 @@ pub fn encode_class_name_native(index: u32) -> String {
     crate::encoder::encode(index as usize)
 }
 
+/// One class name of a `class` attribute the HTML tokenizer reads.
+#[napi(object)]
+pub struct NativeHtmlClassName {
+    /// Where its spelling starts, in UTF-16 units.
+    pub start: u32,
+    /// Where its spelling ends, in UTF-16 units.
+    pub end: u32,
+    /// The name it decodes to.
+    pub name: String,
+}
+
+/// Every class name of every `class` attribute the HTML tokenizer reads
+/// (`html_text::html_class_names`).
+#[napi(js_name = "htmlClassNames")]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn html_class_names_native(html: String) -> Vec<NativeHtmlClassName> {
+    // A JavaScript string is shorter than 2^32 UTF-16 units.
+    let unit = |at: usize| u32::try_from(at).unwrap_or(u32::MAX);
+    crate::html_text::html_class_names(&html)
+        .into_iter()
+        .map(|found| NativeHtmlClassName {
+            start: unit(found.start),
+            end: unit(found.end),
+            name: found.name,
+        })
+        .collect()
+}
+
 /// The mangle map's checksum, from the map's own entries: originals and
 /// their mangled names in the same order (see `mangle::checksum_of_entries`).
 ///
@@ -616,6 +645,8 @@ pub struct NativeMigrateHtmlOptions {
     pub underscore_readings: Option<Vec<String>>,
     /// The project's Tailwind prefix, as for JSX.
     pub prefix: Option<String>,
+    /// The page's path, which each warning starts with.
+    pub file_path: Option<String>,
 }
 
 /// The counts of one migrated file.
@@ -896,6 +927,7 @@ pub fn migrate_html_native(
         served: served_answers(options.served_classes, options.unserved_classes),
         underscores: underscore_answers(options.underscore_values, options.underscore_readings)?,
         prefix: options.prefix,
+        file_path: options.file_path,
     };
     Ok(migrate::transform_html_source(&source, &html_options).into())
 }

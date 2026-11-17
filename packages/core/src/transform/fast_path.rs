@@ -212,9 +212,16 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
     let sz_attribute_count = count_sz_attributes(&file.source);
 
     for (attribute_start, value_start) in jsx_attributes(&file.source, "sz") {
-        // Only `sz={{` is read here; a spaced `=` or another value is the
-        // parser's.
-        if value_start != attribute_start + "sz=".len()
+        // Only the plain spelling is read here: `sz` after whitespace or the
+        // tag's `<`, then `={{`. A spaced `=`, another value, or a name that
+        // only ends in `sz` (`ns:sz`, `x‌sz`, which the parser lane does
+        // not read as `sz`) is the parser's.
+        let plain_start = file.source[..attribute_start]
+            .chars()
+            .next_back()
+            .is_some_and(|before| before.is_whitespace() || before == '<');
+        if !plain_start
+            || value_start != attribute_start + "sz=".len()
             || !file.source[value_start..].starts_with("{{")
         {
             return None;
@@ -236,7 +243,9 @@ fn try_static_sz_ir(file: &TransformFile) -> Option<SourceIr> {
             return None;
         }
 
-        let inner_start = attribute_start + "sz={{".len();
+        // From where the value opens, so the check above is the one that
+        // turns a value away from `sz=` to the parser.
+        let inner_start = value_start + "{{".len();
         let close_relative = file.source[inner_start..opening_end].find("}}")?;
         let inner_end = inner_start + close_relative;
         let attribute_end = inner_end + 2;
@@ -511,11 +520,46 @@ fn span(start: usize, end: usize) -> Option<TextSpan> {
 #[cfg(test)]
 mod tests {
     use super::{
-        element_name, is_identifier_key, non_code_ranges, opening_end, opening_start,
-        parse_flat_static_object, parse_simple_string, skip_group, triage_source,
+        any_sz_marker_in_ranges, element_name, is_identifier_key, non_code_ranges, opening_end,
+        opening_start, parse_flat_static_object, parse_simple_string, skip_group, triage_source,
         FastPathBailoutReason, FastPathTriage,
     };
     use crate::transform::TransformFile;
+
+    /// Only `sz={{` written plainly takes the AST-free path: a spaced `=`, a
+    /// string value, or a name that only ends in `sz` is the parser's.
+    #[test]
+    fn only_a_plain_sz_object_takes_the_static_path() {
+        let triage = |source: &str| {
+            triage_source(&TransformFile {
+                filename: "/repo/src/App.tsx".to_string(),
+                source: source.to_string(),
+            })
+        };
+        assert!(matches!(
+            triage("export const A = () => <div sz={{ p: 4 }} />;"),
+            FastPathTriage::StaticIr(_)
+        ));
+        for source in [
+            "export const A = () => <div sz = {{ p: 4 }} />;",
+            "export const A = () => <div sz=\"p: 4\" />;",
+            "export const A = () => <div ns:sz={{ p: 4 }} />;",
+        ] {
+            assert!(
+                matches!(triage(source), FastPathTriage::NeedsParser(_)),
+                "{source:?} took the static path"
+            );
+        }
+    }
+
+    /// A range ends before its end offset: an `sz` written right after a
+    /// comment is not inside it.
+    #[test]
+    fn an_sz_right_after_a_range_is_outside_it() {
+        let source = "/*a*/sz={{ p: 4 }}";
+        assert!(!any_sz_marker_in_ranges(source, &[(0, 5)]));
+        assert!(any_sz_marker_in_ranges(source, &[(0, 6)]));
+    }
 
     #[test]
     fn source_without_sz_is_noop_without_parse() {

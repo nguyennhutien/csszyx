@@ -238,5 +238,61 @@
                 8
             ]
         ]
+    },
+    {
+        "case": "a block comment after the =",
+        "text": "<div sz=/* c */\"p-4\" />",
+        "name": "sz",
+        "found": [
+            [
+                5,
+                8
+            ]
+        ]
+    },
+    {
+        "case": "a line comment after the =",
+        "text": "<div sz= // c\n{{ p: 4 }} />",
+        "name": "sz",
+        "found": [
+            [
+                5,
+                9
+            ]
+        ]
+    },
+    {
+        "case": "a comment after the = of className",
+        "text": "<div className=/* x */\"block\" />",
+        "name": "className",
+        "found": [
+            [
+                5,
+                15
+            ]
+        ]
+    },
+    {
+        "case": "a vowel sign (Other_Alphabetic) right before it",
+        "text": "<i ाsz={a} />",
+        "name": "sz",
+        "found": []
+    },
+    {
+        "case": "a combining mark that is not alphabetic right before it",
+        "text": "<i ́sz={a} />",
+        "name": "sz",
+        "found": [
+            [
+                4,
+                7
+            ]
+        ]
+    },
+    {
+        "case": "a zero-width non-joiner right before it",
+        "text": "<i ‌sz={a} />",
+        "name": "sz",
+        "found": []
     }
 ]

@@ -73,6 +73,9 @@ pub mod transform;
 /// JavaScript character classes the engine reads text by.
 pub(crate) mod js_text;
 
+/// The `class` attributes of an HTML text, read by the tokenizer's rules.
+pub(crate) mod html_text;
+
 /// Mangle map checksum module for SSR/CSR integrity.
 pub mod mangle;
 
@@ -142,6 +145,17 @@ pub fn version() -> String {
 #[wasm_bindgen]
 pub fn engine_digest() -> String {
     env!("CSSZYX_ENGINE_DIGEST").to_string()
+}
+
+/// The class names of an HTML text, as JSON.
+///
+/// `[{ start, end, name }]`: every class name of every `class` attribute the
+/// tokenizer reads, its spelling's range in UTF-16 units and the name it
+/// decodes to (`html_text::html_class_names`).
+#[wasm_bindgen]
+#[must_use]
+pub fn html_class_names_json(html: &str) -> String {
+    serde_json::to_string(&html_text::html_class_names(html)).unwrap_or_else(|_| "[]".to_string())
 }
 
 /// Whole-file source transform across the WASM boundary.
@@ -231,6 +245,15 @@ pub fn scan_global_var_usages_json(files_json: &str, query_json: &str) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn html_class_names_cross_the_boundary_as_json() {
+        // The wasm lane reads a page's class names through this export.
+        assert_eq!(
+            html_class_names_json("<p title=\"é\" class=\"a b&amp;c\">"),
+            r#"[{"start":20,"end":21,"name":"a"},{"start":22,"end":29,"name":"b&c"}]"#
+        );
+    }
 
     #[cfg(feature = "native-engine")]
     #[test]

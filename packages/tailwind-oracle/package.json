@@ -21,6 +21,10 @@
     "./css-comments": {
       "import": "./src/css-comments.ts",
       "types": "./src/css-comments.ts"
+    },
+    "./sz-marker": {
+      "import": "./src/sz-marker.ts",
+      "types": "./src/sz-marker.ts"
     }
   },
   "scripts": {
