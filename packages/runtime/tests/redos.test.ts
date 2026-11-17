@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cpuMs } from '../../core/tests/helpers/cpu-time.js';
 import { classify, has, splitBox } from '../src/split-box.js';
 
 /**
@@ -26,18 +27,18 @@ describe('className parsing stays linear (ReDoS tripwire)', () => {
     it('splitBox handles a 100k-char pathological token quickly', () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const evil = `${'a'.repeat(50_000)}:${'['.repeat(50_000)}`;
-        const start = performance.now();
+        const start = cpuMs();
         splitBox(evil);
         splitBox(`${'hover:'.repeat(10_000)}px-2`);
-        expect(performance.now() - start).toBeLessThan(BUDGET_MS);
+        expect(cpuMs() - start).toBeLessThan(BUDGET_MS);
         expect(warn).toHaveBeenCalled();
     });
 
     it('classify / has stay linear on a long token', () => {
         const evil = `${'@max-['.repeat(20_000)}px-2`;
-        const start = performance.now();
+        const start = cpuMs();
         classify(evil);
         has(`${'x'.repeat(100_000)} px-2`, 'padding');
-        expect(performance.now() - start).toBeLessThan(BUDGET_MS);
+        expect(cpuMs() - start).toBeLessThan(BUDGET_MS);
     });
 });

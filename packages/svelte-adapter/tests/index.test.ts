@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-
+import { cpuMs } from '../../core/tests/helpers/cpu-time.js';
 import { transformMarkup } from '../src/index.js';
 
 describe('Svelte markup transform', () => {
@@ -31,11 +31,11 @@ describe('Svelte markup transform', () => {
 
     it('processes repeated hostile openings in linear time', () => {
         const source = `<div ${'sz="{{a '.repeat(100_000)} />`;
-        const startedAt = performance.now();
+        const startedAt = cpuMs();
         const result = transformMarkup(source);
 
         expect(result.count).toBe(0);
         expect(result.code).toBe(source);
-        expect(performance.now() - startedAt).toBeLessThan(2_000);
+        expect(cpuMs() - startedAt).toBeLessThan(2_000);
     });
 });

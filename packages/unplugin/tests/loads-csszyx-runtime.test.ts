@@ -6,7 +6,7 @@
  */
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-
+import { cpuMsPerCall } from '../../core/tests/helpers/cpu-time.js';
 import { loadsCsszyxRuntime } from '../src/merge-registration.js';
 
 describe('loadsCsszyxRuntime', () => {
@@ -107,17 +107,19 @@ describe('loadsCsszyxRuntime against TypeScript', () => {
 
 describe('loadsCsszyxRuntime cost', () => {
     /**
-     * The fastest of three passes over `code`.
+     * The fastest of three passes over `code`, in CPU time per pass
+     * (`cpuMsPerCall`).
      *
      * @param code - Module text.
-     * @returns Seconds.
+     * @returns Milliseconds.
      */
     function fastest(code: string): number {
         let best = Number.POSITIVE_INFINITY;
         for (let run = 0; run < 3; run++) {
-            const start = performance.now();
-            loadsCsszyxRuntime(code);
-            best = Math.min(best, performance.now() - start);
+            best = Math.min(
+                best,
+                cpuMsPerCall(() => loadsCsszyxRuntime(code)),
+            );
         }
         return best;
     }

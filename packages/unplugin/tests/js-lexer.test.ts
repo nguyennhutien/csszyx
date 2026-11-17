@@ -3,7 +3,7 @@
  * each one follows, past comments and whitespace.
  */
 import { describe, expect, it } from 'vitest';
-
+import { cpuMsPerCall } from '../../core/tests/helpers/cpu-time.js';
 import {
     codeAfter,
     type JsLiteral,
@@ -194,8 +194,9 @@ describe('walkJsTokens cost', () => {
     /**
      * How much longer the walk over `large` takes than the walk over `small`.
      * The two are walked in turn, after one walk of each to warm the JIT, and
-     * each keeps its fastest time, so a stretch of load on the machine slows
-     * both sides instead of one.
+     * each keeps its fastest CPU time per walk (`cpuMsPerCall`), so a stretch of load on the
+     * machine slows both sides instead of one, and time other processes hold
+     * the CPU is not counted.
      *
      * @param small - Module text.
      * @param large - The same shape, longer.
@@ -203,11 +204,10 @@ describe('walkJsTokens cost', () => {
      */
     function growth(small: string, large: string): number {
         const best = [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY];
-        for (let run = 0; run < 8; run++) {
+        for (let run = 0; run < 5; run++) {
             [small, large].forEach((text, side) => {
-                const start = performance.now();
-                walkJsTokens(text, () => false);
-                if (run > 0) best[side] = Math.min(best[side], performance.now() - start);
+                const ms = cpuMsPerCall(() => walkJsTokens(text, () => false));
+                if (run > 0) best[side] = Math.min(best[side], ms);
             });
         }
         return best[1] / best[0];

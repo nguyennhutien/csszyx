@@ -6,7 +6,7 @@
  */
 import { __szCss, clearMangleRegistry, installMangleRuntime } from '@csszyx/runtime';
 import { afterEach, describe, expect, it } from 'vitest';
-
+import { cpuMs } from '../../core/tests/helpers/cpu-time.js';
 import { collectUnmarkedNames, inlineClassMarks } from '../src/class-mark-inline.js';
 
 const MAP = { 'p-4': 'a', flex: 'b', 'hover:m-2': 'c' };
@@ -261,16 +261,16 @@ describe('inlineClassMarks', () => {
 
     it('scans long runs of spaces and many helper names in linear time', () => {
         const chunk = `${' '.repeat(2_000_000)}${'x(__szCss); '.repeat(100_000)}`;
-        const started = performance.now();
+        const started = cpuMs();
         expect(inlineClassMarks(chunk, MAP).missed).toBe(0);
-        expect(performance.now() - started).toBeLessThan(1000);
+        expect(cpuMs() - started).toBeLessThan(1000);
     });
 
     it('scans a chunk of many annotations in linear time', () => {
         const chunk = '/*#__PURE__*/ new Map();'.repeat(200_000);
-        const started = performance.now();
+        const started = cpuMs();
         expect(inlineClassMarks(chunk, MAP).inlined).toBe(0);
-        expect(performance.now() - started).toBeLessThan(1000);
+        expect(cpuMs() - started).toBeLessThan(1000);
     });
 });
 
@@ -341,12 +341,12 @@ describe('collectUnmarkedNames', () => {
     it('reads a deep nest of templates in linear time', () => {
         const depth = 20_000;
         const code = `${'`${'.repeat(depth)}"before:content-['x']"${'}`'.repeat(depth)}`;
-        const started = performance.now();
+        const started = cpuMs();
         expect(names(code).has("before:content-['x']")).toBe(true);
         expect(
             names(`${'(/['.repeat(depth)}\n"before:content-['x']"`).has("before:content-['x']"),
         ).toBe(true);
-        expect(performance.now() - started).toBeLessThan(1000);
+        expect(cpuMs() - started).toBeLessThan(1000);
     });
 
     it('does not read the classes inside a mark', () => {

@@ -4,7 +4,7 @@
  * text, and a string to its quote, an unescaped line break, or the end.
  */
 import { describe, expect, it } from 'vitest';
-
+import { cpuMs } from '../../core/tests/helpers/cpu-time.js';
 import {
     cssCommentEnd,
     cssOpaqueEnd,
@@ -78,8 +78,8 @@ describe('stripCssBlockComments', () => {
 
     it('stays linear on an unterminated comment opener repeated', () => {
         const hostile = `/*${'a/*'.repeat(200_000)}`;
-        const start = performance.now();
+        const start = cpuMs();
         expect(stripCssBlockComments(hostile)).toBe('');
-        expect(performance.now() - start).toBeLessThan(1000);
+        expect(cpuMs() - start).toBeLessThan(1000);
     });
 });
