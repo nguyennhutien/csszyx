@@ -508,23 +508,49 @@ type WebpackAssetProcessor = (
  * the plugin's, so sharing that stage ran after it (ADR 0034). Content hashes
  * are recomputed later still, at `OPTIMIZE_HASH`.
  *
+ * A file can arrive after that stage: html-webpack-plugin generates its page
+ * at `OPTIMIZE_INLINE` (700), and other plugins add stylesheets, scripts and
+ * manifests later still. `additionalAssets` hands `processLaterAssets` each
+ * file name a later stage adds, once; a file renamed by its content hash at
+ * `OPTIMIZE_HASH` comes back under its new name, which the processors know
+ * by the asset info they set. `finishAssets` runs once every stage has run,
+ * so what it reports covers the late files too.
+ *
  * @param compiler Webpack compiler instance.
  * @param processAssets Final asset processor.
+ * @param processLaterAssets Processor for the files a later stage adds.
+ * @param finishAssets Called once the compilation's assets are final.
  */
 function registerWebpackAssetProcessor(
     compiler: WebpackCompiler,
     processAssets: WebpackAssetProcessor,
+    processLaterAssets: WebpackAssetProcessor,
+    finishAssets: (compilation: WebpackCompilation) => void,
 ): void {
     compiler.hooks.compilation.tap('csszyx:post', compilation => {
         const stage =
             compiler.webpack?.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE ||
             (compilation.constructor as { PROCESS_ASSETS_STAGE_OPTIMIZE?: number })
                 .PROCESS_ASSETS_STAGE_OPTIMIZE;
-        compilation.hooks.processAssets.tap({ name: 'csszyx:post', stage: stage || 100 }, assets =>
-            processAssets(assets, compilation, compiler),
+        compilation.hooks.processAssets.tap(
+            {
+                name: 'csszyx:post',
+                stage: stage || 100,
+                additionalAssets: (assets: WebpackCompilation['assets']) =>
+                    processLaterAssets(assets, compilation, compiler),
+            },
+            assets => processAssets(assets, compilation, compiler),
         );
+        compilation.hooks.afterProcessAssets.tap('csszyx:post', () => finishAssets(compilation));
     });
 }
+
+/**
+ * The asset-info key csszyx sets on each file it has read: a file renamed by
+ * its content hash keeps its info, so it is not read a second time, where a
+ * stylesheet's tokens would read as classes some other CSS styles.
+ */
+const REWRITTEN_ASSET = 'csszyxRewritten';
 
 /** Source file queued by the prescan walker. */
 interface PrescanSourceFile {
@@ -8694,6 +8720,114 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Whether this Webpack build mangles class names: on, outside development,
+     * with a map to apply.
+     *
+     * @param compiler Active Webpack compiler.
+     * @returns True when it does.
+     */
+    function webpackShouldMangle(compiler: WebpackCompiler): boolean {
+        return (
+            manglingEnabled &&
+            compiler.options.mode !== 'development' &&
+            Object.keys(state.mangleMap).length > 0
+        );
+    }
+
+    /** What one compilation's output pass collects for the warnings it ends with. */
+    interface WebpackOutputPass {
+        shouldMangle: boolean;
+        /** Whether this is the parent compilation, which owns the build's files. */
+        ownsBuildFiles: boolean;
+        mangledSources: Set<string>;
+        externalClasses: Set<string>;
+        attributeSelectors: Map<string, ClassAttributeSelector>;
+    }
+    const webpackOutputPasses = new WeakMap<WebpackCompilation, WebpackOutputPass>();
+
+    /**
+     * Rewrite one stylesheet, script or page of a Webpack compilation, as it
+     * stands now, and mark it read ({@link REWRITTEN_ASSET}).
+     *
+     * @param file Output filename.
+     * @param pass The compilation's output pass.
+     * @param compilation Active Webpack compilation.
+     * @param compiler Active Webpack compiler.
+     */
+    function rewriteWebpackAsset(
+        file: string,
+        pass: WebpackOutputPass,
+        compilation: WebpackCompilation,
+        compiler: WebpackCompiler,
+    ): void {
+        const source = compilation.assets[file].source().toString();
+        if (file.endsWith('.css')) {
+            const css = rewriteOutputCss(
+                source,
+                file,
+                pass.shouldMangle,
+                pass.mangledSources,
+                pass.externalClasses,
+                pass.attributeSelectors,
+            );
+            if (css !== source) {
+                compilation.updateAsset(file, new compiler.webpack.sources.RawSource(css));
+            }
+        } else {
+            rewriteWebpackCodeAsset(file, source, pass.shouldMangle, compilation, compiler);
+        }
+        compilation.updateAsset(file, current => current, { [REWRITTEN_ASSET]: true });
+    }
+
+    /**
+     * The files a stage after csszyx's own adds: each stylesheet, script and
+     * page among them is rewritten as the ones the pass saw were
+     * (`registerWebpackAssetProcessor`); a file it has read already, renamed
+     * by its content hash, is not read again.
+     *
+     * @param assets The files added since the last call, by name.
+     * @param compilation Active Webpack compilation.
+     * @param compiler Active Webpack compiler.
+     */
+    function processLaterWebpackAssets(
+        assets: WebpackCompilation['assets'],
+        compilation: WebpackCompilation,
+        compiler: WebpackCompiler,
+    ): void {
+        const pass = webpackOutputPasses.get(compilation);
+        if (!pass?.shouldMangle) return;
+        for (const file in assets) {
+            if (!/\.(?:css|js|html)$/.test(file)) continue;
+            if (compilation.assetsInfo.get(file)?.[REWRITTEN_ASSET]) continue;
+            rewriteWebpackAsset(file, pass, compilation, compiler);
+        }
+    }
+
+    /**
+     * Report what the compilation's output pass found, once every stage that
+     * adds files has run.
+     *
+     * @param compilation Active Webpack compilation.
+     */
+    function finishWebpackAssets(compilation: WebpackCompilation): void {
+        // Webpack runs every `processAssets` tap, csszyx's included, before
+        // `afterProcessAssets`, so the pass is there.
+        const pass = webpackOutputPasses.get(compilation) as WebpackOutputPass;
+        webpackOutputPasses.delete(compilation);
+        reportOutputMangleHazards(
+            pass.shouldMangle,
+            pass.mangledSources,
+            pass.externalClasses,
+            pass.attributeSelectors,
+        );
+        // Webpack has no post-write hook in this plugin and prints no asset
+        // table of its own, so the reason the Vite lane defers does not apply:
+        // here the end of the parent's asset processing IS the end of the
+        // build's output.
+        if (pass.ownsBuildFiles) reportBuildSummary();
+    }
+
+    /**
      * Process all Webpack assets after the full class map is available.
      *
      * @param assets Webpack output assets.
@@ -8709,10 +8843,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         state.globalVarValidationResult = validateGlobalVarBundleInputs(
             collectWebpackGlobalVarCssAssets(assets),
         );
-        const shouldMangle =
-            manglingEnabled &&
-            compiler.options.mode !== 'development' &&
-            Object.keys(state.mangleMap).length > 0;
+        const shouldMangle = webpackShouldMangle(compiler);
         // The stage is tapped on `hooks.compilation`, which webpack copies onto
         // every child compiler (html-webpack-plugin's template compile). A
         // child reaches it while the parent is still transforming, so a file
@@ -8726,38 +8857,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             emitWebpackBuildFiles(compilation, compiler, shouldMangle);
         }
 
-        const mangledSources = new Set<string>();
-        const externalClasses = new Set<string>();
-        const attributeSelectors = new Map<string, ClassAttributeSelector>();
-        for (const file in assets) {
-            const source = assets[file].source().toString();
-            if (file.endsWith('.css')) {
-                const css = rewriteOutputCss(
-                    source,
-                    file,
-                    shouldMangle,
-                    mangledSources,
-                    externalClasses,
-                    attributeSelectors,
-                );
-                if (css !== source) {
-                    compilation.updateAsset(file, new compiler.webpack.sources.RawSource(css));
-                }
-            } else {
-                rewriteWebpackCodeAsset(file, source, shouldMangle, compilation, compiler);
-            }
-        }
-        reportOutputMangleHazards(
+        const pass: WebpackOutputPass = {
             shouldMangle,
-            mangledSources,
-            externalClasses,
-            attributeSelectors,
-        );
-        // Webpack has no post-write hook in this plugin and prints no asset
-        // table of its own, so the reason the Vite lane defers does not apply:
-        // here the end of the parent's asset processing IS the end of the
-        // build's output.
-        if (ownsBuildFiles) reportBuildSummary();
+            ownsBuildFiles,
+            mangledSources: new Set(),
+            externalClasses: new Set(),
+            attributeSelectors: new Map(),
+        };
+        webpackOutputPasses.set(compilation, pass);
+        for (const file in assets) {
+            if (/\.(?:css|js|html)$/.test(file))
+                rewriteWebpackAsset(file, pass, compilation, compiler);
+        }
     }
 
     /**
@@ -8943,7 +9054,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             if (manglingEnabled && compiler.options?.optimization?.realContentHash === false) {
                 emitWarning(realContentHashDisabledMessage());
             }
-            registerWebpackAssetProcessor(compiler, processWebpackAssets);
+            registerWebpackAssetProcessor(
+                compiler,
+                processWebpackAssets,
+                processLaterWebpackAssets,
+                finishWebpackAssets,
+            );
         },
 
         /**
