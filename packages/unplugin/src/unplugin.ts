@@ -5976,8 +5976,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     addSafelistClass(className);
                     sink.add(className);
                 }
-            } catch (err) {
-                warnPrescanSkipped(file.filePath, err);
+            } catch (error) {
+                warnPrescanSkipped(file.filePath, error);
             }
         }
     }
