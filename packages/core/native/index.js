@@ -259,6 +259,17 @@ export function htmlClassNames(html) {
 }
 
 /**
+ * Every text a class attribute string can put in the DOM: as JSX reads it,
+ * then as HTML does, each once.
+ *
+ * @param {string} raw - The attribute string as written.
+ * @returns {string[]} The texts.
+ */
+export function classAttributeReadings(raw) {
+    return laterExport('classAttributeReadings')(raw);
+}
+
+/**
  * The mangle map's checksum, from the map's own entries. Two lists rather
  * than the object: reading an object's keys natively walks its prototype too.
  *

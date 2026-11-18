@@ -22,6 +22,8 @@ import type { Plugin } from 'vite';
 
 import { type ReadFailure, readSzAttributes } from './template-ast.js';
 
+export { templateClassNames } from './template-ast.js';
+
 /**
  * The extension of the files this adapter lowers: a Vue single-file component.
  * `@csszyx/unplugin` routes a file here by it before loading the adapter.

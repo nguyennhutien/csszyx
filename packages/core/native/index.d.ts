@@ -599,6 +599,16 @@ export interface NativeHtmlClassName {
 export function htmlClassNames(html: string): NativeHtmlClassName[];
 
 /**
+ * Every text a class attribute string can put in the DOM: as JSX reads it,
+ * then as HTML does, each once.
+ *
+ * @param raw The attribute string as written.
+ * @returns The texts.
+ * @throws CsszyxNativeUnavailableError when the platform package is missing or predates it.
+ */
+export function classAttributeReadings(raw: string): string[];
+
+/**
  * The mangle map's checksum, from the map's own entries. Two lists rather
  * than the object: reading an object's keys natively walks its prototype too.
  *

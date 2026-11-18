@@ -25,7 +25,7 @@ pub mod global_var_usages;
 #[allow(dead_code)]
 pub(crate) mod helper_names;
 mod ir;
-#[cfg(feature = "native-engine")]
+#[cfg(any(feature = "native-engine", feature = "migrate"))]
 pub(crate) mod jsx_text;
 #[cfg(feature = "native-engine")]
 mod lone_surrogate;

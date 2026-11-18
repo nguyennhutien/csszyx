@@ -9,7 +9,7 @@ vi.mock('@csszyx/compiler/template', async importOriginal => ({
     requirePeer: () => ({ VERSION: '4.2.19', parse: () => ({}) }),
 }));
 
-const { preprocess } = await import('../src/index.js');
+const { preprocess, templateClassNames } = await import('../src/index.js');
 
 describe('a project on Svelte 4', () => {
     it('gets an error naming Svelte 5', () => {
@@ -22,5 +22,9 @@ describe('a project on Svelte 4', () => {
                 '  help: install `svelte@5`.\n' +
                 '  docs: https://csszyx.com/e/svelte-version-unsupported',
         ]);
+    });
+
+    it('gets no class reading, so the caller reads the file another way', () => {
+        expect(templateClassNames('<div class="p-4"></div>')).toBeNull();
     });
 });

@@ -4,7 +4,6 @@ import * as path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import {
-    CLASS_LIST_SPACE,
     type CssVariableMangleValue,
     diagnosticPath,
     HTML_CLASS_SPACE,
@@ -21,6 +20,7 @@ import {
     htmlClassNames,
     isRustTransformAvailable,
     isWasmTransformAvailable,
+    type MangleEngineOptions,
 } from '@csszyx/compiler/engine';
 import type { CsszyxError } from '@csszyx/compiler/errors';
 import {
@@ -31,7 +31,11 @@ import {
     transformRustUnrendered,
     transformWasmUnrendered,
 } from '@csszyx/compiler/internal';
-import type { TemplatePreprocess } from '@csszyx/compiler/template';
+import type {
+    TemplateClassNames,
+    TemplateClassReading,
+    TemplatePreprocess,
+} from '@csszyx/compiler/template';
 import { getNativePackageName } from '@csszyx/core/native';
 import {
     createGitignoreQuery,
@@ -62,8 +66,8 @@ import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } f
 import { atomicWriteFileSync } from './atomic-write.js';
 import {
     collectAuthoredClassNames,
+    collectClassExpressionNames,
     collectMergeCallClassNames,
-    findBalancedCodeEnd,
 } from './authored-class-scanner.js';
 import { collectUnmarkedNames, inlineClassMarks } from './class-mark-inline.js';
 import {
@@ -560,6 +564,14 @@ interface PrescanSourceFile {
     content: string;
 }
 
+/** A template queued by the prescan walker for its framework's adapter. */
+interface PrescanTemplateFile extends PrescanSourceFile {
+    /** The framework whose adapter reads and lowers it. */
+    framework: TemplateFramework;
+    /** Whether its text may hold `sz`, which the adapter lowers. */
+    sz: boolean;
+}
+
 /** Prescan source file plus transform result. */
 interface PrescanTransformResult {
     /** Absolute source path. */
@@ -672,21 +684,54 @@ let _hasWarnedNativeFallback = false;
 const _loggedActiveParsers = new Set<string>();
 const requireFromHere: NodeJS.Require = createRequire(import.meta.url);
 
+/** What the plugin calls of a loaded template adapter. */
+interface TemplateAdapter {
+    /** Lowers the file's `sz`. */
+    preprocess: TemplatePreprocess;
+    /** Reads the class names the file's text puts in the DOM. */
+    templateClassNames: TemplateClassNames;
+}
+
+/**
+ * Load a template adapter module and take what the plugin calls of it.
+ *
+ * @param adapter - The module, once imported.
+ * @returns Its `preprocess` and `templateClassNames`.
+ */
+async function adapterOf(adapter: Promise<TemplateAdapter>): Promise<TemplateAdapter> {
+    const { preprocess, templateClassNames } = await adapter;
+    return { preprocess, templateClassNames };
+}
+
+/**
+ * A template's classes as its framework reads them, or null when that
+ * read fails, its framework not installed being the usual reason.
+ *
+ * @param adapter - The template's adapter.
+ * @param text - The template's text.
+ * @returns The reading, or null.
+ */
+function readWithFramework(adapter: TemplateAdapter, text: string): TemplateClassReading | null {
+    try {
+        return adapter.templateClassNames(text);
+    } catch {
+        return null;
+    }
+}
+
 /**
  * The template adapters, by framework: the extension of the files each lowers
  * and how to load it. A new adapter is one entry here, and the `satisfies`
- * below checks its `preprocess` against the kit's {@link TemplatePreprocess}.
+ * below checks it against the kit's {@link TemplatePreprocess} and
+ * {@link TemplateClassNames}.
  * Nothing in this table is imported until a build meets a file of that
  * extension, so each row repeats the extension its adapter exports;
  * {@link templateAdapterExtensions} lets a test hold the two equal.
  */
 const TEMPLATE_ADAPTERS = {
-    vue: { extension: '.vue', load: async () => (await import('@csszyx/vue-adapter')).preprocess },
-    svelte: {
-        extension: '.svelte',
-        load: async () => (await import('@csszyx/svelte-adapter')).preprocess,
-    },
-} as const satisfies Record<string, { extension: string; load: () => Promise<TemplatePreprocess> }>;
+    vue: { extension: '.vue', load: () => adapterOf(import('@csszyx/vue-adapter')) },
+    svelte: { extension: '.svelte', load: () => adapterOf(import('@csszyx/svelte-adapter')) },
+} as const satisfies Record<string, { extension: string; load: () => Promise<TemplateAdapter> }>;
 
 /** A framework whose templates an adapter lowers. */
 type TemplateFramework = keyof typeof TEMPLATE_ADAPTERS;
@@ -711,11 +756,11 @@ export function templateAdapterExtensions(): Record<string, string> {
 type TemplateReport = typeof import('@csszyx/compiler/template').reportTemplateSzDiagnostics;
 
 /**
- * Each adapter's `preprocess`, once loaded, and the kit's reporter, which
- * loads with the first adapter: a build with no template file loads neither,
- * and a build of one framework never loads another's adapter.
+ * Each adapter, once loaded, and the kit's reporter, which loads with the
+ * first adapter: a build with no template file loads neither, and a build of
+ * one framework never loads another's adapter.
  */
-const templateAdapters: Partial<Record<TemplateFramework, TemplatePreprocess>> = {};
+const templateAdapters: Partial<Record<TemplateFramework, TemplateAdapter>> = {};
 let reportTemplateSzDiagnostics: TemplateReport | undefined;
 
 /**
@@ -749,8 +794,8 @@ function loadTemplateAdapter(framework: TemplateFramework): Promise<void> {
         templateAdapters[framework] ?? TEMPLATE_ADAPTERS[framework].load(),
         reportTemplateSzDiagnostics ?? loadTemplateReport(),
     ]).then(
-        ([preprocess, report]) => {
-            templateAdapters[framework] = preprocess;
+        ([adapter, report]) => {
+            templateAdapters[framework] = adapter;
             reportTemplateSzDiagnostics = report;
         },
         (error: unknown) => {
@@ -1385,17 +1430,6 @@ function sourcePathFrom(from: string, target: string): string {
     // Another drive on Windows: `relative` is the target's absolute path.
     const bare = path.isAbsolute(relative) || posix === '..' || posix.startsWith('../');
     return bare ? posix : `./${posix}`;
-}
-
-/**
- * Find the exclusive end of one JSX expression container.
- *
- * @param code Source code.
- * @param bodyStart Offset after the opening brace.
- * @returns Exclusive expression-body end offset.
- */
-function findJsxExpressionEnd(code: string, bodyStart: number): number {
-    return findBalancedCodeEnd(code, bodyStart);
 }
 
 /**
@@ -3853,6 +3887,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const activeParser = (): ReturnType<typeof resolveParserMode> =>
         (parserChoice ??= resolveParserMode(parserInput));
     /**
+     * The artifact the mangle helpers and the class scanner run on.
+     *
+     * @returns The transform's own.
+     */
+    const engineOptions = (): MangleEngineOptions => ({ parser: activeParser().parser });
+    /**
      * Announce the engine actually in effect (and the native-binary degrade, if
      * any). Called from build-lifecycle hooks, NOT from the factory body: the
      * module exports a default plugin instance for compatibility, so the factory
@@ -4954,6 +4994,22 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Name a file the prescan skipped. The build goes on, but the skip must be
+     * visible: every class in the file is dead under Tailwind `source(none)`.
+     *
+     * @param filePath - The skipped file.
+     * @param err - Why it was skipped.
+     */
+    function warnPrescanSkipped(filePath: string, err: unknown): void {
+        console.warn(
+            diagnosticMessage('engine-call-failed', {
+                file: projectRelative(filePath),
+                detail: err instanceof Error ? err.message : String(err),
+            }),
+        );
+    }
+
+    /**
      * Transforms prescan files one by one.
      *
      * @param files Source files discovered during prescan.
@@ -4974,15 +5030,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     ),
                 });
             } catch (err) {
-                // Historical prescan behavior keeps the build alive, but the skip
-                // itself must be visible: every class in this file is silently
-                // dead under Tailwind `source(none)`.
-                console.warn(
-                    diagnosticMessage('engine-call-failed', {
-                        file: projectRelative(file.filePath),
-                        detail: err instanceof Error ? err.message : String(err),
-                    }),
-                );
+                warnPrescanSkipped(file.filePath, err);
             }
         }
         return results;
@@ -5429,16 +5477,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * `.gitignore` covers it and no stylesheet names it (ADR 0033). Its
      * classes reach the CSS only through the transform, on a lane that adds a
      * class found that late, and a module that only declares `szv` not even
-     * then, so the build names it once at its end. Only a script the prescan
-     * reads counts: a `.vue` or `.svelte` file gives the safelist nothing
-     * wherever it sits, so naming it would change nothing.
+     * then, so the build names it once at its end. Only a file the prescan
+     * reads counts: a script, or a template its framework's adapter lowers.
      *
      * @param id - The module's bundler id.
      */
     function recordGitignoredSz(id: string): void {
         if (prescanScope === null) return;
         const file = id.split('?', 1)[0] as string;
-        if (!SOURCE_EXTENSIONS.has(path.extname(file))) return;
+        if (!isPrescanned(file)) return;
         if (prescanScope.read.has(normalizePathSeparators(file))) return;
         if (state.gitignoredSzFiles.has(file) || !prescanScope.gitignored(file)) return;
         state.gitignoredSzFiles.add(file);
@@ -5502,6 +5549,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Whether the prescan reads a file of this name: a script, or a template
+     * its framework's adapter lowers.
+     *
+     * @param file - A path or bundler id, without a query.
+     * @returns True when the prescan reads it.
+     */
+    function isPrescanned(file: string): boolean {
+        return SOURCE_EXTENSIONS.has(path.extname(file)) || templateFrameworkOf(file) !== null;
+    }
+
+    /**
      * Take back the files a stylesheet's `@source` names that the walk left
      * out, as the project's own Scanner lists them (`filesNamedBySources`):
      * a gitignored folder Tailwind is pointed at, so the sz it holds reaches
@@ -5527,7 +5585,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const named = filesNamedBySources(state.rootDir, state.rootDir, model.sourceRules) ?? [];
         const folders = folderSpellings([normalizeForMatch(state.rootDir), ...compileSourceDirs]);
         for (const reported of named) {
-            if (!SOURCE_EXTENSIONS.has(path.extname(reported))) continue;
+            if (!isPrescanned(reported)) continue;
             const file = spelledInside(reported, folders);
             if (file === null || seen.has(normalizePathSeparators(file))) continue;
             collect(file, false);
@@ -5693,6 +5751,49 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // What the walk reads for merge hooks, read in one scan once it finishes.
         const hookTexts: SourceText[] = [];
         const linkSources: { filePath: string; content: string }[] = [];
+        // Templates that may hold `sz`, lowered once the prefix is known, and
+        // every template the walk read, so a named one is read once.
+        const templateSources: PrescanTemplateFile[] = [];
+        const seenTemplatePaths = new Set<string>();
+
+        /**
+         * Read one template, once: its merge hooks, as any markup file's,
+         * and, when the build processes it and it may hold `sz`, into the
+         * prescan's template queue. One read serves both.
+         *
+         * @param filePath Template file path.
+         * @param framework The framework its extension names.
+         * @param readsHooks Whether its merge hooks are read.
+         */
+        function collectTemplateSource(
+            filePath: string,
+            framework: TemplateFramework,
+            readsHooks: boolean,
+        ): void {
+            const key = normalizePathSeparators(filePath);
+            if (seenTemplatePaths.has(key)) return;
+            seenTemplatePaths.add(key);
+            const hooks = readsHooks && !isHardIgnored(filePath) && !isUserExcluded(filePath);
+            const lowers = shouldProcessSource(filePath);
+            if (!hooks && !lowers) return;
+            let content: string;
+            try {
+                content = fs.readFileSync(filePath, 'utf-8');
+            } catch {
+                // Gone since the walk listed it, as the delete race leaves it.
+                return;
+            }
+            const hookText = hooks ? sourceHookText(filePath, content) : null;
+            if (hookText !== null) hookTexts.push(hookText);
+            if (lowers) {
+                templateSources.push({
+                    filePath,
+                    content,
+                    framework,
+                    sz: moduleMayHoldSz(content),
+                });
+            }
+        }
 
         /**
          * Read one processable source into the prescan queue.
@@ -5758,8 +5859,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
         const walkStarted = performance.now();
         const gitignored = walkProjectFiles((filePath, extension, readsHooks) => {
-            if (SOURCE_EXTENSIONS.has(extension)) collectPrescanSource(filePath, readsHooks);
-            else if (readsHooks && MARKUP_EXTENSIONS.has(extension)) {
+            if (SOURCE_EXTENSIONS.has(extension)) {
+                collectPrescanSource(filePath, readsHooks);
+                return;
+            }
+            const framework = templateFrameworkOf(filePath);
+            if (framework !== null) {
+                collectTemplateSource(filePath, framework, readsHooks);
+                return;
+            }
+            if (readsHooks && MARKUP_EXTENSIONS.has(extension)) {
                 const hookText = markupHookText(filePath);
                 if (hookText !== null) hookTexts.push(hookText);
             }
@@ -5780,14 +5889,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         traceBenchTiming('prescan:model', state.rootDir, modelElapsed);
         const walked = seenSourcePaths.size;
         const namedStarted = performance.now();
-        admitNamedSources(model, seenSourcePaths, collectPrescanSource);
+        admitNamedSources(model, seenSourcePaths, (filePath, readsHooks) => {
+            const framework = templateFrameworkOf(filePath);
+            if (framework === null) collectPrescanSource(filePath, readsHooks);
+            else collectTemplateSource(filePath, framework, readsHooks);
+        });
         const namedElapsed = performance.now() - namedStarted;
         traceBenchTiming(
             `prescan:named files=${seenSourcePaths.size - walked}`,
             state.rootDir,
             namedElapsed,
         );
-        prescanScope = { read: seenSourcePaths, gitignored };
+        prescanScope = { read: new Set([...seenSourcePaths, ...seenTemplatePaths]), gitignored };
 
         // Every walked file's szv factories and forwards, read in one engine
         // call per question. The factories are recorded even when the registry
@@ -5846,6 +5959,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             performance.now() - batchStarted,
         );
 
+        const templatesStarted = performance.now();
+        await lowerPrescanTemplates(templateSources, rawDiscoveredClasses);
+        traceBenchTiming(
+            `prescan:templates files=${templateSources.length}`,
+            state.rootDir,
+            performance.now() - templatesStarted,
+        );
+
         // sz-generated classes are csszyx-owned: safe to both safelist and mangle.
         // Raw className values are added to the safelist below but never to
         // ownedClasses. Shared raw/sz names are subtracted when the map finalizes.
@@ -5865,6 +5986,58 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             performance.now() - safelistStarted,
         );
         traceBenchTiming('prescan', state.rootDir, performance.now() - prescanStarted);
+    }
+
+    /**
+     * Read each template the prescan found, as the transform hook does for the
+     * same file: its authored classes for the census, as its framework reads
+     * them, and, for one that may hold `sz`, the classes the adapter's output
+     * writes into the safelist, which is written before any module is
+     * transformed and is all a `source(none)` stylesheet reads. Each
+     * framework's adapter loads once, all at once, so the transform hook
+     * finds it loaded. Without it a template's classes are read as markup; a
+     * file whose adapter fails to load or to lower its `sz` is named and
+     * skipped, and the transform hook reports why when it lowers the file.
+     *
+     * Cost: one framework parse per template, and one adapter call per
+     * template that may hold `sz`.
+     *
+     * @param files - The templates, in walk order.
+     * @param sink - The raw safelist classes of this prescan.
+     */
+    async function lowerPrescanTemplates(
+        files: readonly PrescanTemplateFile[],
+        sink: Set<string>,
+    ): Promise<void> {
+        const frameworks = [...new Set(files.map(file => file.framework))];
+        const loads = await Promise.allSettled(frameworks.map(loadTemplateAdapter));
+        const loadFailures = new Map<TemplateFramework, unknown>();
+        loads.forEach((load, index) => {
+            if (load.status === 'rejected') {
+                loadFailures.set(frameworks[index] as TemplateFramework, load.reason);
+            }
+        });
+        for (const file of files) {
+            recordAuthoredClassesOf(file.filePath, file.content);
+            if (!file.sz) continue;
+            if (loadFailures.has(file.framework)) {
+                warnPrescanSkipped(file.filePath, loadFailures.get(file.framework));
+                continue;
+            }
+            try {
+                const result = lowerTemplate(file.framework, file.content, file.filePath);
+                for (const className of recordTemplateOutput(
+                    file.framework,
+                    file.filePath,
+                    result.code,
+                )) {
+                    addSafelistClass(className);
+                    sink.add(className);
+                }
+            } catch (error) {
+                warnPrescanSkipped(file.filePath, error);
+            }
+        }
     }
 
     /**
@@ -5902,49 +6075,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Add every whitespace-delimited class from one string to the safelist.
-     *
-     * @param value Class string.
-     */
-    function addSafelistClasses(value: string): void {
-        for (const className of value.split(CLASS_LIST_SPACE).filter(Boolean)) {
-            addSafelistClass(className);
-        }
-    }
-
-    /**
-     * Collect direct quoted class and sz attributes.
-     *
-     * @param code Source code.
-     */
-    function collectQuotedAttributeClasses(code: string): void {
-        const patterns = [
-            /(?:class(?:Name)?|sz)[:=]\s*"([^"]*)"/g,
-            /(?:class(?:Name)?|sz)[:=]\s*'([^']*)'/g,
-        ];
-        for (const pattern of patterns) {
-            for (const match of code.matchAll(pattern)) {
-                addSafelistClasses(match[1]);
-            }
-        }
-    }
-
-    /**
-     * Collect quoted class strings inside className expression containers.
-     *
-     * @param code Source code.
-     */
-    function collectExpressionClasses(code: string): void {
-        for (const match of code.matchAll(/className=\{/g)) {
-            const bodyStart = match.index + match[0].length;
-            const expression = code.slice(bodyStart, findJsxExpressionEnd(code, bodyStart));
-            for (const stringMatch of expression.matchAll(/"([^"]+)"|'([^']+)'/g)) {
-                addSafelistClasses(stringMatch[1] ?? stringMatch[2]);
-            }
-        }
-    }
-
-    /**
      * Collect literal class strings passed directly to the merge helpers.
      * Dynamic values deliberately stay absent: without a build-time spelling
      * they cannot have a trustworthy signature and runtime must keep them.
@@ -5956,29 +6086,26 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Extracts classes from source code into the safelist (state.classes) so
-     * Tailwind generates their CSS. This is the regex fallback for files the
-     * engine's sz pass did not handle (non-sz files, Vue/Svelte adapter output),
-     * where owned and author classes are indistinguishable by regex — so these
-     * deliberately do NOT enter ownedClasses and are never mangled.
-     * Handles both static patterns (className="...") and expression patterns
-     * (className={cond ? "..." : "..."}) which arise from pre-compiled ternary expressions.
-     * @param code source code
-     */
-    function extractClasses(code: string): void {
-        collectQuotedAttributeClasses(code);
-        collectExpressionClasses(code);
-        collectMergeCallClasses(code);
-    }
-
-    /**
-     * Record raw author classes for safelisting and mangle ownership.
+     * Record raw author classes for safelisting and mangle ownership. A
+     * template's are read as its framework reads it
+     * ({@link templateClassNamesOf}); a script's by the class scanner.
      *
      * @param code Source text before csszyx transforms it.
+     * @param file Its path or bundler id.
      */
-    function recordAuthoredClasses(code: string): void {
+    function recordAuthoredClasses(code: string, file: string): void {
         collectMergeCallClasses(code);
-        for (const className of collectAuthoredClassNames(code)) {
+        const framework = templateFrameworkOf(file);
+        const names =
+            framework === null
+                ? collectAuthoredClassNames(code, engineOptions())
+                : templateClassNamesOf({
+                      framework,
+                      id: file,
+                      text: code,
+                      kind: 'source',
+                  });
+        for (const className of names) {
             addSafelistClass(className);
             state.authoredClasses.add(className);
         }
@@ -6001,7 +6128,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const digest = sha256Of(code).base64;
         if (authoredRead.get(key) === digest) return;
         authoredRead.set(key, digest);
-        recordAuthoredClasses(code);
+        recordAuthoredClasses(code, file);
     }
 
     /**
@@ -6377,7 +6504,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         assertVarMangleMapSize(state.varMangleMap, varMangleMapMaxBytes);
         state.checksum = computeMangleChecksum(
             createHydrationMangleMap(state.mangleMap, state.varMangleMap),
-            { parser: activeParser().parser },
+            engineOptions(),
         );
         state.finalized = true;
     }
@@ -6402,9 +6529,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     function mangleHtmlClasses(source: string): string {
         let output = '';
         let cursor = 0;
-        for (const { start, end, name } of htmlClassNames(source, {
-            parser: activeParser().parser,
-        })) {
+        for (const { start, end, name } of htmlClassNames(source, engineOptions())) {
             // Own keys only: `constructor` is a class name, not a map entry.
             if (!ownKey.call(state.mangleMap, name)) continue;
             output += source.slice(cursor, start) + state.mangleMap[name];
@@ -6540,7 +6665,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function recordUntransformedHotFile(file: string, content: string): void {
         // Plain merge calls need a fresh registration even without sz props.
-        recordAuthoredClasses(content);
+        recordAuthoredClasses(content, file);
         trackGlobalVarSourceFile(file, content);
         recordFileVarMangleEntries(state, file, []);
         recordFileCSSVariableMetrics(state, file, null);
@@ -6626,7 +6751,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const sizeBefore = state.classes.size;
         // Capture the previous size first: authored and lowered classes can
         // overlap, but discovering either must still grow the safelist.
-        recordAuthoredClasses(fileContent);
+        recordAuthoredClasses(fileContent, file);
         trackGlobalVarSourceFile(file, fileContent);
         recordSzClasses(file, result);
         for (const cls of result.classes) {
@@ -7335,6 +7460,119 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Lower a template's `sz` with its framework's adapter, loaded already.
+     * The transform hook and the prescan lower a file alike.
+     *
+     * @param framework - The framework whose adapter lowers it.
+     * @param code - The template's text.
+     * @param id - Its path or bundler id.
+     * @returns The adapter's result.
+     */
+    function lowerTemplate(
+        framework: TemplateFramework,
+        code: string,
+        id: string,
+    ): ReturnType<TemplatePreprocess> {
+        const { preprocess } = templateAdapters[framework] as TemplateAdapter;
+        return preprocess(code, {
+            // Every line names the file as the project reads it.
+            filename: diagnosticPath(id, state.rootDir),
+            parser: activeParser().parser,
+            classPrefix: createCompilerOptions().classPrefix,
+        });
+    }
+
+    /**
+     * Read what a template's lowered text writes: an adapter marks nothing, so
+     * every class it writes stays unrenamed, and the source holds only `sz`,
+     * so those classes are in its output alone, where Tailwind's own scan of
+     * the source never looks.
+     *
+     * The output is still a component of its framework, read as any
+     * template's text is ({@link templateClassNamesOf}).
+     *
+     * @param framework - The framework whose adapter lowered it.
+     * @param id - Its path or bundler id.
+     * @param lowered - The adapter's output.
+     * @returns The classes the output writes, for the safelist.
+     */
+    function recordTemplateOutput(
+        framework: TemplateFramework,
+        id: string,
+        lowered: string,
+    ): Set<string> {
+        recordUnmarkedNames(id, lowered);
+        return templateClassNamesOf({ framework, id, text: lowered, kind: 'output' });
+    }
+
+    /**
+     * Per template and text kind, the digest of the text last read and what
+     * {@link templateClassNamesOf} read from it: one entry a file and kind,
+     * as `unmarkedNamesByFile` keeps.
+     */
+    const templateClassReads = new Map<string, { digest: string; names: ReadonlySet<string> }>();
+
+    /**
+     * The class names a template's text puts in the DOM. With its adapter
+     * loaded, its framework's own parser reads them (`templateClassNames`):
+     * static `class` words, `class:` directives, and the class binding
+     * expressions, Vue's through the class scanner's expression reader. A
+     * text is read once per process; the prescan and the transform hook read
+     * the same text.
+     *
+     * Without the adapter, for a file its framework cannot parse, or when the
+     * framework itself is missing (`vue` and `svelte` are optional peers, so a
+     * React project with one stray `.vue` file has the adapter and no Vue),
+     * the text is read as markup ({@link markupClassNames}).
+     *
+     * Cost: one parse a text (about 0.01 ms a Vue file, 0.1 ms a Svelte
+     * component), then a hash.
+     *
+     * @param template - The text to read.
+     * @param template.framework - Its framework.
+     * @param template.id - Its path or bundler id.
+     * @param template.text - Its text.
+     * @param template.kind - Whether it is the source or the adapter's output.
+     * @returns The names; a set the caller may add to.
+     */
+    function templateClassNamesOf(template: {
+        framework: TemplateFramework;
+        id: string;
+        text: string;
+        kind: 'source' | 'output';
+    }): Set<string> {
+        const { framework, id, text, kind } = template;
+        const adapter = templateAdapters[framework];
+        const key = `${kind}:${normalizeSourceFilename(id)}`;
+        const digest = sha256Of(text).base64;
+        const known = templateClassReads.get(key);
+        if (known?.digest === digest) return new Set(known.names);
+        const reading = adapter === undefined ? null : readWithFramework(adapter, text);
+        const names = reading === null ? markupClassNames(text) : new Set(reading.names);
+        for (const expression of reading?.expressions ?? []) {
+            collectClassExpressionNames(names, expression);
+        }
+        // Only the adapter's reading is the file's for good.
+        if (adapter !== undefined) templateClassReads.set(key, { digest, names });
+        return new Set(names);
+    }
+
+    /**
+     * The class names of markup read without its framework: each `class`
+     * attribute as the HTML tokenizer reads it (`htmlClassNames`), so text
+     * such as `Don't` is text, and the class scanner's reading for a binding
+     * such as Vue's `:class="'p-4'"`, which only adds names.
+     *
+     * @param text - The markup.
+     * @returns The names.
+     */
+    function markupClassNames(text: string): Set<string> {
+        const names = collectAuthoredClassNames(text, engineOptions());
+        for (const { name } of htmlClassNames(text, engineOptions())) names.add(name);
+        return names;
+    }
+
+    /**
      * Dispatch one sz-bearing source module to its framework/compiler lane.
      *
      * @param code Source module contents.
@@ -7353,15 +7591,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (framework !== null) {
             // A template has no csszyx runtime: a value the engine cannot
             // resolve at build time is an error, and the build stops on it.
-            const adapterOptions = {
-                // Every line names the file as the project reads it.
-                filename: diagnosticPath(id, state.rootDir),
-                parser: activeParser().parser,
-                classPrefix: createCompilerOptions().classPrefix,
-            };
-            // The transform hook loads it before it lowers the first file.
-            const preprocess = templateAdapters[framework] as TemplatePreprocess;
-            const result = preprocess(code, adapterOptions);
+            const result = lowerTemplate(framework, code, id);
             (reportTemplateSzDiagnostics as TemplateReport)(
                 {
                     warn,
@@ -7371,8 +7601,9 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 },
                 result.diagnostics,
             );
-            // An adapter marks nothing, so every class its output writes stays.
-            recordUnmarkedNames(id, result.code);
+            for (const className of recordTemplateOutput(framework, id, result.code)) {
+                addSafelistClass(className);
+            }
             return { ...unchangedPreTransform(result.code), transformed: result.code !== code };
         }
 
@@ -7784,13 +8015,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         ) {
             return null;
         }
-        if (output.szClasses) {
-            for (const className of output.szClasses) {
-                addSafelistClass(className);
-                state.ownedClasses.add(className);
-            }
-        } else {
-            extractClasses(output.code);
+        // The classes a module writes itself are already in the safelist:
+        // `readTransformedSourceFacts` read its text, and `transformSzSource`
+        // the output of a template adapter.
+        for (const className of output.szClasses ?? []) {
+            addSafelistClass(className);
+            state.ownedClasses.add(className);
         }
         return { code: output.code, map: null };
     }

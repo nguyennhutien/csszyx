@@ -24,6 +24,8 @@ import type { Plugin } from 'vite';
 
 import { readSzAttributes } from './markup-ast.js';
 
+export { templateClassNames } from './markup-ast.js';
+
 /**
  * The extension of the files this adapter lowers: a Svelte component.
  * `@csszyx/unplugin` routes a file here by it before loading the adapter.

@@ -1,6 +1,7 @@
 import * as nativeModule from '@csszyx/core/native';
 import {
     CsszyxNativeUnavailableError,
+    classAttributeReadings,
     computeMangleChecksum,
     encodeClassName,
     getNativePackageName,
@@ -686,6 +687,24 @@ export function htmlClassNamesRust(html: string): HtmlClassName[] {
     try {
         checkNativeEngine();
         return htmlClassNames(html);
+    } catch (error) {
+        throw asRustUnavailable(error);
+    }
+}
+
+/**
+ * Every text a class attribute string can put in the DOM, on the native
+ * engine.
+ *
+ * @internal Used by `@csszyx/unplugin`; not a stable API.
+ * @param raw - The attribute string as written.
+ * @returns The texts: as JSX reads it, then as HTML does, each once.
+ * @throws {RustTransformUnavailableError} when the native engine cannot run.
+ */
+export function classAttributeReadingsRust(raw: string): string[] {
+    try {
+        checkNativeEngine();
+        return classAttributeReadings(raw);
     } catch (error) {
         throw asRustUnavailable(error);
     }

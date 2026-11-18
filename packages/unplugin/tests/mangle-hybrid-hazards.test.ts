@@ -189,6 +189,28 @@ describe('hybrid raw-class ownership', () => {
         expect(mangleEligibleClasses(owned, authored)).toEqual(['p-4']);
     });
 
+    it.each([
+        ['JSX', '<div className="p&#45;4 m-2" />'],
+        // JSX keeps a reference spelled `&#X`; HTML decodes it.
+        ['HTML-only', '<div class="p&#X2d;4 m-2" />'],
+    ])('keeps an owned class a %s attribute spells with a reference unrenamed', (_case, source) => {
+        // The element carries `p-4` in the DOM: renaming it in the CSS would
+        // leave the element unstyled.
+        const owned = new Set(['p-4', 'm-2', 'gap-1']);
+        const authored = collectAuthoredClassNames(source);
+        expect(mangleEligibleClasses(owned, authored)).toEqual(['gap-1']);
+    });
+
+    it('keeps an owned class an HTML attribute spells with an HTML5 name unrenamed', () => {
+        // `&colon;` and `&lsqb;`/`&rsqb;` are HTML5 names JSX does not read,
+        // so only the HTML reading carries `hover:p-4` and `w-[10px]`.
+        const owned = new Set(['hover:p-4', 'w-[10px]', 'gap-1']);
+        const authored = collectAuthoredClassNames(
+            '<div class="hover&colon;p-4 w-&lsqb;10px&rsqb;" />',
+        );
+        expect(mangleEligibleClasses(owned, authored)).toEqual(['gap-1']);
+    });
+
     it('orders eligible classes independently of discovery order', () => {
         const authored = new Set(['p-4']);
 

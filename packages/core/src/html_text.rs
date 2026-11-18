@@ -506,14 +506,15 @@ enum Piece<'a> {
     /// The `&` of `&name;` with a name the reader cannot tell. None of them
     /// reads as whitespace (of the 2,125 names, only `Tab` and `NewLine` do,
     /// and both are read), so it stays inside the class name it is written
-    /// in, and the name and `;` after it read as that name's text.
+    /// in, and the name and `;` after it read as that name's text. None reads
+    /// as ASCII either, save `fjlig` (`fj`).
     Unknown(usize),
 }
 
 /// Walk an attribute value as the tokenizer decodes it. `&name;` with a name
-/// outside the legacy set, `apos`, `Tab` and `NewLine` comes as
-/// [`Piece::Unknown`]: HTML names 2,231, and reading one wrong would rewrite
-/// a class the page never had. An `&` that starts no name is text (`R&D`,
+/// outside [`LEGACY_NAMES`] and [`ASCII_NAMES`] comes as [`Piece::Unknown`]:
+/// HTML names 2,231, and reading one wrong would rewrite a class the page
+/// never had. An `&` that starts no name is text (`R&D`,
 /// `[&a]:p-4`).
 fn decode_pieces<'a>(raw: &'a str, mut piece: impl FnMut(Piece<'a>)) {
     let bytes = raw.as_bytes();
@@ -605,19 +606,15 @@ fn reference_at(bytes: &[u8], at: usize) -> Reference {
     }
     let name = &rest[..run];
     let semicolon = rest.get(run) == Some(&b';');
-    let legacy = LEGACY_NAMES
-        .split(' ')
-        .position(|legacy| legacy.as_bytes() == name)
-        .map(|index| char::from(LEGACY_CHARACTERS[index]));
-    // The names besides the legacy ones that the reader knows: `apos`, and
-    // the only two that read as whitespace, which split a class list.
-    let known = match name {
-        b"apos" => Some('\''),
-        b"Tab" => Some('\t'),
-        b"NewLine" => Some('\n'),
-        _ => None,
+    let lookup = |names: &str, characters: &[u8]| {
+        names
+            .split(' ')
+            .position(|known| known.as_bytes() == name)
+            .map(|index| char::from(characters[index]))
     };
-    match (legacy.or(known), semicolon) {
+    let legacy = lookup(LEGACY_NAMES, LEGACY_CHARACTERS);
+    let known = || lookup(ASCII_NAMES, ASCII_CHARACTERS);
+    match (legacy.or_else(known), semicolon) {
         (Some(character), true) => Reference::Char(run + 2, character),
         // Without its `;`, a legacy name before `=` stays text in a value.
         (Some(character), false) if legacy.is_some() && rest.get(run) != Some(&b'=') => {
@@ -656,25 +653,74 @@ const LEGACY_CHARACTERS: &[u8; 106] =
       \xba\xf8\xf5\xf6\xb6\xb1\xa3\x22\xbb\xae\xa7\xad\xb9\xb2\xb3\xdf\xfe\xd7\xfa\xfb\
       \xf9\xa8\xfc\xfd\xa5\xff";
 
+/// The 37 names outside [`LEGACY_NAMES`] that stand for one ASCII character
+/// (from the `entities` package's `entities.json`), and in
+/// [`ASCII_CHARACTERS`] at the same position that character. Each needs its
+/// `;`. A class is written in ASCII, so these are the names a page spells one
+/// with (`hover&colon;p-4`, `w-&lsqb;10px&rsqb;`), and the only two that read
+/// as whitespace, `Tab` and `NewLine`, are among them. Locked to parse5 by
+/// the fixture case that writes every one.
+const ASCII_NAMES: &str = "DiacriticalGrave Hat NewLine Tab UnderBar VerticalLine apos ast bsol \
+     colon comma commat dollar equals excl grave lbrace lbrack lcub lowbar lpar lsqb midast num \
+     percnt period plus quest rbrace rbrack rcub rpar rsqb semi sol verbar vert";
+
+/// The characters of [`ASCII_NAMES`], in its order.
+const ASCII_CHARACTERS: &[u8; 37] = b"`^\n\t_|'*\\:,@$=!`{[{_([*#%.+?}]})];/||";
+
 /// An attribute value as the tokenizer decodes it; `None` when it holds a
 /// named reference the reader cannot tell ([`Piece::Unknown`]), which
 /// migrate leaves as written.
 #[cfg(any(feature = "migrate", test))]
 pub fn decode_attribute_value(raw: &str) -> Option<std::borrow::Cow<'_, str>> {
+    match decode_attribute(raw) {
+        (_, true) => None,
+        (text, false) => Some(text),
+    }
+}
+
+/// An attribute value as the tokenizer decodes it, each `&name;` the reader
+/// cannot tell ([`Piece::Unknown`]) kept as written, and whether there was one.
+#[cfg(any(feature = "migrate", feature = "native-engine", test))]
+fn decode_attribute(raw: &str) -> (std::borrow::Cow<'_, str>, bool) {
     if !raw.bytes().any(|b| b == b'&' || b == b'\0') {
-        return Some(std::borrow::Cow::Borrowed(raw));
+        return (std::borrow::Cow::Borrowed(raw), false);
     }
     let mut decoded = String::with_capacity(raw.len());
     let mut unknown = false;
     decode_pieces(raw, |piece| match piece {
         Piece::Text(_, text) => decoded.push_str(text),
         Piece::Char(_, _, character) => decoded.push(character),
-        Piece::Unknown(_) => unknown = true,
+        Piece::Unknown(_) => {
+            unknown = true;
+            decoded.push('&');
+        }
     });
-    if unknown {
-        return None;
+    (std::borrow::Cow::Owned(decoded), unknown)
+}
+
+/// Every text a class attribute string written as `raw` can put in the DOM,
+/// each once: as JSX reads it, then as HTML does. `raw` itself is one of them
+/// when a language reads it as written.
+///
+/// A scanner that does not know which language a file's attribute is in
+/// reads every one, so a name the element carries is never missed; reading
+/// one it does not carry only keeps a class from being renamed. HTML keeps a
+/// name it cannot tell as written, as the class reader does.
+///
+/// `n` = `raw.len()`: one walk per language, none when `raw` holds no `&`
+/// and no NUL.
+#[cfg(feature = "native-engine")]
+pub fn class_attribute_readings(raw: &str) -> Vec<String> {
+    let mut readings: Vec<String> = Vec::with_capacity(2);
+    for reading in [
+        crate::transform::jsx_text::decode_jsx_attribute_text(raw),
+        decode_attribute(raw).0,
+    ] {
+        if !readings.iter().any(|seen| *seen == reading) {
+            readings.push(reading.into_owned());
+        }
     }
-    Some(std::borrow::Cow::Owned(decoded))
+    readings
 }
 
 /// One class name of a `class` attribute the tokenizer reads: where its
@@ -772,6 +818,37 @@ impl<'a> Utf16Counter<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn a_class_attribute_reads_as_jsx_then_as_html() {
+        // Both languages agree: one reading.
+        assert_eq!(class_attribute_readings("p&#45;4 a&amp;b"), ["p-4 a&b"]);
+        // JSX knows `hellip`, HTML keeps it as written.
+        assert_eq!(
+            class_attribute_readings("x&hellip;"),
+            ["x\u{2026}", "x&hellip;"]
+        );
+        // HTML decodes `&lt` before a space with no `;`, JSX reads it as written.
+        assert_eq!(class_attribute_readings("x&lt y"), ["x&lt y", "x< y"]);
+        assert_eq!(class_attribute_readings("&lt;a&lt b"), ["<a&lt b", "<a< b"]);
+        // Nothing to decode, or nothing either language reads: the text itself.
+        assert_eq!(class_attribute_readings("p-4 [&_p]:m-2"), ["p-4 [&_p]:m-2"]);
+        assert_eq!(class_attribute_readings("a&bogus;b"), ["a&bogus;b"]);
+        // A NUL reads as U+FFFD in HTML only.
+        assert_eq!(class_attribute_readings("a\0b"), ["a\0b", "a\u{FFFD}b"]);
+    }
+
+    #[test]
+    fn an_attribute_keeps_a_name_the_reader_cannot_tell_and_says_so() {
+        assert!(matches!(
+            decode_attribute("p-4"),
+            (std::borrow::Cow::Borrowed("p-4"), false)
+        ));
+        let (text, unknown) = decode_attribute("&foo;&amp;x&#65;");
+        assert_eq!((text.as_ref(), unknown), ("&foo;&xA", true));
+        assert!(!decode_attribute("&amp;").1);
+    }
 
     /// The cases parse5 answers (`tests/fixtures/html-class-cases.json`):
     /// where each `class` lies, in UTF-16 units, and the value it decodes to.

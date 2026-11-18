@@ -99,6 +99,24 @@ export type TemplatePreprocess = (
     options: TemplateSzOptions,
 ) => TemplatePreprocessResult;
 
+/**
+ * The class names a template's text puts in the DOM, as its framework's own
+ * parser reads it: what an adapter reads itself, and the class binding
+ * expressions it leaves to a JavaScript reader.
+ */
+export interface TemplateClassReading {
+    /** Static `class` words, `class:` directive names, and the names an adapter reads from an expression itself. */
+    names: string[];
+    /** Class binding expressions, as written, for a JavaScript reader. */
+    expressions: string[];
+}
+
+/**
+ * The `templateClassNames` every template adapter exports: null for a file
+ * its framework cannot parse, which the caller then reads another way.
+ */
+export type TemplateClassNames = (source: string) => TemplateClassReading | null;
+
 /** What {@link templateVitePlugin} builds a plugin from. */
 export interface TemplateVitePluginInput {
     /** The plugin's name. */

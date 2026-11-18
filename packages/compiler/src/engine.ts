@@ -33,6 +33,7 @@ export {
     scanGlobalVarUsages,
 } from './global-var-diagnostics.js';
 export {
+    classAttributeReadings,
     classNameEncoder,
     computeMangleChecksum,
     type HtmlClassName,
@@ -54,6 +55,7 @@ export type {
     TransformSourceOptions,
 } from './transform-core.js';
 export {
+    classAttributeReadingsRust,
     computeMangleChecksumRust,
     encodeClassNameRust,
     ensureRustTransformAvailable,
@@ -68,6 +70,7 @@ export {
 } from './transform-rust.js';
 export { transformSource } from './transform-select.js';
 export {
+    classAttributeReadingsWasm,
     computeMangleChecksumWasm,
     encodeClassNameWasm,
     htmlClassNamesWasm,

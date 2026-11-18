@@ -152,6 +152,147 @@ describe('the sz prescan', () => {
         60_000,
     );
 
+    it.each(lanes)(
+        'of a %s build safelists the templates it walks and the gitignored ones `@source` names',
+        async (_lane, prescan) => {
+            const safelist = await prescan({
+                '.gitignore': 'src/generated/\nsrc/hidden/\n',
+                'src/App.vue': '<template><div sz="{ p: 9 }" /></template>\n',
+                // No `sz`: the adapter is not asked, so the class its output
+                // would carry stays out of the safelist.
+                'src/Plain.vue': '<template><div class="plain-raw" /></template>\n',
+                'src/generated/Card.svelte': '<div sz={{ m: 9 }} />\n',
+                'src/hidden/Gone.vue': '<template><div sz="{ m: 13 }" /></template>\n',
+                // `App.vue` is both walked and named by `@source`.
+                'src/index.css': `${TW}@source "./generated";\n@source "./App.vue";\n`,
+            });
+            expect(safelist).toContain('p-9');
+            expect(safelist).toContain('m-9');
+            expect(safelist).not.toContain('m-13');
+            expect(safelist).not.toContain('plain-raw');
+        },
+        60_000,
+    );
+
+    it('reads a stray template as markup when its framework is not installed', async () => {
+        // The adapters ship with the plugin; `vue` and `svelte` are optional
+        // peers, so a React project with one `.vue` file has the adapter and
+        // no `vue/compiler-sfc`.
+        vi.doMock('@csszyx/vue-adapter', async original => ({
+            ...(await original<typeof import('@csszyx/vue-adapter')>()),
+            templateClassNames: () => {
+                throw new Error('install vue@3.5');
+            },
+        }));
+        try {
+            vi.resetModules();
+            const { vitePlugin: freshPlugin } = await import('../src/unplugin.js');
+            const root = tailwindProject('csszyx-template-no-peer-', {
+                'src/index.css': TW,
+                'src/Box.tsx': 'export const Box = () => <div sz={{ gap: 1 }} />;\n',
+                'src/Stray.vue': `<template><p>Don't</p><i class="stray-a">x</i></template>\n`,
+            });
+            vi.spyOn(process, 'cwd').mockReturnValue(root);
+            const call = callHooks(
+                freshPlugin({
+                    build: { cache: false },
+                    production: { mangle: false },
+                }) as unknown as Record<string, unknown>[],
+            );
+            await call('configResolved', { root, command: 'build' });
+            const safelist = readFileSync(join(root, '.csszyx/csszyx-classes.txt'), 'utf8');
+            expect(safelist).toContain('gap-1');
+        } finally {
+            vi.doUnmock('@csszyx/vue-adapter');
+            vi.resetModules();
+        }
+    }, 60_000);
+
+    it('reads a template outside `include` for its merge hooks only', async () => {
+        const root = tailwindProject('csszyx-template-include-', {
+            'src/index.css': TW,
+            'src/Box.tsx': 'export const Box = () => <div sz={{ gap: 1 }} />;\n',
+            'src/Out.vue': '<template><div sz="{ p: 19 }" /></template>\n',
+        });
+        vi.spyOn(process, 'cwd').mockReturnValue(root);
+        const call = callHooks(
+            vitePlugin({
+                build: { cache: false },
+                production: { mangle: false },
+                include: [/\.tsx$/],
+            }) as unknown as Record<string, unknown>[],
+        );
+        await call('configResolved', { root, command: 'build' });
+        const safelist = readFileSync(join(root, '.csszyx/csszyx-classes.txt'), 'utf8');
+        expect(safelist).toContain('gap-1');
+        expect(safelist).not.toContain('p-19');
+    }, 60_000);
+
+    it('names a template its adapter cannot load or lower and writes the rest', async () => {
+        vi.doMock('node:fs', async original => {
+            const fs = await original<typeof import('node:fs')>();
+            const readFileSync = ((file: unknown, ...rest: unknown[]) => {
+                if (String(file).endsWith('Gone.vue')) throw new Error('ENOENT');
+                return (fs.readFileSync as (...args: unknown[]) => unknown)(file, ...rest);
+            }) as typeof fs.readFileSync;
+            return { ...fs, readFileSync, default: { ...fs, readFileSync } };
+        });
+        vi.doMock('@csszyx/vue-adapter', () => {
+            throw new Error('vue adapter missing');
+        });
+        vi.doMock('@csszyx/svelte-adapter', () => ({
+            preprocess: () => {
+                // Not an Error: its text is still what the warning names.
+                throw 'adapter broke';
+            },
+            templateClassNames: () => ({ names: [], expressions: [] }),
+        }));
+        const warned: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation((message: unknown) => {
+            warned.push(String(message));
+        });
+        try {
+            vi.resetModules();
+            const { vitePlugin: freshPlugin } = await import('../src/unplugin.js');
+            const root = tailwindProject('csszyx-gitignore-adapter-', {
+                'src/index.css': TW,
+                // The control: a script's sz reaches the safelist.
+                'src/Box.tsx': 'export const Box = () => <div sz={{ gap: 1 }} />;\n',
+                'src/App.vue': '<template><div sz="{ p: 9 }" /></template>\n',
+                'src/Card.svelte': '<div sz={{ m: 9 }} />\n',
+                // Excluded: not read at all.
+                'src/Skip.vue': '<template><div sz="{ p: 15 }" /></template>\n',
+                // Listed by the walk and unreadable when it is read, as the
+                // delete race leaves it: skipped without a word.
+                'src/Gone.vue': '<template><div sz="{ p: 17 }" /></template>\n',
+            });
+            vi.spyOn(process, 'cwd').mockReturnValue(root);
+            const call = callHooks(
+                freshPlugin({
+                    build: { cache: false },
+                    production: { mangle: false },
+                    exclude: ['**/Skip.vue'],
+                }) as unknown as Record<string, unknown>[],
+            );
+            await call('configResolved', { root, command: 'build' });
+            const safelist = readFileSync(join(root, '.csszyx/csszyx-classes.txt'), 'utf8');
+            expect(safelist).toContain('gap-1');
+            expect(safelist).not.toContain('p-9');
+            expect(safelist).not.toContain('m-9');
+            expect(safelist).not.toContain('p-15');
+            expect(safelist).not.toContain('p-17');
+            expect(warned.join('\n')).not.toContain('Gone.vue');
+            expect(warned.join('\n')).toContain('src/Card.svelte');
+            expect(warned.join('\n')).toContain('adapter broke');
+            expect(warned.join('\n')).toContain('src/App.vue');
+        } finally {
+            vi.doUnmock('@csszyx/vue-adapter');
+            vi.doUnmock('@csszyx/svelte-adapter');
+            vi.doUnmock('node:fs');
+            vi.resetModules();
+        }
+    }, 60_000);
+
     it('leaves out a file a stylesheet names outside the project root', async () => {
         // Outside the root, a package is opted in through `compileSources`,
         // as `csszyx check` and the Next prebuild read it.
@@ -349,12 +490,24 @@ describe('a gitignored module the build lowers', () => {
         expect(warned).toContain('src/generated/variants.ts');
     }, 60_000);
 
-    it('is not named for a component the prescan reads no classes from', async () => {
+    it('is named for a template, whose classes the prescan reads through its adapter', async () => {
         const module = 'src/generated/Card.vue';
         const warned = await warnedAfter(
             { ...GENERATED, [module]: '<template><div :sz="{ m: 9 }" /></template>\n' },
             TW,
             module,
+        );
+        expect(warned).toContain('`.gitignore` covers');
+        expect(warned).toContain('src/generated/Card.vue');
+    }, 60_000);
+
+    it('is not named for a script block of a file the prescan does not read', async () => {
+        // An Astro script block is lowered as `.ts`, but the file is `.astro`,
+        // which no prescan reads: an `@source` for it would add nothing.
+        const warned = await warnedAfter(
+            GENERATED,
+            TW,
+            'src/generated/Page.astro?astro&type=script&index=0&lang.ts',
         );
         expect(warned).not.toContain('`.gitignore` covers');
     }, 60_000);

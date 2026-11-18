@@ -71,6 +71,7 @@ migrate = [
     "dep:oxc_parser",
     "dep:oxc_span",
     "dep:oxc_str",
+    "dep:oxc_syntax",
 ]
 native-engine = [
     "dep:oxc_allocator",

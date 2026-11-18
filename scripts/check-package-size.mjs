@@ -600,7 +600,13 @@ export const SIZE_BUDGETS = [
         // (the only two that read as whitespace) split a list. 424 gzip -9
         // bytes (594,758 → 595,182, same build). This script reads 598,733.
         // ~300 bytes of headroom.
-        maxGzipBytes: 599_030,
+        //
+        // Raised from 599,030 on 2026-11-18: `class_attribute_readings_json`,
+        // the texts a class attribute string can put in the DOM as JSX and
+        // as HTML read it, so the mangle census reads `className="p&#45;4"`
+        // as `p-4`. This script reads 599,257 with no wasm-opt (container).
+        // ~300 bytes of headroom.
+        maxGzipBytes: 599_560,
     },
     // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
     // bundles from the compiler's source, unminified, and that every editor
@@ -834,7 +840,10 @@ export const SIZE_BUDGETS = [
         // re-lays out the browser `transform-core` chunk (`./browser` +107).
         // 31,200 on 2026-11-08, measured 30,581: the `underscore-space` registry entry and the step that moves its fact out of
         // `issues`, so no lane renders a verdict the engine did not make.
-        maxGzipBytes: 31_200,
+        // 31,650 on 2026-11-18, measured 31,341: `classAttributeReadings` on
+        // both artifacts, which the mangle census decodes attribute strings
+        // through.
+        maxGzipBytes: 31_650,
         excludedModules: [
             'src/state-variants.generated.ts',
             'src/template-sz.ts',
@@ -857,7 +866,9 @@ export const SIZE_BUDGETS = [
         // whole plugin process.
         // 31,700 on 2026-11-08, measured 31,089: the `underscore-space` registry entry and the step that moves its fact out of
         // `issues`, so no lane renders a verdict the engine did not make.
-        maxGzipBytes: 31_700,
+        // 32,050 on 2026-11-18, measured 31,748: `classAttributeReadings`
+        // (see `./engine`).
+        maxGzipBytes: 32_050,
         excludedModules: [
             'src/state-variants.generated.ts',
             'src/template-sz.ts',
@@ -873,7 +884,9 @@ export const SIZE_BUDGETS = [
         // loaded only when a build meets a `.vue` or `.svelte` file.
         // 33,400 on 2026-11-08, measured 32,757: the `underscore-space` registry entry and the step that moves its fact out of
         // `issues`, so no lane renders a verdict the engine did not make.
-        maxGzipBytes: 33_400,
+        // 33,700 on 2026-11-18, measured 33,416: `classAttributeReadings`
+        // (see `./engine`).
+        maxGzipBytes: 33_700,
         excludedModules: ['src/state-variants.generated.ts'],
     },
     // The plugin and the CLI run in Node at the start of every build, dev
@@ -919,7 +932,10 @@ export const SIZE_BUDGETS = [
         // 125,550 the same day, measured 125,259, after review: the webpack
         // HTML mangle reads `class` through the shared HTML reader (spaced
         // `=`, unquoted values, any case). ~300 bytes of headroom.
-        maxGzipBytes: 125_550,
+        // 126,100 on 2026-11-18, measured 125,777: a template's classes are
+        // read by its adapter's framework parser, cached per file, with the
+        // HTML reader as the fallback. ~300 bytes of headroom.
+        maxGzipBytes: 126_100,
         wrappers: ['./vite', './webpack'],
     },
     {
@@ -1073,7 +1089,9 @@ export const SIZE_BUDGETS = [
         // Measured 27,572. 28,300 on 2026-11-08, measured 27,982: the
         // `underscore-space` registry entry. 28,600 on 2026-11-12, measured
         // 28,325: the `mangle-mark-missed` registry entry.
-        maxGzipBytes: 28_600,
+        // 28,900 on 2026-11-18, measured 28,601: `classAttributeReadings`
+        // (see `./engine`).
+        maxGzipBytes: 28_900,
     },
     {
         name: '@csszyx/compiler `./report`, loaded by Node',
@@ -1118,7 +1136,9 @@ export const SIZE_BUDGETS = [
         subpath: '.',
         // The same for a Svelte build and `svelte.config.js`; the template
         // kit and `svelte/compiler` are other packages. Measured 2,087.
-        maxGzipBytes: 2_400,
+        // 3,100 on 2026-11-18, measured 2,782: `templateClassNames` reads a
+        // component's classes from Svelte's own tree, expressions included.
+        maxGzipBytes: 3_100,
     },
 ];
 
