@@ -556,6 +556,12 @@ interface PrescanSourceFile {
     content: string;
 }
 
+/** A template queued by the prescan walker for its framework's adapter. */
+interface PrescanTemplateFile extends PrescanSourceFile {
+    /** The framework whose adapter lowers it. */
+    framework: TemplateFramework;
+}
+
 /** Prescan source file plus transform result. */
 interface PrescanTransformResult {
     /** Absolute source path. */
@@ -4945,6 +4951,22 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Name a file the prescan skipped. The build goes on, but the skip must be
+     * visible: every class in the file is dead under Tailwind `source(none)`.
+     *
+     * @param filePath - The skipped file.
+     * @param err - Why it was skipped.
+     */
+    function warnPrescanSkipped(filePath: string, err: unknown): void {
+        console.warn(
+            diagnosticMessage('engine-call-failed', {
+                file: projectRelative(filePath),
+                detail: err instanceof Error ? err.message : String(err),
+            }),
+        );
+    }
+
+    /**
      * Transforms prescan files one by one.
      *
      * @param files Source files discovered during prescan.
@@ -4965,15 +4987,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     ),
                 });
             } catch (err) {
-                // Historical prescan behavior keeps the build alive, but the skip
-                // itself must be visible: every class in this file is silently
-                // dead under Tailwind `source(none)`.
-                console.warn(
-                    diagnosticMessage('engine-call-failed', {
-                        file: projectRelative(file.filePath),
-                        detail: err instanceof Error ? err.message : String(err),
-                    }),
-                );
+                warnPrescanSkipped(file.filePath, err);
             }
         }
         return results;
@@ -5420,16 +5434,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * `.gitignore` covers it and no stylesheet names it (ADR 0033). Its
      * classes reach the CSS only through the transform, on a lane that adds a
      * class found that late, and a module that only declares `szv` not even
-     * then, so the build names it once at its end. Only a script the prescan
-     * reads counts: a `.vue` or `.svelte` file gives the safelist nothing
-     * wherever it sits, so naming it would change nothing.
+     * then, so the build names it once at its end. Only a file the prescan
+     * reads counts: a script, or a template its framework's adapter lowers.
      *
      * @param id - The module's bundler id.
      */
     function recordGitignoredSz(id: string): void {
         if (prescanScope === null) return;
         const file = id.split('?', 1)[0] as string;
-        if (!SOURCE_EXTENSIONS.has(path.extname(file))) return;
+        if (!isPrescanned(file)) return;
         if (prescanScope.read.has(normalizePathSeparators(file))) return;
         if (state.gitignoredSzFiles.has(file) || !prescanScope.gitignored(file)) return;
         state.gitignoredSzFiles.add(file);
@@ -5493,6 +5506,17 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Whether the prescan reads a file of this name: a script, or a template
+     * its framework's adapter lowers.
+     *
+     * @param file - A path or bundler id, without a query.
+     * @returns True when the prescan reads it.
+     */
+    function isPrescanned(file: string): boolean {
+        return SOURCE_EXTENSIONS.has(path.extname(file)) || templateFrameworkOf(file) !== null;
+    }
+
+    /**
      * Take back the files a stylesheet's `@source` names that the walk left
      * out, as the project's own Scanner lists them (`filesNamedBySources`):
      * a gitignored folder Tailwind is pointed at, so the sz it holds reaches
@@ -5518,7 +5542,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const named = filesNamedBySources(state.rootDir, state.rootDir, model.sourceRules) ?? [];
         const folders = folderSpellings([normalizeForMatch(state.rootDir), ...compileSourceDirs]);
         for (const reported of named) {
-            if (!SOURCE_EXTENSIONS.has(path.extname(reported))) continue;
+            if (!isPrescanned(reported)) continue;
             const file = spelledInside(reported, folders);
             if (file === null || seen.has(normalizePathSeparators(file))) continue;
             collect(file, false);
@@ -5684,6 +5708,24 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         // What the walk reads for merge hooks, read in one scan once it finishes.
         const hookTexts: SourceText[] = [];
         const linkSources: { filePath: string; content: string }[] = [];
+        // Templates that may hold `sz`, lowered once the prefix is known, and
+        // every template the walk read, so a named one is read once.
+        const templateSources: PrescanTemplateFile[] = [];
+        const seenTemplatePaths = new Set<string>();
+
+        /**
+         * Read one template into the prescan's template queue, once.
+         *
+         * @param filePath Template file path.
+         * @param framework The framework its extension names.
+         */
+        function collectTemplateSource(filePath: string, framework: TemplateFramework): void {
+            const key = normalizePathSeparators(filePath);
+            if (seenTemplatePaths.has(key)) return;
+            seenTemplatePaths.add(key);
+            const template = templateSourceOf(filePath, framework);
+            if (template !== null) templateSources.push(template);
+        }
 
         /**
          * Read one processable source into the prescan queue.
@@ -5749,11 +5791,16 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
 
         const walkStarted = performance.now();
         const gitignored = walkProjectFiles((filePath, extension, readsHooks) => {
-            if (SOURCE_EXTENSIONS.has(extension)) collectPrescanSource(filePath, readsHooks);
-            else if (readsHooks && MARKUP_EXTENSIONS.has(extension)) {
+            if (SOURCE_EXTENSIONS.has(extension)) {
+                collectPrescanSource(filePath, readsHooks);
+                return;
+            }
+            if (readsHooks && MARKUP_EXTENSIONS.has(extension)) {
                 const hookText = markupHookText(filePath);
                 if (hookText !== null) hookTexts.push(hookText);
             }
+            const framework = templateFrameworkOf(filePath);
+            if (framework !== null) collectTemplateSource(filePath, framework);
         });
         readSourceHooksOf(hookTexts);
 
@@ -5771,14 +5818,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         traceBenchTiming('prescan:model', state.rootDir, modelElapsed);
         const walked = seenSourcePaths.size;
         const namedStarted = performance.now();
-        admitNamedSources(model, seenSourcePaths, collectPrescanSource);
+        admitNamedSources(model, seenSourcePaths, (filePath, readsHooks) => {
+            const framework = templateFrameworkOf(filePath);
+            if (framework === null) collectPrescanSource(filePath, readsHooks);
+            else collectTemplateSource(filePath, framework);
+        });
         const namedElapsed = performance.now() - namedStarted;
         traceBenchTiming(
             `prescan:named files=${seenSourcePaths.size - walked}`,
             state.rootDir,
             namedElapsed,
         );
-        prescanScope = { read: seenSourcePaths, gitignored };
+        prescanScope = { read: new Set([...seenSourcePaths, ...seenTemplatePaths]), gitignored };
 
         // Every walked file's szv factories and forwards, read in one engine
         // call per question. The factories are recorded even when the registry
@@ -5837,6 +5888,14 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             performance.now() - batchStarted,
         );
 
+        const templatesStarted = performance.now();
+        await lowerPrescanTemplates(templateSources, rawDiscoveredClasses);
+        traceBenchTiming(
+            `prescan:templates files=${templateSources.length}`,
+            state.rootDir,
+            performance.now() - templatesStarted,
+        );
+
         // sz-generated classes are csszyx-owned: safe to both safelist and mangle.
         // Raw className values are added to the safelist below but never to
         // ownedClasses. Shared raw/sz names are subtracted when the map finalizes.
@@ -5856,6 +5915,71 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             performance.now() - safelistStarted,
         );
         traceBenchTiming('prescan', state.rootDir, performance.now() - prescanStarted);
+    }
+
+    /**
+     * A template the prescan lowers: one of a framework an adapter lowers,
+     * that the build processes and whose text may hold `sz`.
+     *
+     * @param filePath - Absolute path of a walked file.
+     * @param framework - The framework its extension names.
+     * @returns The file with its text and framework, or null.
+     */
+    function templateSourceOf(
+        filePath: string,
+        framework: TemplateFramework,
+    ): PrescanTemplateFile | null {
+        if (!shouldProcessSource(filePath)) return null;
+        let content: string;
+        try {
+            content = fs.readFileSync(filePath, 'utf-8');
+        } catch {
+            return null;
+        }
+        return moduleMayHoldSz(content) ? { filePath, content, framework } : null;
+    }
+
+    /**
+     * Lower each template the prescan found and add the classes its output
+     * writes to the safelist, as the transform hook does for the same file:
+     * the safelist is written before any module is transformed, and a
+     * `source(none)` stylesheet reads nothing else. Each framework's adapter
+     * loads once, all at once. A file whose adapter fails to load or to lower
+     * it is named and skipped; the transform hook reports why when it lowers
+     * the file.
+     *
+     * Cost: one adapter call per template that may hold `sz`.
+     *
+     * @param files - The templates, in walk order.
+     * @param sink - The raw safelist classes of this prescan.
+     */
+    async function lowerPrescanTemplates(
+        files: readonly PrescanTemplateFile[],
+        sink: Set<string>,
+    ): Promise<void> {
+        const frameworks = [...new Set(files.map(file => file.framework))];
+        const loads = await Promise.allSettled(frameworks.map(loadTemplateAdapter));
+        const loadFailures = new Map<TemplateFramework, unknown>();
+        loads.forEach((load, index) => {
+            if (load.status === 'rejected') {
+                loadFailures.set(frameworks[index] as TemplateFramework, load.reason);
+            }
+        });
+        for (const file of files) {
+            if (loadFailures.has(file.framework)) {
+                warnPrescanSkipped(file.filePath, loadFailures.get(file.framework));
+                continue;
+            }
+            try {
+                const result = lowerTemplate(file.framework, file.content, file.filePath);
+                for (const className of recordTemplateOutput(file.filePath, result.code)) {
+                    addSafelistClass(className);
+                    sink.add(className);
+                }
+            } catch (err) {
+                warnPrescanSkipped(file.filePath, err);
+            }
+        }
     }
 
     /**
@@ -7265,6 +7389,44 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
+     * Lower a template's `sz` with its framework's adapter, loaded already.
+     * The transform hook and the prescan lower a file alike.
+     *
+     * @param framework - The framework whose adapter lowers it.
+     * @param code - The template's text.
+     * @param id - Its path or bundler id.
+     * @returns The adapter's result.
+     */
+    function lowerTemplate(
+        framework: TemplateFramework,
+        code: string,
+        id: string,
+    ): ReturnType<TemplatePreprocess> {
+        const preprocess = templateAdapters[framework] as TemplatePreprocess;
+        return preprocess(code, {
+            // Every line names the file as the project reads it.
+            filename: diagnosticPath(id, state.rootDir),
+            parser: activeParser().parser,
+            classPrefix: createCompilerOptions().classPrefix,
+        });
+    }
+
+    /**
+     * Read what a template's lowered text writes: an adapter marks nothing, so
+     * every class it writes stays unrenamed, and the source holds only `sz`,
+     * so those classes are in its output alone, where Tailwind's own scan of
+     * the source never looks.
+     *
+     * @param id - Its path or bundler id.
+     * @param lowered - The adapter's output.
+     * @returns The classes the output writes, for the safelist.
+     */
+    function recordTemplateOutput(id: string, lowered: string): Set<string> {
+        recordUnmarkedNames(id, lowered);
+        return collectAuthoredClassNames(lowered, engineOptions());
+    }
+
+    /**
      * Dispatch one sz-bearing source module to its framework/compiler lane.
      *
      * @param code Source module contents.
@@ -7283,15 +7445,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         if (framework !== null) {
             // A template has no csszyx runtime: a value the engine cannot
             // resolve at build time is an error, and the build stops on it.
-            const adapterOptions = {
-                // Every line names the file as the project reads it.
-                filename: diagnosticPath(id, state.rootDir),
-                parser: activeParser().parser,
-                classPrefix: createCompilerOptions().classPrefix,
-            };
-            // The transform hook loads it before it lowers the first file.
-            const preprocess = templateAdapters[framework] as TemplatePreprocess;
-            const result = preprocess(code, adapterOptions);
+            const result = lowerTemplate(framework, code, id);
             (reportTemplateSzDiagnostics as TemplateReport)(
                 {
                     warn,
@@ -7301,11 +7455,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 },
                 result.diagnostics,
             );
-            // An adapter marks nothing, so every class its output writes stays.
-            recordUnmarkedNames(id, result.code);
-            // The source holds only `sz`: the classes the adapter wrote are in
-            // its output alone, and Tailwind's own scan reads the source.
-            for (const className of collectAuthoredClassNames(result.code, engineOptions())) {
+            for (const className of recordTemplateOutput(id, result.code)) {
                 addSafelistClass(className);
             }
             return { ...unchangedPreTransform(result.code), transformed: result.code !== code };

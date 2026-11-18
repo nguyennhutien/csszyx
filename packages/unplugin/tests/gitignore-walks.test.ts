@@ -152,6 +152,90 @@ describe('the sz prescan', () => {
         60_000,
     );
 
+    it.each(lanes)(
+        'of a %s build safelists the templates it walks and the gitignored ones `@source` names',
+        async (_lane, prescan) => {
+            const safelist = await prescan({
+                '.gitignore': 'src/generated/\nsrc/hidden/\n',
+                'src/App.vue': '<template><div sz="{ p: 9 }" /></template>\n',
+                // No `sz`: the adapter is not asked.
+                'src/Plain.vue': '<template><div class="plain-raw" /></template>\n',
+                'src/generated/Card.svelte': '<div sz={{ m: 9 }} />\n',
+                'src/hidden/Gone.vue': '<template><div sz="{ m: 13 }" /></template>\n',
+                // Named twice, read once.
+                'src/index.css': `${TW}@source "./generated";\n@source "./App.vue";\n`,
+            });
+            expect(safelist).toContain('p-9');
+            expect(safelist).toContain('m-9');
+            expect(safelist).not.toContain('m-13');
+        },
+        60_000,
+    );
+
+    it('names a template its adapter cannot load or lower and writes the rest', async () => {
+        vi.doMock('node:fs', async original => {
+            const fs = await original<typeof import('node:fs')>();
+            const readFileSync = ((file: unknown, ...rest: unknown[]) => {
+                if (String(file).endsWith('Gone.vue')) throw new Error('ENOENT');
+                return (fs.readFileSync as (...args: unknown[]) => unknown)(file, ...rest);
+            }) as typeof fs.readFileSync;
+            return { ...fs, readFileSync, default: { ...fs, readFileSync } };
+        });
+        vi.doMock('@csszyx/vue-adapter', () => {
+            throw new Error('vue adapter missing');
+        });
+        vi.doMock('@csszyx/svelte-adapter', () => ({
+            preprocess: () => {
+                // Not an Error: its text is still what the warning names.
+                throw 'adapter broke';
+            },
+        }));
+        const warned: string[] = [];
+        vi.spyOn(console, 'warn').mockImplementation((message: unknown) => {
+            warned.push(String(message));
+        });
+        try {
+            vi.resetModules();
+            const { vitePlugin: freshPlugin } = await import('../src/unplugin.js');
+            const root = tailwindProject('csszyx-gitignore-adapter-', {
+                'src/index.css': TW,
+                // The control: a script's sz reaches the safelist.
+                'src/Box.tsx': 'export const Box = () => <div sz={{ gap: 1 }} />;\n',
+                'src/App.vue': '<template><div sz="{ p: 9 }" /></template>\n',
+                'src/Card.svelte': '<div sz={{ m: 9 }} />\n',
+                // Excluded: not read at all.
+                'src/Skip.vue': '<template><div sz="{ p: 15 }" /></template>\n',
+                // Listed by the walk and unreadable when it is read, as the
+                // delete race leaves it: skipped without a word.
+                'src/Gone.vue': '<template><div sz="{ p: 17 }" /></template>\n',
+            });
+            vi.spyOn(process, 'cwd').mockReturnValue(root);
+            const call = callHooks(
+                freshPlugin({
+                    build: { cache: false },
+                    production: { mangle: false },
+                    exclude: ['**/Skip.vue'],
+                }) as unknown as Record<string, unknown>[],
+            );
+            await call('configResolved', { root, command: 'build' });
+            const safelist = readFileSync(join(root, '.csszyx/csszyx-classes.txt'), 'utf8');
+            expect(safelist).toContain('gap-1');
+            expect(safelist).not.toContain('p-9');
+            expect(safelist).not.toContain('m-9');
+            expect(safelist).not.toContain('p-15');
+            expect(safelist).not.toContain('p-17');
+            expect(warned.join('\n')).not.toContain('Gone.vue');
+            expect(warned.join('\n')).toContain('src/Card.svelte');
+            expect(warned.join('\n')).toContain('adapter broke');
+            expect(warned.join('\n')).toContain('src/App.vue');
+        } finally {
+            vi.doUnmock('@csszyx/vue-adapter');
+            vi.doUnmock('@csszyx/svelte-adapter');
+            vi.doUnmock('node:fs');
+            vi.resetModules();
+        }
+    }, 60_000);
+
     it('leaves out a file a stylesheet names outside the project root', async () => {
         // Outside the root, a package is opted in through `compileSources`,
         // as `csszyx check` and the Next prebuild read it.
@@ -349,14 +433,15 @@ describe('a gitignored module the build lowers', () => {
         expect(warned).toContain('src/generated/variants.ts');
     }, 60_000);
 
-    it('is not named for a component the prescan reads no classes from', async () => {
+    it('is named for a template, whose classes the prescan reads through its adapter', async () => {
         const module = 'src/generated/Card.vue';
         const warned = await warnedAfter(
             { ...GENERATED, [module]: '<template><div :sz="{ m: 9 }" /></template>\n' },
             TW,
             module,
         );
-        expect(warned).not.toContain('`.gitignore` covers');
+        expect(warned).toContain('`.gitignore` covers');
+        expect(warned).toContain('src/generated/Card.vue');
     }, 60_000);
 
     it('writes the file, not its folder, when a pattern of `.gitignore` covers it', async () => {
