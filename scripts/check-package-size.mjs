@@ -932,7 +932,10 @@ export const SIZE_BUDGETS = [
         // 125,550 the same day, measured 125,259, after review: the webpack
         // HTML mangle reads `class` through the shared HTML reader (spaced
         // `=`, unquoted values, any case). ~300 bytes of headroom.
-        maxGzipBytes: 125_550,
+        // 126,100 on 2026-11-18, measured 125,777: a template's classes are
+        // read by its adapter's framework parser, cached per file, with the
+        // HTML reader as the fallback. ~300 bytes of headroom.
+        maxGzipBytes: 126_100,
         wrappers: ['./vite', './webpack'],
     },
     {
@@ -1133,7 +1136,9 @@ export const SIZE_BUDGETS = [
         subpath: '.',
         // The same for a Svelte build and `svelte.config.js`; the template
         // kit and `svelte/compiler` are other packages. Measured 2,087.
-        maxGzipBytes: 2_400,
+        // 3,100 on 2026-11-18, measured 2,782: `templateClassNames` reads a
+        // component's classes from Svelte's own tree, expressions included.
+        maxGzipBytes: 3_100,
     },
 ];
 

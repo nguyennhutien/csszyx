@@ -25,13 +25,20 @@ const BOM_CLASS = 'content-[a﻿b]';
  *
  * @param source - The module.
  * @param file - Its name under `src/`.
+ * @param onDisk - Whether the module is on disk when the server starts, so
+ *        the prescan reads it first.
  * @returns The safelist's class lines.
  */
-async function safelistAfter(source: string, file = 'Plain.tsx'): Promise<string[]> {
+async function safelistAfter(
+    source: string,
+    file = 'Plain.tsx',
+    onDisk = false,
+): Promise<string[]> {
     const { vitePlugin } = await import('../src/unplugin.js');
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-fallback-list-'));
     tempDirs.push(root);
     fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+    if (onDisk) fs.writeFileSync(path.join(root, 'src', file), source);
     const plugins = vitePlugin({});
     const ctx = { warn() {}, error() {}, emitFile() {}, addWatchFile() {} };
     const call = async (self: object, hookName: string, ...args: unknown[]): Promise<unknown> => {
@@ -124,4 +131,38 @@ describe('the safelist a template adapter feeds', () => {
         const lines = await safelistAfter(source, file);
         for (const name of classes) expect(lines).toContain(name);
     });
+
+    it.each([
+        ['Vue', 'D.vue', `<template><p>Don't</p><div class="plain-a">x</div></template>\n`],
+        ['Svelte', 'E.svelte', `<p>it's</p>\n<div class="plain-a">x</div>\n`],
+    ])(
+        'names the classes a %s template without sz writes after a quote in its text',
+        async (_what, file, source) => {
+            // No `sz`, so no adapter output: the source is read, as markup.
+            const lines = await safelistAfter(source, file);
+            expect(lines).toContain('plain-a');
+        },
+    );
+
+    it.each([
+        // Keys of a class object, which no markup reading and no scanner gives.
+        [
+            'Svelte',
+            'F.svelte',
+            "<script>let on = true;</script>\n<p>it's</p><i class={{ flipped: on }} class:lit={on}>x</i>\n",
+            ['flipped', 'lit'],
+        ],
+        [
+            'Vue',
+            'G.vue',
+            `<template><p>Don't</p><i :class="['v-a', on && 'v-b']" class="v-c">x</i></template>\n`,
+            ['v-a', 'v-b', 'v-c'],
+        ],
+    ])(
+        'reads a %s template the prescan walked as its framework does',
+        async (_what, file, source, classes) => {
+            const lines = await safelistAfter(source, file, true);
+            for (const name of classes) expect(lines).toContain(name);
+        },
+    );
 });

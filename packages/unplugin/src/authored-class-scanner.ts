@@ -334,6 +334,18 @@ function collectTemplateTokens(target: Set<string>, source: string, start: numbe
 }
 
 /**
+ * Collect the class candidates of one class binding expression, such as a
+ * Vue `:class` value its parser left as text: its quoted and template
+ * strings, read as the class scanner reads an expression.
+ *
+ * @param target Class candidate sink.
+ * @param expression Class-bearing JavaScript expression.
+ */
+export function collectClassExpressionNames(target: Set<string>, expression: string): void {
+    collectExpressionTokens(target, expression);
+}
+
+/**
  * Collect quoted and template strings from a class expression.
  * @param target Class candidate sink.
  * @param expression Class-bearing JavaScript expression.

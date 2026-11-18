@@ -16,6 +16,7 @@ import {
 import {
     placeTemplateDiagnostic,
     requirePeer,
+    type TemplateClassReading,
     type TemplateSzAttribute,
     type TemplateSzDiagnostic,
 } from '@csszyx/compiler/template';
@@ -66,12 +67,7 @@ const BYTE_ORDER_MARK = '﻿';
  * @returns The attributes, or the error that stopped the read.
  */
 export function readSzAttributes(source: string, filename?: string): SzAttributeReading {
-    const svelte = requirePeer<SvelteCompiler>({
-        from: import.meta.url,
-        request: 'svelte/compiler',
-        requiredBy: '@csszyx/svelte-adapter',
-        install: 'svelte@5',
-    });
+    const svelte = svelteCompiler();
     const fail = <Args extends object>(
         offset: number,
         diagnostic: SzBrowserDiagnostic<Args>,
@@ -113,6 +109,160 @@ export function readSzAttributes(source: string, filename?: string): SzAttribute
 }
 
 /**
+ * The project's `svelte/compiler`, or the error that says to install it.
+ *
+ * @returns The compiler.
+ */
+function svelteCompiler(): SvelteCompiler {
+    return requirePeer<SvelteCompiler>({
+        from: import.meta.url,
+        request: 'svelte/compiler',
+        requiredBy: '@csszyx/svelte-adapter',
+        install: 'svelte@5',
+    });
+}
+
+/**
+ * The class names a component puts in the DOM, as Svelte reads it: the words
+ * of every `class` value's text, each `class:` directive's name, and from a
+ * `class={…}` or `class="a {…}"` expression every string and template text
+ * in it and the keys of a class object at its top or in an array there,
+ * read from the expression tree Svelte parsed, with no lexer of its own.
+ * Over-reads (`class={x === 'dark' ? …}` gives `dark`), never under-reads.
+ *
+ * Cost: one `svelte.parse` (about 0.1 ms a component) and one walk.
+ *
+ * @param source - The component.
+ * @returns The names, or null when Svelte 5 cannot parse it.
+ * @internal Used by csszyx's own packages; not a stable API.
+ */
+export function templateClassNames(source: string): TemplateClassReading | null {
+    const svelte = svelteCompiler();
+    if (Number.parseInt(svelte.VERSION, 10) < 5) return null;
+    let root: SvelteNode;
+    try {
+        root = svelte.parse(source, { modern: true }).fragment;
+    } catch (error) {
+        if (typeof (error as SvelteCompileError).code !== 'string') throw error;
+        return null;
+    }
+    const names = new Set<string>();
+    forEachAttributeList(root, attributes => {
+        for (const attribute of attributes) readClassAttribute(names, attribute);
+    });
+    return { names: [...names], expressions: [] };
+}
+
+/**
+ * Add what one attribute of an element puts in its class list: a `class:`
+ * directive's name, or a `class` value's text words and expression names.
+ *
+ * @param names - The set read into.
+ * @param attribute - One attribute.
+ */
+function readClassAttribute(names: Set<string>, attribute: SvelteNode): void {
+    if (attribute.type === 'ClassDirective' && attribute.name) names.add(attribute.name);
+    if (attribute.type !== 'Attribute' || attribute.name !== 'class') return;
+    const value = attribute.value;
+    for (const part of Array.isArray(value) ? value : [value]) {
+        if (part === true || part === undefined) continue;
+        if (part.type === 'Text') addWords(names, String(part.data));
+        if (part.type === 'ExpressionTag') {
+            const expression = part.expression as unknown as EstreeNode;
+            addExpressionStrings(names, expression);
+            addClassObjectKeys(names, expression);
+        }
+    }
+}
+
+/** A node of the estree Svelte gives an expression; only what is read. */
+interface EstreeNode {
+    type: string;
+    [key: string]: unknown;
+}
+
+/**
+ * Add each word of a class list, split on HTML whitespace.
+ *
+ * @param names - The set read into.
+ * @param text - A class list.
+ */
+function addWords(names: Set<string>, text: string): void {
+    for (const word of text.split(/[\t\n\f\r ]+/)) if (word !== '') names.add(word);
+}
+
+/**
+ * Add the words of every string and template text in an expression. The walk
+ * keeps its own stack.
+ *
+ * @param names - The set read into.
+ * @param root - The expression.
+ */
+function addExpressionStrings(names: Set<string>, root: EstreeNode): void {
+    const pending: unknown[] = [root];
+    for (let node = pending.pop(); node !== undefined; node = pending.pop()) {
+        if (Array.isArray(node)) pending.push(...node);
+        else readStringNode(names, node as EstreeNode, pending);
+    }
+}
+
+/**
+ * Add the words of one expression node when it is a string or a template's
+ * text, and queue the nodes under it.
+ *
+ * @param names - The set read into.
+ * @param tree - The node.
+ * @param pending - The walk's queue.
+ */
+function readStringNode(names: Set<string>, tree: EstreeNode, pending: unknown[]): void {
+    if (tree.type === 'Literal' && typeof tree.value === 'string') addWords(names, tree.value);
+    if (tree.type === 'TemplateElement') {
+        const text = tree.value as { cooked?: string | null; raw: string };
+        addWords(names, text.cooked ?? text.raw);
+    }
+    for (const [key, child] of Object.entries(tree)) {
+        if (key !== 'loc' && key !== 'metadata' && typeof child === 'object' && child !== null) {
+            pending.push(child);
+        }
+    }
+}
+
+/**
+ * Add the keys of a class object at the top of a class value, or in an array
+ * there at any depth: `class={{ active }}`, `class={['a', { b: c }]}`.
+ *
+ * @param names - The set read into.
+ * @param root - The expression.
+ */
+function addClassObjectKeys(names: Set<string>, root: EstreeNode): void {
+    const pending: EstreeNode[] = [root];
+    for (let node = pending.pop(); node !== undefined; node = pending.pop()) {
+        if (node.type === 'ArrayExpression') {
+            pending.push(
+                ...(node.elements as (EstreeNode | null)[]).filter(element => element !== null),
+            );
+        }
+        if (node.type === 'ObjectExpression') {
+            for (const property of node.properties as EstreeNode[]) addPropertyKey(names, property);
+        }
+    }
+}
+
+/**
+ * Add a class object property's key, when it is written out: `active` or
+ * `'is-open'`, not `[name]` or a spread.
+ *
+ * @param names - The set read into.
+ * @param property - One member of the object.
+ */
+function addPropertyKey(names: Set<string>, property: EstreeNode): void {
+    if (property.type !== 'Property' || property.computed === true) return;
+    const key = property.key as EstreeNode;
+    if (key.type === 'Identifier') names.add(String(key.name));
+    if (key.type === 'Literal' && typeof key.value === 'string') addWords(names, key.value);
+}
+
+/**
  * Why Svelte likely could not parse a component, which picks the advice.
  *
  * @param source - The component.
@@ -143,9 +293,21 @@ interface Reader {
  * @param root - The component's root fragment.
  */
 function collect(reader: Reader, root: SvelteNode): void {
+    forEachAttributeList(root, attributes => readElement(reader, attributes));
+}
+
+/**
+ * Visit the attributes of every element of a fragment and of every fragment
+ * under it, in file order. The walk keeps its own stack, so no depth of
+ * nesting exhausts the call stack.
+ *
+ * @param root - The component's root fragment.
+ * @param visit - Called with each element's attributes, in order.
+ */
+function forEachAttributeList(root: SvelteNode, visit: (attributes: SvelteNode[]) => void): void {
     const pending: SvelteNode[] = [root];
     for (let node = pending.pop(); node !== undefined; node = pending.pop()) {
-        if (node.attributes) readElement(reader, node.attributes);
+        if (node.attributes) visit(node.attributes);
         const next: SvelteNode[] = [...(node.nodes ?? [])];
         for (const value of Object.values(node)) {
             if (isFragment(value)) next.push(value);

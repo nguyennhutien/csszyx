@@ -17,6 +17,8 @@ export {
     type LowerSzAttributesInput,
     type LowerSzAttributesOptions,
     lowerSzAttributes,
+    type TemplateClassNames,
+    type TemplateClassReading,
     type TemplatePreprocess,
     type TemplatePreprocessResult,
     type TemplateSzReading,

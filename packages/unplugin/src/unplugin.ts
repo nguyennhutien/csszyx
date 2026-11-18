@@ -31,7 +31,7 @@ import {
     transformRustUnrendered,
     transformWasmUnrendered,
 } from '@csszyx/compiler/internal';
-import type { TemplatePreprocess } from '@csszyx/compiler/template';
+import type { TemplateClassNames, TemplatePreprocess } from '@csszyx/compiler/template';
 import { getNativePackageName } from '@csszyx/core/native';
 import {
     createGitignoreQuery,
@@ -60,7 +60,11 @@ import { createUnplugin, type UnpluginInstance, type WebpackPluginInstance } fro
 import type { EnvironmentModuleNode, FSWatcher, PluginOption, ViteDevServer } from 'vite';
 import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } from 'webpack';
 import { atomicWriteFileSync } from './atomic-write.js';
-import { collectAuthoredClassNames, collectMergeCallClassNames } from './authored-class-scanner.js';
+import {
+    collectAuthoredClassNames,
+    collectClassExpressionNames,
+    collectMergeCallClassNames,
+} from './authored-class-scanner.js';
 import { collectUnmarkedNames, inlineClassMarks } from './class-mark-inline.js';
 import {
     classNameAuthorConflictMessage,
@@ -558,8 +562,10 @@ interface PrescanSourceFile {
 
 /** A template queued by the prescan walker for its framework's adapter. */
 interface PrescanTemplateFile extends PrescanSourceFile {
-    /** The framework whose adapter lowers it. */
+    /** The framework whose adapter reads and lowers it. */
     framework: TemplateFramework;
+    /** Whether its text may hold `sz`, which the adapter lowers. */
+    sz: boolean;
 }
 
 /** Prescan source file plus transform result. */
@@ -674,21 +680,38 @@ let _hasWarnedNativeFallback = false;
 const _loggedActiveParsers = new Set<string>();
 const requireFromHere: NodeJS.Require = createRequire(import.meta.url);
 
+/** What the plugin calls of a loaded template adapter. */
+interface TemplateAdapter {
+    /** Lowers the file's `sz`. */
+    preprocess: TemplatePreprocess;
+    /** Reads the class names the file's text puts in the DOM. */
+    templateClassNames: TemplateClassNames;
+}
+
+/**
+ * Load a template adapter module and take what the plugin calls of it.
+ *
+ * @param adapter - The module, once imported.
+ * @returns Its `preprocess` and `templateClassNames`.
+ */
+async function adapterOf(adapter: Promise<TemplateAdapter>): Promise<TemplateAdapter> {
+    const { preprocess, templateClassNames } = await adapter;
+    return { preprocess, templateClassNames };
+}
+
 /**
  * The template adapters, by framework: the extension of the files each lowers
  * and how to load it. A new adapter is one entry here, and the `satisfies`
- * below checks its `preprocess` against the kit's {@link TemplatePreprocess}.
+ * below checks it against the kit's {@link TemplatePreprocess} and
+ * {@link TemplateClassNames}.
  * Nothing in this table is imported until a build meets a file of that
  * extension, so each row repeats the extension its adapter exports;
  * {@link templateAdapterExtensions} lets a test hold the two equal.
  */
 const TEMPLATE_ADAPTERS = {
-    vue: { extension: '.vue', load: async () => (await import('@csszyx/vue-adapter')).preprocess },
-    svelte: {
-        extension: '.svelte',
-        load: async () => (await import('@csszyx/svelte-adapter')).preprocess,
-    },
-} as const satisfies Record<string, { extension: string; load: () => Promise<TemplatePreprocess> }>;
+    vue: { extension: '.vue', load: () => adapterOf(import('@csszyx/vue-adapter')) },
+    svelte: { extension: '.svelte', load: () => adapterOf(import('@csszyx/svelte-adapter')) },
+} as const satisfies Record<string, { extension: string; load: () => Promise<TemplateAdapter> }>;
 
 /** A framework whose templates an adapter lowers. */
 type TemplateFramework = keyof typeof TEMPLATE_ADAPTERS;
@@ -713,11 +736,11 @@ export function templateAdapterExtensions(): Record<string, string> {
 type TemplateReport = typeof import('@csszyx/compiler/template').reportTemplateSzDiagnostics;
 
 /**
- * Each adapter's `preprocess`, once loaded, and the kit's reporter, which
- * loads with the first adapter: a build with no template file loads neither,
- * and a build of one framework never loads another's adapter.
+ * Each adapter, once loaded, and the kit's reporter, which loads with the
+ * first adapter: a build with no template file loads neither, and a build of
+ * one framework never loads another's adapter.
  */
-const templateAdapters: Partial<Record<TemplateFramework, TemplatePreprocess>> = {};
+const templateAdapters: Partial<Record<TemplateFramework, TemplateAdapter>> = {};
 let reportTemplateSzDiagnostics: TemplateReport | undefined;
 
 /**
@@ -751,8 +774,8 @@ function loadTemplateAdapter(framework: TemplateFramework): Promise<void> {
         templateAdapters[framework] ?? TEMPLATE_ADAPTERS[framework].load(),
         reportTemplateSzDiagnostics ?? loadTemplateReport(),
     ]).then(
-        ([preprocess, report]) => {
-            templateAdapters[framework] = preprocess;
+        ([adapter, report]) => {
+            templateAdapters[framework] = adapter;
             reportTemplateSzDiagnostics = report;
         },
         (error: unknown) => {
@@ -5742,8 +5765,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             }
             const hookText = hooks ? sourceHookText(filePath, content) : null;
             if (hookText !== null) hookTexts.push(hookText);
-            if (lowers && moduleMayHoldSz(content)) {
-                templateSources.push({ filePath, content, framework });
+            if (lowers) {
+                templateSources.push({
+                    filePath,
+                    content,
+                    framework,
+                    sz: moduleMayHoldSz(content),
+                });
             }
         }
 
@@ -5941,15 +5969,18 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Lower each template the prescan found and add the classes its output
-     * writes to the safelist, as the transform hook does for the same file:
-     * the safelist is written before any module is transformed, and a
-     * `source(none)` stylesheet reads nothing else. Each framework's adapter
-     * loads once, all at once. A file whose adapter fails to load or to lower
-     * it is named and skipped; the transform hook reports why when it lowers
-     * the file.
+     * Read each template the prescan found, as the transform hook does for the
+     * same file: its authored classes for the census, as its framework reads
+     * them, and, for one that may hold `sz`, the classes the adapter's output
+     * writes into the safelist, which is written before any module is
+     * transformed and is all a `source(none)` stylesheet reads. Each
+     * framework's adapter loads once, all at once, so the transform hook
+     * finds it loaded. Without it a template's classes are read as markup; a
+     * file whose adapter fails to load or to lower its `sz` is named and
+     * skipped, and the transform hook reports why when it lowers the file.
      *
-     * Cost: one adapter call per template that may hold `sz`.
+     * Cost: one framework parse per template, and one adapter call per
+     * template that may hold `sz`.
      *
      * @param files - The templates, in walk order.
      * @param sink - The raw safelist classes of this prescan.
@@ -5967,13 +5998,19 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             }
         });
         for (const file of files) {
+            recordAuthoredClassesOf(file.filePath, file.content);
+            if (!file.sz) continue;
             if (loadFailures.has(file.framework)) {
                 warnPrescanSkipped(file.filePath, loadFailures.get(file.framework));
                 continue;
             }
             try {
                 const result = lowerTemplate(file.framework, file.content, file.filePath);
-                for (const className of recordTemplateOutput(file.filePath, result.code)) {
+                for (const className of recordTemplateOutput(
+                    file.framework,
+                    file.filePath,
+                    result.code,
+                )) {
                     addSafelistClass(className);
                     sink.add(className);
                 }
@@ -6029,13 +6066,26 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Record raw author classes for safelisting and mangle ownership.
+     * Record raw author classes for safelisting and mangle ownership. A
+     * template's are read as its framework reads it
+     * ({@link templateClassNamesOf}); a script's by the class scanner.
      *
      * @param code Source text before csszyx transforms it.
+     * @param file Its path or bundler id.
      */
-    function recordAuthoredClasses(code: string): void {
+    function recordAuthoredClasses(code: string, file: string): void {
         collectMergeCallClasses(code);
-        for (const className of collectAuthoredClassNames(code, engineOptions())) {
+        const framework = templateFrameworkOf(file);
+        const names =
+            framework === null
+                ? collectAuthoredClassNames(code, engineOptions())
+                : templateClassNamesOf({
+                      framework,
+                      id: file,
+                      text: code,
+                      kind: 'source',
+                  });
+        for (const className of names) {
             addSafelistClass(className);
             state.authoredClasses.add(className);
         }
@@ -6058,7 +6108,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const digest = sha256Of(code).base64;
         if (authoredRead.get(key) === digest) return;
         authoredRead.set(key, digest);
-        recordAuthoredClasses(code);
+        recordAuthoredClasses(code, file);
     }
 
     /**
@@ -6595,7 +6645,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      */
     function recordUntransformedHotFile(file: string, content: string): void {
         // Plain merge calls need a fresh registration even without sz props.
-        recordAuthoredClasses(content);
+        recordAuthoredClasses(content, file);
         trackGlobalVarSourceFile(file, content);
         recordFileVarMangleEntries(state, file, []);
         recordFileCSSVariableMetrics(state, file, null);
@@ -6681,7 +6731,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const sizeBefore = state.classes.size;
         // Capture the previous size first: authored and lowered classes can
         // overlap, but discovering either must still grow the safelist.
-        recordAuthoredClasses(fileContent);
+        recordAuthoredClasses(fileContent, file);
         trackGlobalVarSourceFile(file, fileContent);
         recordSzClasses(file, result);
         for (const cls of result.classes) {
@@ -7403,7 +7453,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         code: string,
         id: string,
     ): ReturnType<TemplatePreprocess> {
-        const preprocess = templateAdapters[framework] as TemplatePreprocess;
+        const { preprocess } = templateAdapters[framework] as TemplateAdapter;
         return preprocess(code, {
             // Every line names the file as the project reads it.
             filename: diagnosticPath(id, state.rootDir),
@@ -7418,23 +7468,86 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * so those classes are in its output alone, where Tailwind's own scan of
      * the source never looks.
      *
-     * The output is markup, so its `class` attributes are read as the HTML
-     * tokenizer reads them (`htmlClassNames`): text such as `Don't` is text.
-     * The source scanner reads it too, for a binding such as Vue's
-     * `:class="'p-4'"`, which is no `class` attribute; it reads the text as
-     * code, so a quote in it can hide what follows, and only adds names.
+     * The output is still a component of its framework, read as any
+     * template's text is ({@link templateClassNamesOf}).
      *
-     * Cost: one tokenizer walk and one scan of the output.
-     *
+     * @param framework - The framework whose adapter lowered it.
      * @param id - Its path or bundler id.
      * @param lowered - The adapter's output.
      * @returns The classes the output writes, for the safelist.
      */
-    function recordTemplateOutput(id: string, lowered: string): Set<string> {
+    function recordTemplateOutput(
+        framework: TemplateFramework,
+        id: string,
+        lowered: string,
+    ): Set<string> {
         recordUnmarkedNames(id, lowered);
-        const classes = collectAuthoredClassNames(lowered, engineOptions());
-        for (const { name } of htmlClassNames(lowered, engineOptions())) classes.add(name);
-        return classes;
+        return templateClassNamesOf({ framework, id, text: lowered, kind: 'output' });
+    }
+
+    /**
+     * Per template and text kind, the digest of the text last read and what
+     * {@link templateClassNamesOf} read from it: one entry a file and kind,
+     * as `unmarkedNamesByFile` keeps.
+     */
+    const templateClassReads = new Map<string, { digest: string; names: ReadonlySet<string> }>();
+
+    /**
+     * The class names a template's text puts in the DOM. With its adapter
+     * loaded, its framework's own parser reads them (`templateClassNames`):
+     * static `class` words, `class:` directives, and the class binding
+     * expressions, Vue's through the class scanner's expression reader. A
+     * text is read once per process; the prescan and the transform hook read
+     * the same text.
+     *
+     * Without the adapter, or for a file its framework cannot parse, the text
+     * is read as markup ({@link markupClassNames}).
+     *
+     * Cost: one parse a text (about 0.01 ms a Vue file, 0.1 ms a Svelte
+     * component), then a hash.
+     *
+     * @param template - The text to read.
+     * @param template.framework - Its framework.
+     * @param template.id - Its path or bundler id.
+     * @param template.text - Its text.
+     * @param template.kind - Whether it is the source or the adapter's output.
+     * @returns The names; a set the caller may add to.
+     */
+    function templateClassNamesOf(template: {
+        framework: TemplateFramework;
+        id: string;
+        text: string;
+        kind: 'source' | 'output';
+    }): Set<string> {
+        const { framework, id, text, kind } = template;
+        const adapter = templateAdapters[framework];
+        const key = `${kind}:${normalizeSourceFilename(id)}`;
+        const digest = sha256Of(text).base64;
+        const known = templateClassReads.get(key);
+        if (known?.digest === digest) return new Set(known.names);
+        const reading = adapter?.templateClassNames(text) ?? null;
+        const names = reading === null ? markupClassNames(text) : new Set(reading.names);
+        for (const expression of reading?.expressions ?? []) {
+            collectClassExpressionNames(names, expression);
+        }
+        // Only the adapter's reading is the file's for good.
+        if (adapter !== undefined) templateClassReads.set(key, { digest, names });
+        return new Set(names);
+    }
+
+    /**
+     * The class names of markup read without its framework: each `class`
+     * attribute as the HTML tokenizer reads it (`htmlClassNames`), so text
+     * such as `Don't` is text, and the class scanner's reading for a binding
+     * such as Vue's `:class="'p-4'"`, which only adds names.
+     *
+     * @param text - The markup.
+     * @returns The names.
+     */
+    function markupClassNames(text: string): Set<string> {
+        const names = collectAuthoredClassNames(text, engineOptions());
+        for (const { name } of htmlClassNames(text, engineOptions())) names.add(name);
+        return names;
     }
 
     /**
@@ -7466,7 +7579,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 },
                 result.diagnostics,
             );
-            for (const className of recordTemplateOutput(id, result.code)) {
+            for (const className of recordTemplateOutput(framework, id, result.code)) {
                 addSafelistClass(className);
             }
             return { ...unchangedPreTransform(result.code), transformed: result.code !== code };

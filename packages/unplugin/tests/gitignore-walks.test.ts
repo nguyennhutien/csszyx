@@ -191,6 +191,7 @@ describe('the sz prescan', () => {
                 // Not an Error: its text is still what the warning names.
                 throw 'adapter broke';
             },
+            templateClassNames: () => ({ names: [], expressions: [] }),
         }));
         const warned: string[] = [];
         vi.spyOn(console, 'warn').mockImplementation((message: unknown) => {
