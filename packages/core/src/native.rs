@@ -135,6 +135,7 @@ pub fn html_class_names_native(html: String) -> Vec<NativeHtmlClassName> {
 
 /// Every text a class attribute string can put in the DOM, as JSX and as
 /// HTML read it (`html_text::class_attribute_readings`).
+#[cfg(feature = "native-engine")]
 #[napi(js_name = "classAttributeReadings")]
 #[must_use]
 #[allow(clippy::needless_pass_by_value)]
