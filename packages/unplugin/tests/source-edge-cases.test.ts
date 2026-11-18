@@ -29,21 +29,38 @@ describe('source and generated-node boundaries', () => {
         ]);
     });
 
-    it('reads a class attribute as JSX and as HTML decode it', () => {
-        // The DOM carries the decoded name, so a census that kept only the
-        // spelling would let an owned `p-4` be renamed under the element.
-        const jsx = collectAuthoredClassNames(
-            '<div className="p&#45;4 m&#x2d;2 a&amp;b x&hellip;" />',
-        );
-        // JSX knows `hellip`; HTML keeps it as written.
-        expect([...jsx]).toEqual(['p-4', 'm-2', 'a&b', 'x…', 'x&hellip;']);
-        // HTML decodes `&lt` before a space with no `;`; JSX does not.
-        const html = collectAuthoredClassNames('<div class="x&lt y&gt;z" />');
-        expect([...html]).toEqual(['x&lt', 'y>z', 'x<']);
-        // A JavaScript string in braces is not an attribute string.
-        expect([...collectAuthoredClassNames('<div className={"p&#45;4"} />')]).toEqual([
-            'p&#45;4',
-        ]);
+    // The census runs on the artifact the build names; both read alike.
+    describe.each(['rust', 'wasm'] as const)('on the %s artifact', parser => {
+        const read = (source: string): string[] => [
+            ...collectAuthoredClassNames(source, { parser }),
+        ];
+
+        it('reads a class attribute as JSX and as HTML decode it', () => {
+            // The DOM carries the decoded name, so a census that kept only the
+            // spelling would let an owned `p-4` be renamed under the element.
+            // JSX knows `hellip`; HTML keeps it as written.
+            expect(read('<div className="p&#45;4 m&#x2d;2 a&amp;b x&hellip;" />')).toEqual([
+                'p-4',
+                'm-2',
+                'a&b',
+                'x…',
+                'x&hellip;',
+            ]);
+            // HTML decodes `&lt` before a space with no `;`; JSX does not.
+            expect(read('<div class="x&lt y&gt;z" />')).toEqual(['x&lt', 'y>z', 'x<']);
+            // A single-quoted string, and a Vue binding, read the same way.
+            expect(read("<div class='p&#45;4' />")).toEqual(['p-4']);
+            expect(read(`<div :class="'p&#45;4'" />`)).toEqual(['p-4']);
+        });
+
+        it('reads a JavaScript string as JavaScript does, never as an attribute', () => {
+            // In braces or as an object value, `&` is text and `\u0020` a space.
+            expect(read('<div className={"p&#45;4"} />')).toEqual(['p&#45;4']);
+            expect(read(String.raw`h('div', { className: "p-4\u0020a&amp;b" })`)).toEqual([
+                'p-4',
+                'a&amp;b',
+            ]);
+        });
     });
 
     it('matches an absolute literal and a singleton filter', () => {

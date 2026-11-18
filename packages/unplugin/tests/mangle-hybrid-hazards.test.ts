@@ -191,8 +191,8 @@ describe('hybrid raw-class ownership', () => {
 
     it.each([
         ['JSX', '<div className="p&#45;4 m-2" />'],
-        // JSX reads `&NewLine;` as written; HTML splits on it.
-        ['HTML-only name', '<div class="p-4&NewLine;m-2" />'],
+        // JSX keeps a reference spelled `&#X`; HTML decodes it.
+        ['HTML-only', '<div class="p&#X2d;4 m-2" />'],
     ])('keeps an owned class a %s attribute spells with a reference unrenamed', (_case, source) => {
         // The element carries `p-4` in the DOM: renaming it in the CSS would
         // leave the element unstyled.

@@ -7303,6 +7303,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             );
             // An adapter marks nothing, so every class its output writes stays.
             recordUnmarkedNames(id, result.code);
+            // The source holds only `sz`: the classes the adapter wrote are in
+            // its output alone, and Tailwind's own scan reads the source.
+            for (const className of collectAuthoredClassNames(result.code, engineOptions())) {
+                addSafelistClass(className);
+            }
             return { ...unchangedPreTransform(result.code), transformed: result.code !== code };
         }
 
@@ -7715,7 +7720,8 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             return null;
         }
         // The classes a module writes itself are already in the safelist:
-        // `readTransformedSourceFacts` read this text first.
+        // `readTransformedSourceFacts` read its text, and `transformSzSource`
+        // the output of a template adapter.
         for (const className of output.szClasses ?? []) {
             addSafelistClass(className);
             state.ownedClasses.add(className);

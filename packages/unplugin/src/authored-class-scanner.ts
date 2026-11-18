@@ -132,16 +132,20 @@ function decodeJavaScriptString(value: string): string {
 /**
  * Every text an attribute string written as `raw` can put in the DOM: as JSX
  * reads it and as HTML does (`classAttributeReadings`), since a source file
- * does not say which. Text with no `&` and no NUL reads as written in both,
- * so it does not cross into the engine.
+ * does not say which. Neither language decodes an `&` unless `#` or a
+ * letter follows it, and only HTML a NUL, so text with neither reads as
+ * written in both and does not cross into the engine (`[&_p]:m-2`).
  *
  * @param raw - The attribute string between its quotes.
  * @param options - The engine artifact.
  * @returns The texts.
  */
 export function classAttributeTexts(raw: string, options: MangleEngineOptions = {}): string[] {
-    return raw.includes('&') || raw.includes('\0') ? classAttributeReadings(raw, options) : [raw];
+    return MAY_DECODE.test(raw) ? classAttributeReadings(raw, options) : [raw];
 }
+
+/** What {@link classAttributeTexts} can read differently from its spelling. */
+const MAY_DECODE = /&[#A-Z]|\0/i;
 
 /**
  * Add whitespace-delimited class candidates to a set.
@@ -530,7 +534,12 @@ function collectClassSink(
     if (quote === '"' || quote === "'") {
         const end = quotedEnd(source, valueStart, quote);
         const value = source.slice(valueStart + 1, end - 1);
-        for (const text of classAttributeTexts(value, options)) {
+        // `class="…"` is an attribute string; `class: "…"` a JavaScript one.
+        const texts =
+            operator === '='
+                ? classAttributeTexts(value, options)
+                : [decodeJavaScriptString(value)];
+        for (const text of texts) {
             if (vueBinding) collectExpressionTokens(target, text);
             else collectClassTokens(target, text);
         }

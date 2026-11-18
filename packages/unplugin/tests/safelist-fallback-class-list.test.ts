@@ -20,13 +20,14 @@ afterEach(() => {
 const BOM_CLASS = 'content-[a﻿b]';
 
 /**
- * Serve a project, transform one module with no `sz`, then hot-update an `sz`
- * module with a new class so the safelist is written.
+ * Serve a project, transform one module, then hot-update an `sz` module with
+ * a new class so the safelist is written.
  *
- * @param source - The module with no `sz`.
+ * @param source - The module.
+ * @param file - Its name under `src/`.
  * @returns The safelist's class lines.
  */
-async function safelistAfter(source: string): Promise<string[]> {
+async function safelistAfter(source: string, file = 'Plain.tsx'): Promise<string[]> {
     const { vitePlugin } = await import('../src/unplugin.js');
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'csszyx-fallback-list-'));
     tempDirs.push(root);
@@ -44,7 +45,7 @@ async function safelistAfter(source: string): Promise<string[]> {
     await call(ctx, 'configResolved', { root, command: 'serve' });
     await call(ctx, 'transform', '@import "tailwindcss";', path.join(root, 'src/index.css'));
 
-    await call(ctx, 'transform', source, path.join(root, 'src/Plain.tsx'));
+    await call(ctx, 'transform', source, path.join(root, 'src', file));
 
     const card = path.join(root, 'src/Card.tsx');
     fs.writeFileSync(card, 'export const Card = () => <div sz={{ m: 7 }} />;');
@@ -98,5 +99,22 @@ describe('the safelist a module with no sz feeds', () => {
         const lines = await safelistAfter(source);
         for (const name of present) expect(lines).toContain(name);
         for (const name of absent) expect(lines).not.toContain(name);
+    });
+});
+
+describe('the safelist a template adapter feeds', () => {
+    // The adapter writes the classes into its output; the source holds only
+    // `sz`, so the classes reach the safelist from that output or not at all.
+    it.each([
+        [
+            'Vue',
+            'A.vue',
+            `<template><p sz="{ p: 9, hover: { bg: 'blue-700' } }" /></template>\n`,
+            ['p-9', 'hover:bg-blue-700'],
+        ],
+        ['Svelte', 'B.svelte', '<p sz={{ m: 9 }} />\n', ['m-9']],
+    ])('names the classes a %s template lowers to', async (_what, file, source, classes) => {
+        const lines = await safelistAfter(source, file);
+        for (const name of classes) expect(lines).toContain(name);
     });
 });

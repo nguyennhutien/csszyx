@@ -614,6 +614,9 @@ impl<'a> Migration<'_, '_> {
         let class_name_changed = remaining.join(" ") != tokenize(trimmed).join(" ");
         let unrecognized = converted.unrecognized.clone();
         if !writes_back(&remaining) {
+            self.classes_unrecognized
+                .extend(unrecognized.iter().cloned());
+            self.inject_todo_comment(&unrecognized);
             return false;
         }
 
@@ -811,6 +814,17 @@ mod tests {
             &options,
         );
         assert!(!braced.changed, "{:?}", braced.code);
+        // …and converts with its `&` as written when the rest can stay.
+        let plain = transform_source(
+            "export const A = () => <div className={\"p-4 a&b\"} />;",
+            "A.tsx",
+            &options,
+        );
+        assert!(
+            plain.code.contains("className=\"a&b\" sz={{ p: 4 }}"),
+            "{:?}",
+            plain.code
+        );
     }
 
     /// The same reading when a resolve pass merges a className into the sz
@@ -840,6 +854,7 @@ mod tests {
         );
         assert!(!kept.changed, "{:?}", kept.code);
         assert_eq!(kept.stats.class_names_skipped, 1);
+        assert_eq!(kept.stats.classes_unrecognized, ["a\"b"]);
     }
 
     /// JSX allows whitespace around an attribute's `=`, so keys-only mode
