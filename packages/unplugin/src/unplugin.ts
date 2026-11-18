@@ -31,7 +31,11 @@ import {
     transformRustUnrendered,
     transformWasmUnrendered,
 } from '@csszyx/compiler/internal';
-import type { TemplateClassNames, TemplatePreprocess } from '@csszyx/compiler/template';
+import type {
+    TemplateClassNames,
+    TemplateClassReading,
+    TemplatePreprocess,
+} from '@csszyx/compiler/template';
 import { getNativePackageName } from '@csszyx/core/native';
 import {
     createGitignoreQuery,
@@ -697,6 +701,22 @@ interface TemplateAdapter {
 async function adapterOf(adapter: Promise<TemplateAdapter>): Promise<TemplateAdapter> {
     const { preprocess, templateClassNames } = await adapter;
     return { preprocess, templateClassNames };
+}
+
+/**
+ * A template's classes as its framework reads them, or null when that
+ * read fails, its framework not installed being the usual reason.
+ *
+ * @param adapter - The template's adapter.
+ * @param text - The template's text.
+ * @returns The reading, or null.
+ */
+function readWithFramework(adapter: TemplateAdapter, text: string): TemplateClassReading | null {
+    try {
+        return adapter.templateClassNames(text);
+    } catch {
+        return null;
+    }
 }
 
 /**
@@ -7500,8 +7520,10 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * text is read once per process; the prescan and the transform hook read
      * the same text.
      *
-     * Without the adapter, or for a file its framework cannot parse, the text
-     * is read as markup ({@link markupClassNames}).
+     * Without the adapter, for a file its framework cannot parse, or when the
+     * framework itself is missing (`vue` and `svelte` are optional peers, so a
+     * React project with one stray `.vue` file has the adapter and no Vue),
+     * the text is read as markup ({@link markupClassNames}).
      *
      * Cost: one parse a text (about 0.01 ms a Vue file, 0.1 ms a Svelte
      * component), then a hash.
@@ -7525,7 +7547,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const digest = sha256Of(text).base64;
         const known = templateClassReads.get(key);
         if (known?.digest === digest) return new Set(known.names);
-        const reading = adapter?.templateClassNames(text) ?? null;
+        const reading = adapter === undefined ? null : readWithFramework(adapter, text);
         const names = reading === null ? markupClassNames(text) : new Set(reading.names);
         for (const expression of reading?.expressions ?? []) {
             collectClassExpressionNames(names, expression);

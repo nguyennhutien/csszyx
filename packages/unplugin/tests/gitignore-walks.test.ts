@@ -174,6 +174,40 @@ describe('the sz prescan', () => {
         60_000,
     );
 
+    it('reads a stray template as markup when its framework is not installed', async () => {
+        // The adapters ship with the plugin; `vue` and `svelte` are optional
+        // peers, so a React project with one `.vue` file has the adapter and
+        // no `vue/compiler-sfc`.
+        vi.doMock('@csszyx/vue-adapter', async original => ({
+            ...(await original<typeof import('@csszyx/vue-adapter')>()),
+            templateClassNames: () => {
+                throw new Error('install vue@3.5');
+            },
+        }));
+        try {
+            vi.resetModules();
+            const { vitePlugin: freshPlugin } = await import('../src/unplugin.js');
+            const root = tailwindProject('csszyx-template-no-peer-', {
+                'src/index.css': TW,
+                'src/Box.tsx': 'export const Box = () => <div sz={{ gap: 1 }} />;\n',
+                'src/Stray.vue': `<template><p>Don't</p><i class="stray-a">x</i></template>\n`,
+            });
+            vi.spyOn(process, 'cwd').mockReturnValue(root);
+            const call = callHooks(
+                freshPlugin({
+                    build: { cache: false },
+                    production: { mangle: false },
+                }) as unknown as Record<string, unknown>[],
+            );
+            await call('configResolved', { root, command: 'build' });
+            const safelist = readFileSync(join(root, '.csszyx/csszyx-classes.txt'), 'utf8');
+            expect(safelist).toContain('gap-1');
+        } finally {
+            vi.doUnmock('@csszyx/vue-adapter');
+            vi.resetModules();
+        }
+    }, 60_000);
+
     it('reads a template outside `include` for its merge hooks only', async () => {
         const root = tailwindProject('csszyx-template-include-', {
             'src/index.css': TW,
