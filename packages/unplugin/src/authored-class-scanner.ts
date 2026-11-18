@@ -1,4 +1,5 @@
 import { CLASS_LIST_SPACE } from '@csszyx/compiler';
+import { classAttributeReadings, type MangleEngineOptions } from '@csszyx/compiler/engine';
 
 /** Characters that can precede a JavaScript regular-expression literal. */
 const REGEX_PREFIXES = new Set('([{:,;=!?&|+-*%^~<>/');
@@ -129,23 +130,17 @@ function decodeJavaScriptString(value: string): string {
 }
 
 /**
- * Decode HTML whitespace entities that can separate class candidates.
+ * Every text an attribute string written as `raw` can put in the DOM: as JSX
+ * reads it and as HTML does (`classAttributeReadings`), since a source file
+ * does not say which. Text with no `&` and no NUL reads as written in both,
+ * so it does not cross into the engine.
  *
- * @param value Raw quoted JSX/HTML attribute content.
- * @returns Content with class-separating entities decoded.
+ * @param raw - The attribute string between its quotes.
+ * @param options - The engine artifact.
+ * @returns The texts.
  */
-function decodeAttributeWhitespace(value: string): string {
-    return value.replace(
-        /&#(?:(\d+)|x([\da-f]+));|&(?:Tab|NewLine);/gi,
-        (entity, decimal: string | undefined, hexadecimal: string | undefined) => {
-            if (!decimal && !hexadecimal) return ' ';
-            const codePoint = Number.parseInt(
-                decimal ?? (hexadecimal as string),
-                decimal ? 10 : 16,
-            );
-            return [9, 10, 12, 13, 32].includes(codePoint) ? ' ' : entity;
-        },
-    );
+export function classAttributeTexts(raw: string, options: MangleEngineOptions = {}): string[] {
+    return raw.includes('&') || raw.includes('\0') ? classAttributeReadings(raw, options) : [raw];
 }
 
 /**
@@ -512,6 +507,7 @@ function collectClassDirective(
  * @param source Complete source text.
  * @param start Class identifier start.
  * @param nameEnd Class identifier end.
+ * @param options The engine artifact that decodes attribute strings.
  * @returns Offset after the consumed sink value.
  */
 function collectClassSink(
@@ -519,6 +515,7 @@ function collectClassSink(
     source: string,
     start: number,
     nameEnd: number,
+    options: MangleEngineOptions,
 ): number {
     const operatorStart = triviaEnd(source, nameEnd);
     const operator = source[operatorStart];
@@ -533,8 +530,10 @@ function collectClassSink(
     if (quote === '"' || quote === "'") {
         const end = quotedEnd(source, valueStart, quote);
         const value = source.slice(valueStart + 1, end - 1);
-        if (vueBinding) collectExpressionTokens(target, decodeAttributeWhitespace(value));
-        else collectClassTokens(target, decodeAttributeWhitespace(value));
+        for (const text of classAttributeTexts(value, options)) {
+            if (vueBinding) collectExpressionTokens(target, text);
+            else collectClassTokens(target, text);
+        }
         return end;
     }
     if (operator === '=' && quote === '{') {
@@ -553,13 +552,20 @@ function collectClassSink(
 /**
  * Collect statically authored class candidates from source-level class sinks.
  *
+ * A quoted attribute string gives the names of every text it can put in the
+ * DOM, as JSX and as HTML read it, so `className="p&#45;4"` gives `p-4`.
+ *
  * @param source Module text before csszyx transforms it.
+ * @param options The engine artifact that decodes attribute strings.
  * @returns Candidates that must retain authored spelling.
  */
-export function collectAuthoredClassNames(source: string): Set<string> {
+export function collectAuthoredClassNames(
+    source: string,
+    options: MangleEngineOptions = {},
+): Set<string> {
     const classes = new Set<string>();
     let cursor = 0;
-    while (cursor < source.length) cursor = scanFrom(classes, source, cursor);
+    while (cursor < source.length) cursor = scanFrom(classes, source, cursor, options);
     return classes;
 }
 
@@ -570,14 +576,20 @@ export function collectAuthoredClassNames(source: string): Set<string> {
  * @param classes - Where candidates go.
  * @param source - Complete source text.
  * @param cursor - The offset.
+ * @param options - The engine artifact that decodes attribute strings.
  * @returns Where the scan goes on, always past `cursor`.
  */
-function scanFrom(classes: Set<string>, source: string, cursor: number): number {
+function scanFrom(
+    classes: Set<string>,
+    source: string,
+    cursor: number,
+    options: MangleEngineOptions,
+): number {
     const code = source.codePointAt(cursor) as number;
     if (code === QUOTE_DOUBLE || code === QUOTE_SINGLE) {
         const keyEnd = quotedEnd(source, cursor, source[cursor] as string);
         return isClassKey(source, cursor + 1, keyEnd - 1)
-            ? collectClassSink(classes, source, cursor, keyEnd)
+            ? collectClassSink(classes, source, cursor, keyEnd, options)
             : keyEnd;
     }
     if (code === BACKTICK || code === SLASH) {
@@ -591,7 +603,7 @@ function scanFrom(classes: Set<string>, source: string, cursor: number): number 
     // Only `class` (5) and `className` (9) are sinks.
     const named = nameEnd - cursor;
     return (named === 5 || named === 9) && isClassSink(source, cursor, nameEnd)
-        ? collectClassSink(classes, source, cursor, nameEnd)
+        ? collectClassSink(classes, source, cursor, nameEnd, options)
         : nameEnd;
 }
 

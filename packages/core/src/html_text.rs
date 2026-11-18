@@ -661,20 +661,55 @@ const LEGACY_CHARACTERS: &[u8; 106] =
 /// migrate leaves as written.
 #[cfg(any(feature = "migrate", test))]
 pub fn decode_attribute_value(raw: &str) -> Option<std::borrow::Cow<'_, str>> {
+    match decode_attribute(raw) {
+        (_, true) => None,
+        (text, false) => Some(text),
+    }
+}
+
+/// An attribute value as the tokenizer decodes it, each `&name;` the reader
+/// cannot tell ([`Piece::Unknown`]) kept as written, and whether there was one.
+#[cfg(any(feature = "migrate", feature = "native-engine", test))]
+fn decode_attribute(raw: &str) -> (std::borrow::Cow<'_, str>, bool) {
     if !raw.bytes().any(|b| b == b'&' || b == b'\0') {
-        return Some(std::borrow::Cow::Borrowed(raw));
+        return (std::borrow::Cow::Borrowed(raw), false);
     }
     let mut decoded = String::with_capacity(raw.len());
     let mut unknown = false;
     decode_pieces(raw, |piece| match piece {
         Piece::Text(_, text) => decoded.push_str(text),
         Piece::Char(_, _, character) => decoded.push(character),
-        Piece::Unknown(_) => unknown = true,
+        Piece::Unknown(_) => {
+            unknown = true;
+            decoded.push('&');
+        }
     });
-    if unknown {
-        return None;
+    (std::borrow::Cow::Owned(decoded), unknown)
+}
+
+/// Every text a class attribute string written as `raw` can put in the DOM,
+/// each once: as JSX reads it, then as HTML does. `raw` itself is one of them
+/// when a language reads it as written.
+///
+/// A scanner that does not know which language a file's attribute is in
+/// reads every one, so a name the element carries is never missed; reading
+/// one it does not carry only keeps a class from being renamed. HTML keeps a
+/// name it cannot tell as written, as the class reader does.
+///
+/// `n` = `raw.len()`: one walk per language, none when `raw` holds no `&`
+/// and no NUL.
+#[cfg(feature = "native-engine")]
+pub fn class_attribute_readings(raw: &str) -> Vec<String> {
+    let mut readings: Vec<String> = Vec::with_capacity(2);
+    for reading in [
+        crate::transform::jsx_text::decode_jsx_attribute_text(raw),
+        decode_attribute(raw).0,
+    ] {
+        if !readings.iter().any(|seen| *seen == reading) {
+            readings.push(reading.into_owned());
+        }
     }
-    Some(std::borrow::Cow::Owned(decoded))
+    readings
 }
 
 /// One class name of a `class` attribute the tokenizer reads: where its
@@ -772,6 +807,37 @@ impl<'a> Utf16Counter<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn a_class_attribute_reads_as_jsx_then_as_html() {
+        // Both languages agree: one reading.
+        assert_eq!(class_attribute_readings("p&#45;4 a&amp;b"), ["p-4 a&b"]);
+        // JSX knows `hellip`, HTML keeps it as written.
+        assert_eq!(
+            class_attribute_readings("x&hellip;"),
+            ["x\u{2026}", "x&hellip;"]
+        );
+        // HTML decodes `&lt` before a space with no `;`, JSX reads it as written.
+        assert_eq!(class_attribute_readings("x&lt y"), ["x&lt y", "x< y"]);
+        assert_eq!(class_attribute_readings("&lt;a&lt b"), ["<a&lt b", "<a< b"]);
+        // Nothing to decode, or nothing either language reads: the text itself.
+        assert_eq!(class_attribute_readings("p-4 [&_p]:m-2"), ["p-4 [&_p]:m-2"]);
+        assert_eq!(class_attribute_readings("a&bogus;b"), ["a&bogus;b"]);
+        // A NUL reads as U+FFFD in HTML only.
+        assert_eq!(class_attribute_readings("a\0b"), ["a\0b", "a\u{FFFD}b"]);
+    }
+
+    #[test]
+    fn an_attribute_keeps_a_name_the_reader_cannot_tell_and_says_so() {
+        assert!(matches!(
+            decode_attribute("p-4"),
+            (std::borrow::Cow::Borrowed("p-4"), false)
+        ));
+        let (text, unknown) = decode_attribute("&foo;&amp;x&#65;");
+        assert_eq!((text.as_ref(), unknown), ("&foo;&xA", true));
+        assert!(!decode_attribute("&amp;").1);
+    }
 
     /// The cases parse5 answers (`tests/fixtures/html-class-cases.json`):
     /// where each `class` lies, in UTF-16 units, and the value it decodes to.

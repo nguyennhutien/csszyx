@@ -158,6 +158,16 @@ pub fn html_class_names_json(html: &str) -> String {
     serde_json::to_string(&html_text::html_class_names(html)).unwrap_or_else(|_| "[]".to_string())
 }
 
+/// Every text a class attribute string can put in the DOM, as a JSON array
+/// (`html_text::class_attribute_readings`).
+#[cfg(feature = "native-engine")]
+#[wasm_bindgen]
+#[must_use]
+pub fn class_attribute_readings_json(raw: &str) -> String {
+    serde_json::to_string(&html_text::class_attribute_readings(raw))
+        .unwrap_or_else(|_| "[]".to_string())
+}
+
 /// Whole-file source transform across the WASM boundary.
 ///
 /// One string in, one JSON string out per FILE: crossing the boundary once
@@ -252,6 +262,16 @@ mod tests {
         assert_eq!(
             html_class_names_json("<p title=\"é\" class=\"a b&amp;c\">"),
             r#"[{"start":20,"end":21,"name":"a"},{"start":22,"end":29,"name":"b&c"}]"#
+        );
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn class_attribute_readings_cross_the_boundary_as_json() {
+        // The wasm lane reads them through this export.
+        assert_eq!(
+            class_attribute_readings_json("x&lt y"),
+            r#"["x&lt y","x< y"]"#
         );
     }
 

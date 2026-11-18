@@ -97,6 +97,7 @@ interface ParserWasmModule {
     encode(index: number): string;
     compute_mangle_checksum(map: Readonly<Record<string, string>>): string;
     html_class_names_json(html: string): string;
+    class_attribute_readings_json(raw: string): string;
 }
 
 /**
@@ -499,4 +500,17 @@ export function computeMangleChecksumWasm(map: Readonly<Record<string, string>>)
  */
 export function htmlClassNamesWasm(html: string): HtmlClassName[] {
     return JSON.parse(requireParserWasm().html_class_names_json(html)) as HtmlClassName[];
+}
+
+/**
+ * Every text a class attribute string can put in the DOM, on the wasm
+ * artifact.
+ *
+ * @internal Used by `@csszyx/unplugin`; not a stable API.
+ * @param raw - The attribute string as written.
+ * @returns The texts: as JSX reads it, then as HTML does, each once.
+ * @throws {WasmTransformUnavailableError} when the wasm artifact is missing.
+ */
+export function classAttributeReadingsWasm(raw: string): string[] {
+    return JSON.parse(requireParserWasm().class_attribute_readings_json(raw)) as string[];
 }

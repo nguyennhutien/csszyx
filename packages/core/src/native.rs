@@ -133,6 +133,15 @@ pub fn html_class_names_native(html: String) -> Vec<NativeHtmlClassName> {
         .collect()
 }
 
+/// Every text a class attribute string can put in the DOM, as JSX and as
+/// HTML read it (`html_text::class_attribute_readings`).
+#[napi(js_name = "classAttributeReadings")]
+#[must_use]
+#[allow(clippy::needless_pass_by_value)]
+pub fn class_attribute_readings_native(raw: String) -> Vec<String> {
+    crate::html_text::class_attribute_readings(&raw)
+}
+
 /// The mangle map's checksum, from the map's own entries: originals and
 /// their mangled names in the same order (see `mangle::checksum_of_entries`).
 ///

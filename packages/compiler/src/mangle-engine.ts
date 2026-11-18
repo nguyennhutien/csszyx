@@ -1,6 +1,7 @@
 /**
- * The class-name encoder, the mangle map's checksum and the class names of
- * an HTML page, on the engine artifact the build runs on.
+ * The class-name encoder, the mangle map's checksum, the class names of an
+ * HTML page and the texts a class attribute reads as, on the engine artifact
+ * the build runs on.
  *
  * A native build reaches none of them through the wasm artifact, which it
  * would otherwise load for these alone. Both artifacts give the same answers.
@@ -11,11 +12,13 @@
 import { chooseEngine } from './engine-choice.js';
 import type { ParserMode } from './parser-mode.js';
 import {
+    classAttributeReadingsRust,
     computeMangleChecksumRust,
     encodeClassNameRust,
     htmlClassNamesRust,
 } from './transform-rust.js';
 import {
+    classAttributeReadingsWasm,
     computeMangleChecksumWasm,
     encodeClassNameWasm,
     htmlClassNamesWasm,
@@ -99,4 +102,24 @@ export function htmlClassNames(html: string, options: MangleEngineOptions = {}):
     return chooseEngine(options.parser) === 'rust'
         ? htmlClassNamesRust(html)
         : htmlClassNamesWasm(html);
+}
+
+/**
+ * Every text a class attribute string written as `raw` can put in the DOM:
+ * as JSX reads it, then as HTML does, each once; `raw` itself is one when a
+ * language reads it as written. A scanner that cannot tell a file's language
+ * reads them all, so the census of names a page carries misses none.
+ *
+ * One decoder for every lane: JSX by the transform's own reading
+ * (`jsx_text.rs`), HTML by the class reader (`html_text.rs`).
+ *
+ * @internal Used by `@csszyx/unplugin`; not a stable API.
+ * @param raw - The attribute string as written, between its quotes.
+ * @param options - The artifact.
+ * @returns The texts.
+ */
+export function classAttributeReadings(raw: string, options: MangleEngineOptions = {}): string[] {
+    return chooseEngine(options.parser) === 'rust'
+        ? classAttributeReadingsRust(raw)
+        : classAttributeReadingsWasm(raw);
 }

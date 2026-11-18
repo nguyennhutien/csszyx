@@ -13,11 +13,37 @@ import { createNextCacheIdentity, stableStringify } from '../src/next-cache-iden
 import { resolveNextAppRoot } from '../src/next-root-resolver.js';
 
 describe('source and generated-node boundaries', () => {
-    it('splits encoded HTML whitespace without decoding non-whitespace entities', () => {
+    it('reads a class attribute with encoded whitespace as JSX and as HTML read it', () => {
         const classes = collectAuthoredClassNames(
             '<div class="p-4&Tab;m-2&NewLine;gap-1&#x20;flex&#32;block&#65;" />',
         );
-        expect([...classes]).toEqual(['p-4', 'm-2', 'gap-1', 'flex', 'block&#65;']);
+        // JSX knows neither `Tab` nor `NewLine`, so it reads those as written;
+        // HTML splits there.
+        expect([...classes]).toEqual([
+            'p-4&Tab;m-2&NewLine;gap-1',
+            'flex',
+            'blockA',
+            'p-4',
+            'm-2',
+            'gap-1',
+        ]);
+    });
+
+    it('reads a class attribute as JSX and as HTML decode it', () => {
+        // The DOM carries the decoded name, so a census that kept only the
+        // spelling would let an owned `p-4` be renamed under the element.
+        const jsx = collectAuthoredClassNames(
+            '<div className="p&#45;4 m&#x2d;2 a&amp;b x&hellip;" />',
+        );
+        // JSX knows `hellip`; HTML keeps it as written.
+        expect([...jsx]).toEqual(['p-4', 'm-2', 'a&b', 'x…', 'x&hellip;']);
+        // HTML decodes `&lt` before a space with no `;`; JSX does not.
+        const html = collectAuthoredClassNames('<div class="x&lt y&gt;z" />');
+        expect([...html]).toEqual(['x&lt', 'y>z', 'x<']);
+        // A JavaScript string in braces is not an attribute string.
+        expect([...collectAuthoredClassNames('<div className={"p&#45;4"} />')]).toEqual([
+            'p&#45;4',
+        ]);
     });
 
     it('matches an absolute literal and a singleton filter', () => {

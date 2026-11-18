@@ -4,7 +4,6 @@ import * as path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import {
-    CLASS_LIST_SPACE,
     type CssVariableMangleValue,
     diagnosticPath,
     HTML_CLASS_SPACE,
@@ -21,6 +20,7 @@ import {
     htmlClassNames,
     isRustTransformAvailable,
     isWasmTransformAvailable,
+    type MangleEngineOptions,
 } from '@csszyx/compiler/engine';
 import type { CsszyxError } from '@csszyx/compiler/errors';
 import {
@@ -60,11 +60,7 @@ import { createUnplugin, type UnpluginInstance, type WebpackPluginInstance } fro
 import type { EnvironmentModuleNode, FSWatcher, PluginOption, ViteDevServer } from 'vite';
 import type { Compilation as WebpackCompilation, Compiler as WebpackCompiler } from 'webpack';
 import { atomicWriteFileSync } from './atomic-write.js';
-import {
-    collectAuthoredClassNames,
-    collectMergeCallClassNames,
-    findBalancedCodeEnd,
-} from './authored-class-scanner.js';
+import { collectAuthoredClassNames, collectMergeCallClassNames } from './authored-class-scanner.js';
 import { collectUnmarkedNames, inlineClassMarks } from './class-mark-inline.js';
 import {
     classNameAuthorConflictMessage,
@@ -1385,17 +1381,6 @@ function sourcePathFrom(from: string, target: string): string {
     // Another drive on Windows: `relative` is the target's absolute path.
     const bare = path.isAbsolute(relative) || posix === '..' || posix.startsWith('../');
     return bare ? posix : `./${posix}`;
-}
-
-/**
- * Find the exclusive end of one JSX expression container.
- *
- * @param code Source code.
- * @param bodyStart Offset after the opening brace.
- * @returns Exclusive expression-body end offset.
- */
-function findJsxExpressionEnd(code: string, bodyStart: number): number {
-    return findBalancedCodeEnd(code, bodyStart);
 }
 
 /**
@@ -3853,6 +3838,12 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     const activeParser = (): ReturnType<typeof resolveParserMode> =>
         (parserChoice ??= resolveParserMode(parserInput));
     /**
+     * The artifact the mangle helpers and the class scanner run on.
+     *
+     * @returns The transform's own.
+     */
+    const engineOptions = (): MangleEngineOptions => ({ parser: activeParser().parser });
+    /**
      * Announce the engine actually in effect (and the native-binary degrade, if
      * any). Called from build-lifecycle hooks, NOT from the factory body: the
      * module exports a default plugin instance for compatibility, so the factory
@@ -5902,49 +5893,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Add every whitespace-delimited class from one string to the safelist.
-     *
-     * @param value Class string.
-     */
-    function addSafelistClasses(value: string): void {
-        for (const className of value.split(CLASS_LIST_SPACE).filter(Boolean)) {
-            addSafelistClass(className);
-        }
-    }
-
-    /**
-     * Collect direct quoted class and sz attributes.
-     *
-     * @param code Source code.
-     */
-    function collectQuotedAttributeClasses(code: string): void {
-        const patterns = [
-            /(?:class(?:Name)?|sz)[:=]\s*"([^"]*)"/g,
-            /(?:class(?:Name)?|sz)[:=]\s*'([^']*)'/g,
-        ];
-        for (const pattern of patterns) {
-            for (const match of code.matchAll(pattern)) {
-                addSafelistClasses(match[1]);
-            }
-        }
-    }
-
-    /**
-     * Collect quoted class strings inside className expression containers.
-     *
-     * @param code Source code.
-     */
-    function collectExpressionClasses(code: string): void {
-        for (const match of code.matchAll(/className=\{/g)) {
-            const bodyStart = match.index + match[0].length;
-            const expression = code.slice(bodyStart, findJsxExpressionEnd(code, bodyStart));
-            for (const stringMatch of expression.matchAll(/"([^"]+)"|'([^']+)'/g)) {
-                addSafelistClasses(stringMatch[1] ?? stringMatch[2]);
-            }
-        }
-    }
-
-    /**
      * Collect literal class strings passed directly to the merge helpers.
      * Dynamic values deliberately stay absent: without a build-time spelling
      * they cannot have a trustworthy signature and runtime must keep them.
@@ -5956,29 +5904,13 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     }
 
     /**
-     * Extracts classes from source code into the safelist (state.classes) so
-     * Tailwind generates their CSS. This is the regex fallback for files the
-     * engine's sz pass did not handle (non-sz files, Vue/Svelte adapter output),
-     * where owned and author classes are indistinguishable by regex — so these
-     * deliberately do NOT enter ownedClasses and are never mangled.
-     * Handles both static patterns (className="...") and expression patterns
-     * (className={cond ? "..." : "..."}) which arise from pre-compiled ternary expressions.
-     * @param code source code
-     */
-    function extractClasses(code: string): void {
-        collectQuotedAttributeClasses(code);
-        collectExpressionClasses(code);
-        collectMergeCallClasses(code);
-    }
-
-    /**
      * Record raw author classes for safelisting and mangle ownership.
      *
      * @param code Source text before csszyx transforms it.
      */
     function recordAuthoredClasses(code: string): void {
         collectMergeCallClasses(code);
-        for (const className of collectAuthoredClassNames(code)) {
+        for (const className of collectAuthoredClassNames(code, engineOptions())) {
             addSafelistClass(className);
             state.authoredClasses.add(className);
         }
@@ -6377,7 +6309,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         assertVarMangleMapSize(state.varMangleMap, varMangleMapMaxBytes);
         state.checksum = computeMangleChecksum(
             createHydrationMangleMap(state.mangleMap, state.varMangleMap),
-            { parser: activeParser().parser },
+            engineOptions(),
         );
         state.finalized = true;
     }
@@ -6402,9 +6334,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
     function mangleHtmlClasses(source: string): string {
         let output = '';
         let cursor = 0;
-        for (const { start, end, name } of htmlClassNames(source, {
-            parser: activeParser().parser,
-        })) {
+        for (const { start, end, name } of htmlClassNames(source, engineOptions())) {
             // Own keys only: `constructor` is a class name, not a map entry.
             if (!ownKey.call(state.mangleMap, name)) continue;
             output += source.slice(cursor, start) + state.mangleMap[name];
@@ -7784,13 +7714,11 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         ) {
             return null;
         }
-        if (output.szClasses) {
-            for (const className of output.szClasses) {
-                addSafelistClass(className);
-                state.ownedClasses.add(className);
-            }
-        } else {
-            extractClasses(output.code);
+        // The classes a module writes itself are already in the safelist:
+        // `readTransformedSourceFacts` read this text first.
+        for (const className of output.szClasses ?? []) {
+            addSafelistClass(className);
+            state.ownedClasses.add(className);
         }
         return { code: output.code, map: null };
     }

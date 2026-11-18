@@ -1,7 +1,7 @@
 /**
- * A module the sz pass does not lower reaches the safelist through the regex
- * fallback (`extractClasses` → `addSafelistClasses`), which reads its quoted
- * `className` strings. A class holding a BOM (not White_Space, so the engine
+ * A module the sz pass does not lower reaches the safelist through the class
+ * scanner (`collectAuthoredClassNames`), which reads its quoted `className`
+ * strings and expressions. A class holding a BOM (not White_Space, so the engine
  * keeps it inside the class) is safelisted whole, as the runtime and the
  * engine read it, through the real Vite plugin: transform the module in dev,
  * then let an `sz` edit write the safelist the way a dev server does.
@@ -63,7 +63,7 @@ async function safelistAfter(source: string): Promise<string[]> {
     return safelist.split('\n').filter(line => line && !line.startsWith('#'));
 }
 
-describe('the safelist the regex fallback feeds', () => {
+describe('the safelist a module with no sz feeds', () => {
     it.each([
         ['a quoted className', `export const P = () => <div className="${BOM_CLASS} p-4" />;`],
         [
@@ -77,5 +77,26 @@ describe('the safelist the regex fallback feeds', () => {
         expect(lines).toContain('p-4');
         expect(lines).not.toContain('content-[a');
         expect(lines).not.toContain('b]');
+    });
+
+    // The names the element carries, not the spelling: a reference decodes,
+    // a JavaScript escape is the character it stands for.
+    it.each([
+        [
+            'a character reference',
+            'export const P = () => <div className="x&#32;y" />;',
+            ['x', 'y'],
+            ['x&#32;y'],
+        ],
+        [
+            'an escaped quote in a string',
+            String.raw`export const P = () => <div className={"a\"b c"} />;`,
+            ['a"b', 'c'],
+            ['a\\', 'b'],
+        ],
+    ])('names what %s reads as', async (_what, source, present, absent) => {
+        const lines = await safelistAfter(source);
+        for (const name of present) expect(lines).toContain(name);
+        for (const name of absent) expect(lines).not.toContain(name);
     });
 });
