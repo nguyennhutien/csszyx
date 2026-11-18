@@ -506,14 +506,15 @@ enum Piece<'a> {
     /// The `&` of `&name;` with a name the reader cannot tell. None of them
     /// reads as whitespace (of the 2,125 names, only `Tab` and `NewLine` do,
     /// and both are read), so it stays inside the class name it is written
-    /// in, and the name and `;` after it read as that name's text.
+    /// in, and the name and `;` after it read as that name's text. None reads
+    /// as ASCII either, save `fjlig` (`fj`).
     Unknown(usize),
 }
 
 /// Walk an attribute value as the tokenizer decodes it. `&name;` with a name
-/// outside the legacy set, `apos`, `Tab` and `NewLine` comes as
-/// [`Piece::Unknown`]: HTML names 2,231, and reading one wrong would rewrite
-/// a class the page never had. An `&` that starts no name is text (`R&D`,
+/// outside [`LEGACY_NAMES`] and [`ASCII_NAMES`] comes as [`Piece::Unknown`]:
+/// HTML names 2,231, and reading one wrong would rewrite a class the page
+/// never had. An `&` that starts no name is text (`R&D`,
 /// `[&a]:p-4`).
 fn decode_pieces<'a>(raw: &'a str, mut piece: impl FnMut(Piece<'a>)) {
     let bytes = raw.as_bytes();
@@ -605,19 +606,15 @@ fn reference_at(bytes: &[u8], at: usize) -> Reference {
     }
     let name = &rest[..run];
     let semicolon = rest.get(run) == Some(&b';');
-    let legacy = LEGACY_NAMES
-        .split(' ')
-        .position(|legacy| legacy.as_bytes() == name)
-        .map(|index| char::from(LEGACY_CHARACTERS[index]));
-    // The names besides the legacy ones that the reader knows: `apos`, and
-    // the only two that read as whitespace, which split a class list.
-    let known = match name {
-        b"apos" => Some('\''),
-        b"Tab" => Some('\t'),
-        b"NewLine" => Some('\n'),
-        _ => None,
+    let lookup = |names: &str, characters: &[u8]| {
+        names
+            .split(' ')
+            .position(|known| known.as_bytes() == name)
+            .map(|index| char::from(characters[index]))
     };
-    match (legacy.or(known), semicolon) {
+    let legacy = lookup(LEGACY_NAMES, LEGACY_CHARACTERS);
+    let known = || lookup(ASCII_NAMES, ASCII_CHARACTERS);
+    match (legacy.or_else(known), semicolon) {
         (Some(character), true) => Reference::Char(run + 2, character),
         // Without its `;`, a legacy name before `=` stays text in a value.
         (Some(character), false) if legacy.is_some() && rest.get(run) != Some(&b'=') => {
@@ -655,6 +652,20 @@ const LEGACY_CHARACTERS: &[u8; 106] =
       \xbe\x3e\xed\xee\xa1\xec\xbf\xef\xab\x3c\xaf\xb5\xb7\xa0\xac\xf1\xf3\xf4\xf2\xaa\
       \xba\xf8\xf5\xf6\xb6\xb1\xa3\x22\xbb\xae\xa7\xad\xb9\xb2\xb3\xdf\xfe\xd7\xfa\xfb\
       \xf9\xa8\xfc\xfd\xa5\xff";
+
+/// The 37 names outside [`LEGACY_NAMES`] that stand for one ASCII character
+/// (from the `entities` package's `entities.json`), and in
+/// [`ASCII_CHARACTERS`] at the same position that character. Each needs its
+/// `;`. A class is written in ASCII, so these are the names a page spells one
+/// with (`hover&colon;p-4`, `w-&lsqb;10px&rsqb;`), and the only two that read
+/// as whitespace, `Tab` and `NewLine`, are among them. Locked to parse5 by
+/// the fixture case that writes every one.
+const ASCII_NAMES: &str = "DiacriticalGrave Hat NewLine Tab UnderBar VerticalLine apos ast bsol \
+     colon comma commat dollar equals excl grave lbrace lbrack lcub lowbar lpar lsqb midast num \
+     percnt period plus quest rbrace rbrack rcub rpar rsqb semi sol verbar vert";
+
+/// The characters of [`ASCII_NAMES`], in its order.
+const ASCII_CHARACTERS: &[u8; 37] = b"`^\n\t_|'*\\:,@$=!`{[{_([*#%.+?}]})];/||";
 
 /// An attribute value as the tokenizer decodes it; `None` when it holds a
 /// named reference the reader cannot tell ([`Piece::Unknown`]), which

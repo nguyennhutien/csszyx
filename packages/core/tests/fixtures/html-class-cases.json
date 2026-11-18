@@ -830,6 +830,44 @@
         ]
     },
     {
+        "case": "every ASCII name with ;",
+        "html": "<div class=\"a&DiacriticalGrave;b a&Hat;b a&NewLine;b a&Tab;b a&UnderBar;b a&VerticalLine;b a&apos;b a&ast;b a&bsol;b a&colon;b a&comma;b a&commat;b a&dollar;b a&equals;b a&excl;b a&grave;b a&lbrace;b a&lbrack;b a&lcub;b a&lowbar;b a&lpar;b a&lsqb;b a&midast;b a&num;b a&percnt;b a&period;b a&plus;b a&quest;b a&rbrace;b a&rbrack;b a&rcub;b a&rpar;b a&rsqb;b a&semi;b a&sol;b a&verbar;b a&vert;b\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 395,
+                "value": "a`b a^b a\nb a\tb a_b a|b a'b a*b a\\b a:b a,b a@b a$b a=b a!b a`b a{b a[b a{b a_b a(b a[b a*b a#b a%b a.b a+b a?b a}b a]b a}b a)b a]b a;b a/b a|b a|b"
+            }
+        ]
+    },
+    {
+        "case": "an ASCII name without ; is text",
+        "html": "<div class=\"a&DiacriticalGrave a&Hat a&UnderBar a&VerticalLine a&apos a&ast a&bsol a&colon a&comma a&commat a&dollar a&equals a&excl a&grave a&lbrace a&lbrack a&lcub a&lowbar a&lpar a&lsqb a&midast a&num a&percnt a&period a&plus a&quest a&rbrace a&rbrack a&rcub a&rpar a&rsqb a&semi a&sol a&verbar a&vert\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 305,
+                "value": "a&DiacriticalGrave a&Hat a&UnderBar a&VerticalLine a&apos a&ast a&bsol a&colon a&comma a&commat a&dollar a&equals a&excl a&grave a&lbrace a&lbrack a&lcub a&lowbar a&lpar a&lsqb a&midast a&num a&percnt a&period a&plus a&quest a&rbrace a&rbrack a&rcub a&rpar a&rsqb a&semi a&sol a&verbar a&vert"
+            }
+        ]
+    },
+    {
+        "case": "a variant and an arbitrary value spelled with references",
+        "html": "<div class=\"hover&colon;p-4 w-&lsqb;10px&rsqb; fjlig&fjlig;\">x</div>",
+        "found": [
+            {
+                "start": 5,
+                "end": 60,
+                "value": "hover:p-4 w-[10px] fjligfj",
+                "undecoded": true,
+                "names": [
+                    "hover:p-4",
+                    "w-[10px]"
+                ]
+            }
+        ]
+    },
+    {
         "case": "an escaped script holding a script",
         "html": "<script><!--<script></script><p class=a></p>--></script><p class=b></p>",
         "found": [

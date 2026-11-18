@@ -201,6 +201,16 @@ describe('hybrid raw-class ownership', () => {
         expect(mangleEligibleClasses(owned, authored)).toEqual(['gap-1']);
     });
 
+    it('keeps an owned class an HTML attribute spells with an HTML5 name unrenamed', () => {
+        // `&colon;` and `&lsqb;`/`&rsqb;` are HTML5 names JSX does not read,
+        // so only the HTML reading carries `hover:p-4` and `w-[10px]`.
+        const owned = new Set(['hover:p-4', 'w-[10px]', 'gap-1']);
+        const authored = collectAuthoredClassNames(
+            '<div class="hover&colon;p-4 w-&lsqb;10px&rsqb;" />',
+        );
+        expect(mangleEligibleClasses(owned, authored)).toEqual(['gap-1']);
+    });
+
     it('orders eligible classes independently of discovery order', () => {
         const authored = new Set(['p-4']);
 
