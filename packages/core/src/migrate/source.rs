@@ -35,6 +35,7 @@ use super::verdict::{
     UnderscoreQuestions,
 };
 use crate::js_text::has_jsx_attribute;
+use crate::transform::jsx_text::{decode_jsx_attribute_text, fits_jsx_attribute_string};
 
 /// Options for the source transformation.
 #[derive(Clone, Copy, Debug, Default)]
@@ -471,9 +472,9 @@ impl<'a> Migration<'_, '_> {
         let range = span_range(attribute.span);
         match &attribute.value {
             Some(JSXAttributeValue::StringLiteral(literal)) => {
-                if let Some(text) = literal.value.as_str() {
-                    self.apply_static_class_migration(text, range);
-                }
+                // oxc keeps an attribute string as written; JSX decodes it.
+                let text = literal.value.as_str().unwrap_or_default();
+                self.apply_static_class_migration(&decode_jsx_attribute_text(text), range);
             }
             Some(JSXAttributeValue::ExpressionContainer(container)) => {
                 self.migrate_class_expression(&container.expression, range);
@@ -604,14 +605,17 @@ impl<'a> Migration<'_, '_> {
         let range = span_range(attribute.span);
 
         // JSX reads no escape in an attribute string, so the value is source
-        // text and never holds a lone surrogate.
-        let text = literal.value.as_str().unwrap_or_default();
+        // text and never holds a lone surrogate; it decodes its references.
+        let text = decode_jsx_attribute_text(literal.value.as_str().unwrap_or_default());
         let trimmed = text.trim_matches(is_class_space);
         let converted = class_name_to_sz_object_with(trimmed, self.lookup);
         let mut remaining = converted.keep_in_class_name.clone();
         remaining.extend(converted.unrecognized.iter().cloned());
         let class_name_changed = remaining.join(" ") != tokenize(trimmed).join(" ");
         let unrecognized = converted.unrecognized.clone();
+        if !writes_back(&remaining) {
+            return false;
+        }
 
         if converted.sz_object.is_empty() && !class_name_changed {
             self.classes_unrecognized
@@ -712,6 +716,13 @@ fn static_sz(object: &ObjectExpression<'_>) -> SiblingSz {
     }
 }
 
+/// Whether the classes that stay in className can go back into an attribute
+/// string: one JSX would read differently (`a"b`, `a&b`) leaves the element
+/// as it was.
+fn writes_back(remaining: &[String]) -> bool {
+    fits_jsx_attribute_string(&remaining.join(" "))
+}
+
 /// A static className as the attribute text that replaces it: `sz={{ … }}`,
 /// preceded by the classes that stay in className when there are any.
 fn process_static_string(class_name: &str, lookup: Lookup<'_>) -> Option<(String, Vec<String>)> {
@@ -728,6 +739,9 @@ fn process_static_string(class_name: &str, lookup: Lookup<'_>) -> Option<(String
     remaining.extend(converted.unrecognized.iter().cloned());
     if remaining.is_empty() {
         return Some((format!("sz={expression}"), Vec::new()));
+    }
+    if !writes_back(&remaining) {
+        return None;
     }
     Some((
         format!("className=\"{}\" sz={expression}", remaining.join(" ")),
@@ -764,6 +778,68 @@ mod tests {
             &options,
         );
         assert!(control.changed);
+    }
+
+    /// A JSX attribute string decodes its character references, so the
+    /// element carries `p-4` and `m-2`: migrate converts what it carries.
+    #[test]
+    fn reads_a_static_class_name_as_jsx_decodes_it() {
+        let options = TransformOptions::default();
+        let result = transform_source(
+            "export const A = () => <div className=\"p-4&#32;m&#x2d;2\" />;",
+            "A.tsx",
+            &options,
+        );
+        assert!(
+            result.code.contains("sz={{ p: 4, m: 2 }}"),
+            "{:?}",
+            result.code
+        );
+        assert!(!result.code.contains("className"), "{:?}", result.code);
+        // A class left in className that no attribute string can spell as
+        // it is (`a"b`) leaves the element as written.
+        let kept = transform_source(
+            "export const A = () => <div className=\"p-4 a&quot;b\" />;",
+            "A.tsx",
+            &options,
+        );
+        assert!(!kept.changed, "{:?}", kept.code);
+        // A JavaScript string in braces is no attribute string: its `&` stays.
+        let braced = transform_source(
+            "export const A = () => <div className={\"p-4 a&amp;b\"} />;",
+            "A.tsx",
+            &options,
+        );
+        assert!(!braced.changed, "{:?}", braced.code);
+    }
+
+    /// The same reading when a resolve pass merges a className into the sz
+    /// prop beside it.
+    #[test]
+    fn merges_a_class_name_into_a_sibling_sz_as_jsx_decodes_it() {
+        let mut map = SzObject::new();
+        map.insert(
+            "mystery".to_string(),
+            super::super::value::SzValue::from("p-4"),
+        );
+        let options = TransformOptions {
+            custom_map: Some(&map),
+            ..TransformOptions::default()
+        };
+        let merged = transform_source(
+            "<div sz={{ m: 1 }} className=\"mys&#116;ery\" />",
+            "A.tsx",
+            &options,
+        );
+        assert!(merged.code.contains("p: 4"), "{:?}", merged.code);
+        assert!(!merged.code.contains("className"), "{:?}", merged.code);
+        let kept = transform_source(
+            "<div sz={{ m: 1 }} className=\"mystery a&quot;b\" />",
+            "A.tsx",
+            &options,
+        );
+        assert!(!kept.changed, "{:?}", kept.code);
+        assert_eq!(kept.stats.class_names_skipped, 1);
     }
 
     /// JSX allows whitespace around an attribute's `=`, so keys-only mode
