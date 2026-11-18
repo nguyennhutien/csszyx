@@ -11,7 +11,7 @@ import { templateClassNames } from '../src/index.js';
 describe('templateClassNames', () => {
     it('reads static words past text a JavaScript reader would take for a string', () => {
         const reading = templateClassNames(
-            `<template><p>Don't panic</p><div class="p-4  m-2&#9;gap-1">x</div></template>`,
+            `<template><p>Don't panic</p><div class=" p-4  m-2&#9;gap-1 ">x</div></template>`,
         );
         expect([...(reading?.names ?? [])].sort()).toEqual(['gap-1', 'm-2', 'p-4']);
     });

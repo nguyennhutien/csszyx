@@ -174,6 +174,26 @@ describe('the sz prescan', () => {
         60_000,
     );
 
+    it('reads a template outside `include` for its merge hooks only', async () => {
+        const root = tailwindProject('csszyx-template-include-', {
+            'src/index.css': TW,
+            'src/Box.tsx': 'export const Box = () => <div sz={{ gap: 1 }} />;\n',
+            'src/Out.vue': '<template><div sz="{ p: 19 }" /></template>\n',
+        });
+        vi.spyOn(process, 'cwd').mockReturnValue(root);
+        const call = callHooks(
+            vitePlugin({
+                build: { cache: false },
+                production: { mangle: false },
+                include: [/\.tsx$/],
+            }) as unknown as Record<string, unknown>[],
+        );
+        await call('configResolved', { root, command: 'build' });
+        const safelist = readFileSync(join(root, '.csszyx/csszyx-classes.txt'), 'utf8');
+        expect(safelist).toContain('gap-1');
+        expect(safelist).not.toContain('p-19');
+    }, 60_000);
+
     it('names a template its adapter cannot load or lower and writes the rest', async () => {
         vi.doMock('node:fs', async original => {
             const fs = await original<typeof import('node:fs')>();
