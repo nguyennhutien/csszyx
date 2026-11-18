@@ -11,6 +11,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { htmlClassNames } from '@csszyx/compiler/engine';
 import { CssSyntaxError } from 'postcss';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import webpack, { type Configuration, type Stats } from 'webpack';
@@ -24,6 +25,9 @@ import { mangleCSSSync } from '../src/css-mangler.js';
 import { webpackPlugin } from '../src/unplugin.js';
 
 const WEBPACK_TEST_TIMEOUT_MS = 30_000;
+
+/** Every rewrite of the late page in the last build: its text before and after. */
+const lateRewrites: Array<[before: string, after: string]> = [];
 const tempDirs: string[] = [];
 
 afterEach(() => {
@@ -32,9 +36,25 @@ afterEach(() => {
 });
 
 /**
+ * A page holding `m-3` where the tokenizer reads a `class` attribute and
+ * where it reads text: a script string that opens a quote must not hide the
+ * element after it, and a class list written with a character reference is
+ * read decoded.
+ */
+const CONTEXTS_HTML =
+    '<!-- <i class="m-3"></i> -->' +
+    "<script>var s = '<b class=\"';</script>" +
+    '<b class="m-3"></b>' +
+    '<a title="x class=m-3"></a>' +
+    '<em class="m-3" class="m-3"></em>' +
+    '<q class="m-3&#32;author-kept"></q>';
+
+/**
  * Emits a synthetic HTML page and an extra JS asset (both referencing the owned
  * `m-3` class) at an early processAssets stage, so csszyx's later
- * OPTIMIZE_SIZE-stage pass finds and mangles their class attributes/strings.
+ * `OPTIMIZE`-stage pass finds and mangles their class attributes/strings; and
+ * a page, a hashed page and a stylesheet after that stage, as
+ * html-webpack-plugin and other late plugins do.
  */
 class EmitExtraAssetsPlugin {
     apply(compiler: webpack.Compiler): void {
@@ -56,6 +76,17 @@ class EmitExtraAssetsPlugin {
                                 '<i class="constructor m-3"></i>',
                         ),
                     );
+                    // HTML allows whitespace around `=` and an unquoted value,
+                    // as a minifier writes one; `data-class` is another name.
+                    compilation.emitAsset(
+                        'spellings.html',
+                        new RawSource(
+                            '<b class = "m-3"></b><u class=m-3></u><s data-class="m-3"></s>',
+                        ),
+                    );
+                    // Where the tokenizer reads no attribute: a comment, a
+                    // script, another attribute's value, a second `class`.
+                    compilation.emitAsset('contexts.html', new RawSource(CONTEXTS_HTML));
                     compilation.emitAsset(
                         'unchanged.html',
                         new RawSource(
@@ -67,6 +98,76 @@ class EmitExtraAssetsPlugin {
                         new RawSource('/* no class selectors */'),
                     );
                     compilation.emitAsset('extra.js', new RawSource('var x={className:"m-3"};'));
+                },
+            );
+            const { RawSource } = compiler.webpack.sources;
+            // Counts every rewrite of the late page, whoever makes it.
+            // Only while assets are processed: once written, webpack swaps
+            // each source for one that can report its size alone.
+            let processing = true;
+            compilation.hooks.afterProcessAssets.tap('emit-extra', () => {
+                processing = false;
+            });
+            const updateAsset = compilation.updateAsset.bind(compilation);
+            compilation.updateAsset = ((file, next, ...rest) => {
+                if (processing && file === 'late.html' && typeof next !== 'function') {
+                    const before = compilation.getAsset(file)?.source.source().toString() ?? '';
+                    lateRewrites.push([before, next.source().toString()]);
+                }
+                return updateAsset(file, next, ...rest);
+            }) as typeof compilation.updateAsset;
+            // A post-processor registered ahead of csszyx, as an HTML minifier
+            // listed before it is: it rewrites a page as soon as one appears,
+            // and csszyx must mangle what it wrote, not the page as emitted.
+            compilation.hooks.processAssets.tap(
+                {
+                    name: 'post-process-pages',
+                    stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_ADDITIONS,
+                    additionalAssets: assets => {
+                        if (!('late.html' in assets)) return;
+                        const page = compilation.getAsset('late.html')?.source.source().toString();
+                        compilation.updateAsset(
+                            'late.html',
+                            new RawSource(`${page}<i class="m-3"></i>`),
+                        );
+                    },
+                },
+                () => undefined,
+            );
+            // html-webpack-plugin generates its page here, after minification
+            // (`OPTIMIZE_INLINE`), long after csszyx's own pass at `OPTIMIZE`.
+            compilation.hooks.processAssets.tap(
+                {
+                    name: 'emit-late-page',
+                    stage: compiler.webpack.Compilation.PROCESS_ASSETS_STAGE_OPTIMIZE_INLINE,
+                },
+                () => {
+                    compilation.emitAsset(
+                        'late.html',
+                        new RawSource('<b class="m-3 author-kept"></b>'),
+                    );
+                    // Renamed by its content hash at `OPTIMIZE_HASH`, so webpack
+                    // hands it to csszyx's late pass a second time.
+                    compilation.emitAsset(
+                        'hashed.0123456789abcdef.html',
+                        new RawSource('<b class="m-3"></b>'),
+                        { contenthash: '0123456789abcdef' },
+                    );
+                    // A stylesheet and a script a late plugin adds are renamed
+                    // like the rest; a hashed one comes back under its new name
+                    // and is not read twice; a manifest holding no class is
+                    // left as it is.
+                    compilation.emitAsset('late.css', new RawSource('.m-3{margin:0}'));
+                    compilation.emitAsset(
+                        'late.0123456789abcdef.css',
+                        new RawSource('.m-3{padding:0}'),
+                        { contenthash: '0123456789abcdef' },
+                    );
+                    compilation.emitAsset('late.js', new RawSource('var c={className:"m-3"};'));
+                    compilation.emitAsset(
+                        'client-reference-manifest.js',
+                        new RawSource('self.manifest={"ssrModuleMapping":{}};'),
+                    );
                 },
             );
         });
@@ -82,13 +183,16 @@ class EmitExtraAssetsPlugin {
  * @param build.emitManifest - `build.emitManifest`.
  * @param ahead - Plugins registered before csszyx's, as Next registers its own.
  * @param optimization - webpack `optimization` options for the build.
+ * @param filename - `output.filename`.
  */
 async function runWebpack(
     root: string,
     build: { emitManifest?: boolean } = { emitManifest: true },
     ahead: webpack.WebpackPluginInstance[] = [],
     optimization: Configuration['optimization'] = undefined,
+    filename = 'bundle.js',
 ): Promise<void> {
+    lateRewrites.length = 0;
     const config: Configuration = {
         mode: 'production',
         optimization,
@@ -96,7 +200,7 @@ async function runWebpack(
         entry: './src/index.js',
         output: {
             path: join(root, 'dist'),
-            filename: 'bundle.js',
+            filename,
             assetModuleFilename: 'assets/[name][ext]',
         },
         module: { rules: [{ test: /\.css$/, type: 'asset/resource' }] },
@@ -185,7 +289,10 @@ describe('webpack processAssets mangle pass', () => {
         );
         writeFileSync(join(src, 'style.css'), '.m-3 { margin: 0.75rem; }\n', 'utf8');
 
-        await runWebpack(root);
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        await runWebpack(root, undefined, undefined, undefined, '[name].[contenthash].js');
+        const warnings = warn.mock.calls.map(call => String(call[0]));
+        warn.mockRestore();
 
         const manifest = JSON.parse(
             readFileSync(join(root, 'dist/csszyx-manifest.json'), 'utf8'),
@@ -219,6 +326,67 @@ describe('webpack processAssets mangle pass', () => {
         // mangled token and nothing else.
         const aside = /<aside class=(["']?)([^"'>]+)\1><\/aside>/.exec(html);
         expect(aside?.[2]).toBe(token);
+
+        // Every spelling of the attribute HTML allows is mangled; another
+        // attribute that only ends in `class` is left as written.
+        const spellings = readFileSync(join(root, 'dist/spellings.html'), 'utf8');
+        // Read back through the reader held to parse5, whatever quoting the
+        // minifier chose.
+        expect(htmlClassNames(spellings).map(at => at.name)).toEqual([token, token]);
+        expect(spellings).toContain('data-class');
+        expect(spellings).toMatch(/data-class=["']?m-3/);
+
+        // webpack's own HTML minimizer drops the comment, the quotes a value
+        // does not need and the second `class`, so each element is read on
+        // its own.
+        const contexts = readFileSync(join(root, 'dist/contexts.html'), 'utf8');
+        const opensWithToken = (tag: string): boolean =>
+            [`<${tag} class=${token}`, `<${tag} class="${token}"`].some(
+                start => contexts.includes(`${start}>`) || contexts.includes(`${start} `),
+            );
+        expect(contexts).toContain("'<b class=\"'");
+        expect(opensWithToken('b')).toBe(true);
+        expect(contexts).toContain('title="x class=m-3"');
+        expect(opensWithToken('em')).toBe(true);
+        expect(contexts).toContain(`<q class="${token} author-kept">`);
+
+        // A page another plugin rewrote first is mangled as that plugin left
+        // it (webpack's minimizer then drops the quotes it can), and renamed
+        // by one rewrite: the only one that turns `m-3` into the token.
+        expect(readFileSync(join(root, 'dist/late.html'), 'utf8').replaceAll('"', '')).toBe(
+            `<b class=${token} author-kept></b><i class=${token}></i>`,
+        );
+        const renames = lateRewrites.filter(
+            ([before, after]) => before.includes('m-3') && !after.includes('m-3'),
+        );
+        expect(renames).toHaveLength(1);
+        // A page renamed by its content hash comes back under its new name;
+        // the second read changes nothing, since no token is a class name.
+        const hashed = readdirSync(join(root, 'dist')).filter(file => file.startsWith('hashed.'));
+        expect(hashed).toHaveLength(1);
+        expect(hashed[0]).not.toBe('hashed.0123456789abcdef.html');
+        expect(readFileSync(join(root, 'dist', hashed[0]), 'utf8').replaceAll('"', '')).toBe(
+            `<b class=${token}></b>`,
+        );
+        // A stylesheet and a script added after the pass are renamed like the
+        // rest; one renamed by its content hash is read once, so its token is
+        // not taken for a class some other CSS styles.
+        expect(readFileSync(join(root, 'dist/late.css'), 'utf8')).toBe(`.${token}{margin:0}`);
+        expect(readFileSync(join(root, 'dist/late.js'), 'utf8')).toContain(`"${token}"`);
+        const lateCss = readdirSync(join(root, 'dist')).filter(
+            file => file.startsWith('late.') && file.endsWith('.css') && file !== 'late.css',
+        );
+        expect(lateCss).toHaveLength(1);
+        expect(lateCss[0]).not.toBe('late.0123456789abcdef.css');
+        expect(readFileSync(join(root, 'dist', lateCss[0]), 'utf8')).toBe(`.${token}{padding:0}`);
+        // The manifest holds no class: the minimizer reformats it, csszyx
+        // adds nothing to it and warns about nothing.
+        const clientManifest = readFileSync(
+            join(root, 'dist/client-reference-manifest.js'),
+            'utf8',
+        );
+        expect(clientManifest.replaceAll('"', '')).toBe('self.manifest={ssrModuleMapping:{}};');
+        expect(warnings.filter(text => text.includes('mangle-hybrid-hazard'))).toEqual([]);
 
         // The extra JS asset's class string is mangled too.
         const extraJs = readFileSync(join(root, 'dist/extra.js'), 'utf8');

@@ -563,7 +563,44 @@ export const SIZE_BUDGETS = [
         // at ASCII whitespace. 1,126 gzip -9 bytes over the first fix (586,856
         // to 587,982, same build), 145 of them the control-character check;
         // this script reads 590,368. ~280 bytes of headroom.
-        maxGzipBytes: 590_650,
+        //
+        // Raised from 590,650 on 2026-11-16, measured 590,670: one reader of
+        // a JSX attribute by name for the fast path and migrate, which reads
+        // whitespace around `=` (a spaced `className` got a second one, a
+        // spaced `sz` shipped raw). `str::match_indices`; `memchr::memmem`
+        // was ten times faster on 1.76 MB of source but added 1,457 gzip -9
+        // bytes, for about 0.01 ms a file. 591,150 the same day, measured
+        // 590,835, after review: the reader takes a comment before the value,
+        // the fast path lowers only `sz` after whitespace or `<` (a name that
+        // ends in `sz`, such as `ns:sz`, is the parser's), and migrate reads an
+        // HTML `class` by the tokenizer's rules (any case, unquoted values,
+        // `data-class` another name). ~300 bytes of headroom.
+        //
+        // Raised from 591,150 on 2026-11-17: the HTML `class` reader moved
+        // into the engine for every lane, so the webpack lane's mangle reads
+        // a page through this artifact when the native one is absent. A
+        // tokenizer of tags, comments, raw text and SVG/MathML content, with
+        // the five named references and numeric ones decoded. 5,040 gzip -9
+        // bytes (588,124 without the export, 593,164 with it, same build);
+        // writing the answer as lines instead of JSON saved 4. This script
+        // reads 596,631. ~300 bytes of headroom.
+        //
+        // Raised from 596,930 the same day, after review: the reader decodes
+        // the 106 legacy references and reads any other `&` before a letter
+        // as text instead of leaving the attribute alone, reads a script's
+        // escaped states, and reads HTML again inside SVG and MathML
+        // integration points. 1,594 gzip -9 bytes (593,164 → 594,758, same
+        // build); the legacy names as one string and their characters as
+        // one byte each, rather than a table of slices, saved 222 of them.
+        // This script reads 598,117. ~300 bytes of headroom.
+        //
+        // Raised from 598,420 the same day, after a third review: a named
+        // reference the reader cannot tell leaves out only the class name it
+        // is written in, not the whole attribute, and `&Tab;` and `&NewLine;`
+        // (the only two that read as whitespace) split a list. 424 gzip -9
+        // bytes (594,758 → 595,182, same build). This script reads 598,733.
+        // ~300 bytes of headroom.
+        maxGzipBytes: 599_030,
     },
     // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
     // bundles from the compiler's source, unminified, and that every editor
@@ -602,8 +639,11 @@ export const SIZE_BUDGETS = [
         // Raised from 50,900 on 2026-11-13, measured 51,095: the
         // `lone-surrogate` fallback kind, its reason and its advice in the
         // diagnostic tables it bundles (50,889 with the same files from
-        // `main`, same build).
-        maxGzipBytes: 51_400,
+        // `main`, same build). Raised from 51,400 on 2026-11-16, measured
+        // 51,407: the scanner reads `sz` through the shared attribute reader,
+        // so `sz = {{…}}` is an expression the editor reads (+163 gzip -9).
+        // ~300 bytes of headroom.
+        maxGzipBytes: 51_700,
         // Built as production, so the leak gate reads it, except for the ids
         // whose words the extension shows as its own editor diagnostics
         // (`diagnostic-provider.ts`, from `SZ_EDITOR_DIAGNOSTIC_TEMPLATES`).
@@ -873,7 +913,13 @@ export const SIZE_BUDGETS = [
         // under the mark helper's name is not a missed mark. 124,950 on
         // 2026-11-15, measured 124,672: a directive ends where JavaScript
         // ends its statement, read past comments by the shared lexer.
-        maxGzipBytes: 124_950,
+        // 125,000 on 2026-11-16, measured 124,986: the transform and hot
+        // update gates read an `sz`/`szs` attribute whatever the whitespace
+        // around its `=`, one exported regex per name so only those two ship.
+        // 125,550 the same day, measured 125,259, after review: the webpack
+        // HTML mangle reads `class` through the shared HTML reader (spaced
+        // `=`, unquoted values, any case). ~300 bytes of headroom.
+        maxGzipBytes: 125_550,
         wrappers: ['./vite', './webpack'],
     },
     {
@@ -1014,8 +1060,10 @@ export const SIZE_BUDGETS = [
         // Measured 58,492. 60,300 on 2026-11-11, measured 59,994 with the
         // other 0.18.1 changes merged (59,923 alone): the runtime reads
         // whitespace as the engine does (White_Space trim and strip, and the
-        // two class-list separators).
-        maxGzipBytes: 60_300,
+        // two class-list separators). 60,350 on 2026-11-16, measured 60,306:
+        // the grid track keywords are exported, so the parity test walks the
+        // set the engine's table is generated from. ~300 bytes of headroom.
+        maxGzipBytes: 60_600,
     },
     {
         name: '@csszyx/compiler `./migrate`, loaded by Node',

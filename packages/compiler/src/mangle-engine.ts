@@ -1,17 +1,25 @@
 /**
- * The class-name encoder and the mangle map's checksum, on the engine
- * artifact the build runs on.
+ * The class-name encoder, the mangle map's checksum and the class names of
+ * an HTML page, on the engine artifact the build runs on.
  *
- * A native build reaches neither through the wasm artifact, which it would
- * otherwise load for these two alone. Both artifacts give the same answers.
+ * A native build reaches none of them through the wasm artifact, which it
+ * would otherwise load for these alone. Both artifacts give the same answers.
  *
  * @module mangle-engine
  */
 
 import { chooseEngine } from './engine-choice.js';
 import type { ParserMode } from './parser-mode.js';
-import { computeMangleChecksumRust, encodeClassNameRust } from './transform-rust.js';
-import { computeMangleChecksumWasm, encodeClassNameWasm } from './transform-wasm.js';
+import {
+    computeMangleChecksumRust,
+    encodeClassNameRust,
+    htmlClassNamesRust,
+} from './transform-rust.js';
+import {
+    computeMangleChecksumWasm,
+    encodeClassNameWasm,
+    htmlClassNamesWasm,
+} from './transform-wasm.js';
 
 /**
  * Where the mangle helpers run.
@@ -54,4 +62,41 @@ export function computeMangleChecksum(
     return chooseEngine(options.parser) === 'rust'
         ? computeMangleChecksumRust(map)
         : computeMangleChecksumWasm(map);
+}
+
+/**
+ * One class name of a `class` attribute the HTML tokenizer reads.
+ *
+ * @internal Used by `@csszyx/unplugin`; not a stable API.
+ */
+export interface HtmlClassName {
+    /** Where its spelling starts, in UTF-16 units. */
+    start: number;
+    /** Where its spelling ends. */
+    end: number;
+    /** The name it decodes to: `a&amp;b` is spelled with the reference. */
+    name: string;
+}
+
+/**
+ * Every class name of every `class` attribute an HTML text holds, read as
+ * the tokenizer reads it with scripting off, so `noscript` markup counts: not
+ * in a comment, a script or another attribute's value, the first `class` of
+ * an element only, a value split after its character references decode. A
+ * class list holding `&name;` with a name outside the 106 legacy ones and
+ * `apos` gives none; an `&` that starts no name is text (`R&D`).
+ * Replacing a name's spelling keeps every other byte of the page as written.
+ *
+ * One reader for every lane: migrate converts what it reads
+ * (`packages/core/src/html_text.rs`).
+ *
+ * @internal Used by `@csszyx/unplugin`; not a stable API.
+ * @param html - HTML text.
+ * @param options - The artifact.
+ * @returns The names, in text order.
+ */
+export function htmlClassNames(html: string, options: MangleEngineOptions = {}): HtmlClassName[] {
+    return chooseEngine(options.parser) === 'rust'
+        ? htmlClassNamesRust(html)
+        : htmlClassNamesWasm(html);
 }

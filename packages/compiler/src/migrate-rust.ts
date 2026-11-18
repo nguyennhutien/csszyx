@@ -106,6 +106,8 @@ export interface MigrateRustHtmlOptions {
     underscores?: ReadonlyMap<string, string>;
     /** The project's Tailwind prefix, as for {@link MigrateRustOptions.prefix}. */
     prefix?: string | null;
+    /** The page's path, which each warning starts with, as a JSX file's do. */
+    filePath?: string;
 }
 
 /** A class a migrate table decided because the project's Tailwind was not asked. */
@@ -281,6 +283,7 @@ export function migrateRustHtml(
                 injectRuntime: options.injectRuntime || undefined,
                 cdnUrl: options.cdnUrl,
                 localPath: options.localPath,
+                filePath: options.filePath,
                 ...servedLists(options.served),
                 ...underscoreLists(options.underscores),
                 prefix: options.prefix ?? undefined,

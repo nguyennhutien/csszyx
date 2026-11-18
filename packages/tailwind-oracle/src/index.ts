@@ -83,7 +83,17 @@ export {
     szValuePairs,
     type ThemeNamespace,
 } from './sibling-keyword.js';
-export { fileMayContainSafelistableSz, moduleMayHoldSz } from './sz-marker.js';
+export {
+    fileMayContainSafelistableSz,
+    hasJsxAttribute,
+    JSX_CLASS_ATTRIBUTE,
+    JSX_CLASS_NAME_ATTRIBUTE,
+    JSX_SZ_ATTRIBUTE,
+    JSX_SZS_ATTRIBUTE,
+    type JsxAttributeAt,
+    jsxAttributes,
+    moduleMayHoldSz,
+} from './sz-marker.js';
 export {
     type CollisionOracle,
     type DeclaredToken,

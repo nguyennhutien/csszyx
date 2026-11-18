@@ -35,6 +35,8 @@ export {
 export {
     classNameEncoder,
     computeMangleChecksum,
+    type HtmlClassName,
+    htmlClassNames,
     type MangleEngineOptions,
 } from './mangle-engine.js';
 export {
@@ -55,6 +57,7 @@ export {
     computeMangleChecksumRust,
     encodeClassNameRust,
     ensureRustTransformAvailable,
+    htmlClassNamesRust,
     isRustTransformAvailable,
     RustTransformUnavailableError,
     scanGlobalVarUsagesRust,
@@ -67,6 +70,7 @@ export { transformSource } from './transform-select.js';
 export {
     computeMangleChecksumWasm,
     encodeClassNameWasm,
+    htmlClassNamesWasm,
     isWasmTransformAvailable,
     scanGlobalVarUsagesWasm,
     scanModuleLinksWasm,

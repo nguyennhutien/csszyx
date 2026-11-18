@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-
+import { cpuMsPerCall } from '../../core/tests/helpers/cpu-time.js';
 import {
     extractSzObjectAt,
     findSzExpressionAt,
@@ -375,5 +375,69 @@ describe('incomplete editor input', () => {
                 }
             }
         }
+    });
+});
+
+// JSX and HTML both allow whitespace around an attribute's `=`, and the editor
+// reads the attribute as the build does (the shared `jsxAttributes` reader).
+describe('the sz attribute with space around its `=`', () => {
+    it.each([
+        ['a JSX object', '<div sz = {{ ', { type: 'key', depth: 1 }],
+        ['a JSX object after a line break', '<div sz\n={{ p: ', { type: 'value', currentKey: 'p' }],
+        ['an explicit HTML object', '<div sz = "{ ', { type: 'key', depth: 1 }],
+        ['an implicit HTML object', "<div sz = 'p: ", { type: 'value', currentKey: 'p' }],
+    ])('reads the context in %s', (_label, source, expected) => {
+        expect(parseSzContext(source)).toMatchObject(expected);
+    });
+
+    it('finds every expression however each `=` is spaced', () => {
+        const text = '<a sz={{ p: 4 }} /><b sz = {{ m: 2 }} /><i sz = "w: 4" />';
+        expect(findSzExpressions(text).map(e => e.objText)).toEqual([
+            '{ p: 4 }',
+            '{ m: 2 }',
+            'w: 4',
+        ]);
+    });
+
+    it.each([
+        ['data-sz with an object', '<a data-sz={{ p: 4 }} />'],
+        ['data-sz with a string', '<a data-sz="p: 4" />'],
+        ['xsz with an object', '<a xsz={{ p: 4 }} />'],
+        ['xsz with a string', "<a xsz = 'p: 4' />"],
+    ])('does not read %s, an attribute that only ends in `sz`', (_label, text) => {
+        expect(findSzExpressions(text)).toEqual([]);
+        expect(parseSzContext(text.slice(0, text.indexOf('p:') + 3)).type).toBe('none');
+    });
+});
+
+describe('findSzExpressions on a long file', () => {
+    /**
+     * How much longer the scan of `large` takes than the scan of `small`, in
+     * CPU time per scan (`cpuMsPerCall`), each kept at its fastest of several runs
+     * after a warm-up.
+     *
+     * @param small - Source text.
+     * @param large - The same shape, longer.
+     * @returns The ratio of the fastest scans.
+     */
+    function growth(small: string, large: string): number {
+        const best = [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY];
+        for (let run = 0; run < 5; run++) {
+            [small, large].forEach((text, side) => {
+                const ms = cpuMsPerCall(() => findSzExpressions(text));
+                if (run > 0) best[side] = Math.min(best[side], ms);
+            });
+        }
+        return best[1] / best[0];
+    }
+
+    // Each expression is looked up from where the last one ended, so eight
+    // times the attributes scan in about eight times the time, where a lookup
+    // from the first attribute each time scans in about sixty-four. Eight
+    // times rather than sixteen keeps the smaller scan long enough that load
+    // on the machine moves the ratio little.
+    it('scans in linear time in the number of sz attributes', () => {
+        const fill = (count: number): string => '<i sz={{ p: 4 }} />'.repeat(count);
+        expect(growth(fill(5_000), fill(40_000))).toBeLessThan(24);
     });
 });

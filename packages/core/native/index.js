@@ -248,6 +248,17 @@ export function encodeClassName(index) {
 }
 
 /**
+ * Every class name of every `class` attribute the HTML tokenizer reads.
+ *
+ * @param {string} html - HTML text.
+ * @returns {Array<{ start: number, end: number, name: string }>} Each name's
+ *     spelling, in UTF-16 units, and the name it decodes to.
+ */
+export function htmlClassNames(html) {
+    return laterExport('htmlClassNames')(html);
+}
+
+/**
  * The mangle map's checksum, from the map's own entries. Two lists rather
  * than the object: reading an object's keys natively walks its prototype too.
  *

@@ -10,6 +10,76 @@
  * @module
  */
 
+/*
+ * A JSX attribute by name: the name, not continuing a longer one (`data-sz`,
+ * `xsz`), then JavaScript whitespace (`\s`) on both sides of an `=`, then a
+ * value, which opens with `{`, `"`, `'` or `<` (an expression, a string, an
+ * element) or with the `/` of a comment before it; that keeps `sz == x` and
+ * `const sz = 1` out. A name continues through Alphabetic and Numeric
+ * characters, `_`, `$`, `-` and the joiners ZWNJ/ZWJ, the set the engine's
+ * `char::is_alphanumeric` names. `:` does not continue
+ * a name: Vue binds an attribute as `:sz` or `v-bind:sz`, and that is `sz`.
+ *
+ * A text scan, not a parse: an attribute spelled in a string or a comment
+ * counts too. Every caller gates or bails on the answer, where a match too
+ * many costs one file the compiler and a match too few ships it unlowered.
+ * The engine's `jsx_attributes` (`js_text.rs`) reads the same way; both are
+ * held to `packages/core/tests/fixtures/jsx-attribute-cases.json`.
+ *
+ * One exported literal per name, so a bundle carries only the names it reads.
+ * Irregexp skips to each candidate with a Boyer-Moore table, where an
+ * `indexOf` loop stops at every `s`: over this repository's 1,332 modules
+ * `moduleMayHoldSz` took 9.6 µs a module this way, 11.6 as a loop and 10.5
+ * as the `includes('sz=')` it replaced. Each is linear: a match can only
+ * start at the name, and `\s*` backtracks over the whitespace behind it.
+ */
+/** The JSX attribute `sz` ({@link jsxAttributes}). */
+export const JSX_SZ_ATTRIBUTE: RegExp =
+    /(?<![\p{Alphabetic}\p{N}\p{Join_Control}_$-])sz\s*=\s*(?=[{"'</])/gu;
+/** The JSX attribute `szs`. */
+export const JSX_SZS_ATTRIBUTE: RegExp =
+    /(?<![\p{Alphabetic}\p{N}\p{Join_Control}_$-])szs\s*=\s*(?=[{"'</])/gu;
+/** The JSX attribute `class`. */
+export const JSX_CLASS_ATTRIBUTE: RegExp =
+    /(?<![\p{Alphabetic}\p{N}\p{Join_Control}_$-])class\s*=\s*(?=[{"'</])/gu;
+/** The JSX attribute `className`. */
+export const JSX_CLASS_NAME_ATTRIBUTE: RegExp =
+    /(?<![\p{Alphabetic}\p{N}\p{Join_Control}_$-])className\s*=\s*(?=[{"'</])/gu;
+
+/** One JSX attribute {@link jsxAttributes} found. */
+export interface JsxAttributeAt {
+    /** Where its name starts, in UTF-16 units. */
+    start: number;
+    /** Where its value starts. */
+    value: number;
+}
+
+/**
+ * Each JSX attribute an attribute pattern finds in `text`, in text order.
+ *
+ * @param text - Source text.
+ * @param attribute - One of the `JSX_*_ATTRIBUTE` patterns.
+ * @returns Where each starts and where its value starts.
+ */
+export function jsxAttributes(text: string, attribute: RegExp): JsxAttributeAt[] {
+    return Array.from(text.matchAll(attribute), match => ({
+        start: match.index,
+        value: match.index + match[0].length,
+    }));
+}
+
+/**
+ * Whether `text` holds the JSX attribute ({@link jsxAttributes}). `search`
+ * reads a global pattern from the start and leaves it as it was.
+ *
+ * @param text - Source text.
+ * @param attribute - One of the `JSX_*_ATTRIBUTE` patterns.
+ * @returns True when one is there.
+ */
+export function hasJsxAttribute(text: string, attribute: RegExp): boolean {
+    return text.search(attribute) !== -1;
+}
+
 /**
  * Whether a module may hold an `sz` value or an `szr()` call, read cheaply
  * before the compiler runs.
@@ -24,8 +94,8 @@
  */
 export function moduleMayHoldSz(code: string): boolean {
     return (
-        code.includes('sz=') ||
-        code.includes('szs=') ||
+        hasJsxAttribute(code, JSX_SZ_ATTRIBUTE) ||
+        hasJsxAttribute(code, JSX_SZS_ATTRIBUTE) ||
         /\bsz\s*:\s*["'{]/.test(code) ||
         code.includes('sz: "') ||
         code.includes('szr(')

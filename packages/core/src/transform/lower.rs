@@ -2441,7 +2441,7 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             } else if needs_brackets(value)
                 // A grid line name (`[a]_1fr`) or tracks spelled with `_`
                 // (`1fr_2fr`): no bare class carries either.
-                || (takes_grid_line_names(key) && is_grid_track_list(value))
+                || (crate::transform::generated::tables::takes_grid_line_names(key) && is_grid_track_list(value))
             {
                 // Tailwind arbitrary values cannot contain raw spaces (the class
                 // attribute would split into separate tokens), so collapse
@@ -3431,7 +3431,8 @@ fn bracketed_inner(key: &str, value: &str) -> Option<String> {
     if key.starts_with("--") {
         return None;
     }
-    if takes_grid_line_names(key) && value.contains(['[', ']']) {
+    if crate::transform::generated::tables::takes_grid_line_names(key) && value.contains(['[', ']'])
+    {
         // A sign is no part of a grid template, whatever its brackets.
         if value.starts_with('-') {
             return Some(bracket_wrapped_inner(value).unwrap_or_else(|| value.to_owned()));
@@ -3457,21 +3458,8 @@ fn is_grid_track_list(value: &str) -> bool {
             && value.split('_').any(|segment| {
                 segment.starts_with(|c: char| c.is_ascii_digit() || c == '.')
                     || segment.contains(['(', '%'])
-                    || matches!(
-                        segment,
-                        "auto" | "min-content" | "max-content" | "none" | "subgrid" | "masonry"
-                    )
+                    || crate::transform::generated::tables::is_grid_track_keyword(segment)
             }))
-}
-
-/// Whether a key's CSS property takes grid line names in its value
-/// (`grid-template-columns`, `grid-template-rows`), the aliases included.
-/// Mirrors `GRID_LINE_NAME_KEYS` in `transform-core.ts`.
-fn takes_grid_line_names(key: &str) -> bool {
-    matches!(
-        key,
-        "gridCols" | "gridRows" | "gridTemplateColumns" | "gridTemplateRows"
-    )
 }
 
 /// Whether the first `[` of a value closes at its last `]`, so the two are one
@@ -3649,12 +3637,14 @@ pub(crate) fn collect_bracketed_values(object: &StaticSzObject, out: &mut Vec<Br
         match &property.value {
             StaticSzValue::String(value) => {
                 if let Some(inner) = bracketed_inner(&property.key, value) {
-                    let offered =
-                        if takes_grid_line_names(&property.key) && value.contains(['[', ']']) {
-                            !value.starts_with('-') && outer_bracket_pair(value) == Some(true)
-                        } else {
-                            !inner.contains(['[', ']'])
-                        };
+                    let offered = if crate::transform::generated::tables::takes_grid_line_names(
+                        &property.key,
+                    ) && value.contains(['[', ']'])
+                    {
+                        !value.starts_with('-') && outer_bracket_pair(value) == Some(true)
+                    } else {
+                        !inner.contains(['[', ']'])
+                    };
                     out.push(BracketedValue {
                         key: property.key.clone(),
                         value: value.clone(),

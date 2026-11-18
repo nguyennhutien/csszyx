@@ -29,6 +29,9 @@ vi.mock('@csszyx/core/native', () => ({
     computeMangleChecksum: () => {
         throw engineFailure;
     },
+    htmlClassNames: () => {
+        throw engineFailure;
+    },
 }));
 
 describe('the Rust lane and a native failure that is not a missing addon', () => {
@@ -44,13 +47,14 @@ describe('the Rust lane and a native failure that is not a missing addon', () =>
         );
     });
 
-    it('rethrows it from the class-name encoder and the checksum unchanged', async () => {
-        const { computeMangleChecksumRust, encodeClassNameRust } = await import(
+    it('rethrows it from the class-name encoder, the checksum and the HTML reader unchanged', async () => {
+        const { computeMangleChecksumRust, encodeClassNameRust, htmlClassNamesRust } = await import(
             '../src/transform-rust.js'
         );
 
         expect(() => encodeClassNameRust(0)).toThrow(engineFailure);
         expect(() => computeMangleChecksumRust({ a: 'b' })).toThrow(engineFailure);
+        expect(() => htmlClassNamesRust('<p class=a>')).toThrow(engineFailure);
     });
 
     it('rethrows it from the global-var usage scan unchanged', async () => {

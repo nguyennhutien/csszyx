@@ -1112,8 +1112,8 @@ function bracketWrappedInner(value: string): string | undefined {
 
 /**
  * Keys whose CSS property takes grid line names in its value
- * (`grid-template-columns`, `grid-template-rows`). Mirrors
- * `takes_grid_line_names`.
+ * (`grid-template-columns`, `grid-template-rows`). The engine's
+ * `takes_grid_line_names` is generated from this set (`gen:rust-tables`).
  */
 const GRID_LINE_NAME_KEYS: ReadonlySet<string> = new Set([
     'gridCols',
@@ -1122,8 +1122,12 @@ const GRID_LINE_NAME_KEYS: ReadonlySet<string> = new Set([
     'gridTemplateRows',
 ]);
 
-/** Track keywords a grid template spells bare between `_`. */
-const GRID_TRACK_KEYWORDS: ReadonlySet<string> = new Set([
+/**
+ * Track keywords a grid template spells bare between `_`. The engine's
+ * `is_grid_track_keyword` is generated from this set (`gen:rust-tables`), and
+ * the parity test walks it on every lane.
+ */
+export const GRID_TRACK_KEYWORDS: ReadonlySet<string> = new Set([
     'auto',
     'min-content',
     'max-content',

@@ -86,6 +86,8 @@ function readTables() {
             booleanOnlyDynamicKeys: core.objectKeys('BOOLEAN_ONLY_DYNAMIC_VOCABULARY'),
             knownSpecialProperties: keyTables.stringSet('KNOWN_SPECIAL_PROPERTIES'),
             cssWideKeywords: core.stringSet('CSS_WIDE_KEYWORDS'),
+            gridTrackKeywords: core.stringSet('GRID_TRACK_KEYWORDS'),
+            gridLineNameKeys: core.stringSet('GRID_LINE_NAME_KEYS'),
             cssWideKeywordUtilities: core.stringSet('CSS_WIDE_KEYWORD_UTILITIES'),
             fractionSupportedProps: core.stringSet('FRACTION_SUPPORTED_PROPS'),
             listStyleKeywords: core.stringSet('LIST_STYLE_STANDARD'),
@@ -161,6 +163,8 @@ function renderRust({
     booleanOnlyDynamicKeys,
     knownSpecialProperties,
     cssWideKeywords,
+    gridTrackKeywords,
+    gridLineNameKeys,
     cssWideKeywordUtilities,
     fractionSupportedProps,
     listStyleKeywords,
@@ -293,6 +297,24 @@ pub(crate) fn is_known_special_property(key: &str) -> bool {
     matches!(
         key,
 ${renderMatchPatterns(knownSpecialProperties)}
+    )
+}
+
+/// Whether a \`_\`-separated segment of a grid template is a track keyword.
+/// Mirrors \`GRID_TRACK_KEYWORDS\`.
+pub(crate) fn is_grid_track_keyword(segment: &str) -> bool {
+    matches!(
+        segment,
+${renderMatchPatterns(gridTrackKeywords)}
+    )
+}
+
+/// Whether a key's CSS property takes grid line names in its value, the
+/// aliases included. Mirrors \`GRID_LINE_NAME_KEYS\`.
+pub(crate) fn takes_grid_line_names(key: &str) -> bool {
+    matches!(
+        key,
+${renderMatchPatterns(gridLineNameKeys)}
     )
 }
 

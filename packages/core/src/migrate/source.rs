@@ -34,6 +34,7 @@ use super::verdict::{
     Judge, ServedAnswers, TableVerdict, TableVerdicts, UnderscoreAnswers, UnderscoreQuestion,
     UnderscoreQuestions,
 };
+use crate::js_text::has_jsx_attribute;
 
 /// Options for the source transformation.
 #[derive(Clone, Copy, Debug, Default)]
@@ -214,10 +215,10 @@ fn unchanged_result(source: &str) -> TransformResult {
     }
 }
 
-/// A file with no `className`, `sz=` or `cva` in it cannot need anything,
-/// so it is not parsed. In keys-only mode only `sz=` matters.
+/// A file with no `className`, `sz` attribute or `cva` in it cannot need
+/// anything, so it is not parsed. In keys-only mode only `sz` matters.
 fn fast_path_result(source: &str, keys_only: bool) -> Option<TransformResult> {
-    let has_sz = source.contains("sz=");
+    let has_sz = has_jsx_attribute(source, "sz");
     if (keys_only && !has_sz)
         || (!has_sz && !source.contains("className") && !source.contains("cva"))
     {
@@ -763,5 +764,25 @@ mod tests {
             &options,
         );
         assert!(control.changed);
+    }
+
+    /// JSX allows whitespace around an attribute's `=`, so keys-only mode
+    /// reads `sz = {{…}}` like `sz={{…}}`.
+    #[test]
+    fn keys_only_reads_an_sz_attribute_with_space_around_its_equals_sign() {
+        let options = TransformOptions {
+            keys_only: true,
+            ..TransformOptions::default()
+        };
+        for jsx in [
+            "export const A = () => <div sz = {{ fontWeight: 'bold' }} />;",
+            "export const A = () => <div sz\n=\n{{ fontWeight: 'bold' }} />;",
+        ] {
+            let result = transform_source(jsx, "A.tsx", &options);
+            assert!(result.changed, "{jsx:?} was left as it was");
+            assert!(result.code.contains("weight:"), "{:?}", result.code);
+        }
+        assert!(fast_path_result("const isz = 1; a == b;", true).is_some());
+        assert!(fast_path_result("if (sz == null) {}", true).is_some());
     }
 }

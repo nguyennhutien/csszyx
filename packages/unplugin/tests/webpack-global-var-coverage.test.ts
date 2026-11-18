@@ -112,6 +112,7 @@ async function applyPlugin(options: {
     const emitted = new Map<string, string>();
     let stage: unknown;
     let run: ((assets: Record<string, FakeAsset>) => void) | undefined;
+    let finish: (() => void) | undefined;
     const compilation = Object.assign(Object.create(options.compilationPrototype ?? {}), {
         hooks: {
             processAssets: {
@@ -120,10 +121,27 @@ async function applyPlugin(options: {
                     run = fn;
                 },
             },
+            afterProcessAssets: {
+                tap: (_name: string, fn: typeof finish) => {
+                    finish = fn;
+                },
+            },
         },
         compiler,
+        assets: {} as Record<string, FakeAsset>,
+        assetsInfo: new Map<string, Record<string, unknown>>(),
         emitAsset: (name: string, source: RawSource) => emitted.set(name, source.source()),
-        updateAsset: (name: string, source: RawSource) => emitted.set(name, source.source()),
+        // A function in place of the source changes only the asset's info.
+        updateAsset: (
+            name: string,
+            source: RawSource | ((current: unknown) => unknown),
+            info?: Record<string, unknown>,
+        ) => {
+            if (typeof source !== 'function') emitted.set(name, source.source());
+            if (info) {
+                compilation.assetsInfo.set(name, { ...compilation.assetsInfo.get(name), ...info });
+            }
+        },
     });
     for (const tap of taps.get('compilation') ?? []) {
         if (tap.name === 'csszyx:post') tap.fn(compilation);
@@ -132,7 +150,9 @@ async function applyPlugin(options: {
     return {
         stage,
         processAssets: assets => {
+            compilation.assets = assets;
             run?.(assets);
+            finish?.();
             return emitted;
         },
     };

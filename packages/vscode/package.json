@@ -105,6 +105,7 @@
   },
   "devDependencies": {
     "@csszyx/compiler": "workspace:*",
+    "@csszyx/tailwind-oracle": "workspace:*",
     "@csszyx/tooling-metadata": "workspace:*",
     "@csszyx/ts-plugin": "workspace:*",
     "@types/node": "^22.20.1",

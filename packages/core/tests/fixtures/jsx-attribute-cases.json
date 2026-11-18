@@ -1,0 +1,298 @@
+[
+    {
+        "case": "tight",
+        "text": "<div sz={{ p: 4 }} />",
+        "name": "sz",
+        "found": [
+            [
+                5,
+                8
+            ]
+        ]
+    },
+    {
+        "case": "space on both sides",
+        "text": "<div sz = {{ p: 4 }} />",
+        "name": "sz",
+        "found": [
+            [
+                5,
+                10
+            ]
+        ]
+    },
+    {
+        "case": "a line break before the =",
+        "text": "<div sz\n={{ p: 4 }} />",
+        "name": "sz",
+        "found": [
+            [
+                5,
+                9
+            ]
+        ]
+    },
+    {
+        "case": "JavaScript whitespace beyond ASCII",
+        "text": "<i sz =　{a} />",
+        "name": "sz",
+        "found": [
+            [
+                3,
+                8
+            ]
+        ]
+    },
+    {
+        "case": "NEL is no JavaScript whitespace",
+        "text": "<i sz={a} />",
+        "name": "sz",
+        "found": []
+    },
+    {
+        "case": "the end of a longer name",
+        "text": "<i data-sz={x} />",
+        "name": "sz",
+        "found": []
+    },
+    {
+        "case": "the end of a longer word",
+        "text": "<i xsz={x} />",
+        "name": "sz",
+        "found": []
+    },
+    {
+        "case": "a namespaced name, which a gate reads as the name",
+        "text": "<i xlink:sz={x} />",
+        "name": "sz",
+        "found": [
+            [
+                9,
+                12
+            ]
+        ]
+    },
+    {
+        "case": "an assignment of a number",
+        "text": "const sz = 1;",
+        "name": "sz",
+        "found": []
+    },
+    {
+        "case": "a comparison",
+        "text": "if (sz == x) {}",
+        "name": "sz",
+        "found": []
+    },
+    {
+        "case": "a longer attribute",
+        "text": "<i szs={{ a: {} }} />",
+        "name": "sz",
+        "found": []
+    },
+    {
+        "case": "szs itself",
+        "text": "<i szs={{ a: {} }} />",
+        "name": "szs",
+        "found": [
+            [
+                3,
+                7
+            ]
+        ]
+    },
+    {
+        "case": "right after a spread",
+        "text": "<i {...p}sz=\"a\" />",
+        "name": "sz",
+        "found": [
+            [
+                9,
+                12
+            ]
+        ]
+    },
+    {
+        "case": "a single-quoted string",
+        "text": "<i className = 'a' />",
+        "name": "className",
+        "found": [
+            [
+                3,
+                15
+            ]
+        ]
+    },
+    {
+        "case": "an element value",
+        "text": "<i class=<b /> />",
+        "name": "class",
+        "found": [
+            [
+                3,
+                9
+            ]
+        ]
+    },
+    {
+        "case": "text before it outside ASCII",
+        "text": "é sz={a}",
+        "name": "sz",
+        "found": [
+            [
+                2,
+                5
+            ]
+        ]
+    },
+    {
+        "case": "an astral character before it",
+        "text": "😀 sz={a}",
+        "name": "sz",
+        "found": [
+            [
+                3,
+                6
+            ]
+        ]
+    },
+    {
+        "case": "two of them",
+        "text": "<i sz={a} sz = {b} />",
+        "name": "sz",
+        "found": [
+            [
+                3,
+                6
+            ],
+            [
+                10,
+                15
+            ]
+        ]
+    },
+    {
+        "case": "at the start of the text",
+        "text": "sz={a}",
+        "name": "sz",
+        "found": [
+            [
+                0,
+                3
+            ]
+        ]
+    },
+    {
+        "case": "an = at the end of the text",
+        "text": "<i sz=",
+        "name": "sz",
+        "found": []
+    },
+    {
+        "case": "the name at the end of the text",
+        "text": "<i sz",
+        "name": "sz",
+        "found": []
+    },
+    {
+        "case": "no text",
+        "text": "",
+        "name": "sz",
+        "found": []
+    },
+    {
+        "case": "a Vue binding",
+        "text": "<i :sz=\"{ p: 4 }\" />",
+        "name": "sz",
+        "found": [
+            [
+                4,
+                7
+            ]
+        ]
+    },
+    {
+        "case": "a Vue v-bind",
+        "text": "<i v-bind:sz=\"{ p: 4 }\" />",
+        "name": "sz",
+        "found": [
+            [
+                10,
+                13
+            ]
+        ]
+    },
+    {
+        "case": "an astral letter right before it",
+        "text": "<i 𝒜sz={a} />",
+        "name": "sz",
+        "found": []
+    },
+    {
+        "case": "an astral symbol right before it",
+        "text": "<i 😀sz={a} />",
+        "name": "sz",
+        "found": [
+            [
+                5,
+                8
+            ]
+        ]
+    },
+    {
+        "case": "a block comment after the =",
+        "text": "<div sz=/* c */\"p-4\" />",
+        "name": "sz",
+        "found": [
+            [
+                5,
+                8
+            ]
+        ]
+    },
+    {
+        "case": "a line comment after the =",
+        "text": "<div sz= // c\n{{ p: 4 }} />",
+        "name": "sz",
+        "found": [
+            [
+                5,
+                9
+            ]
+        ]
+    },
+    {
+        "case": "a comment after the = of className",
+        "text": "<div className=/* x */\"block\" />",
+        "name": "className",
+        "found": [
+            [
+                5,
+                15
+            ]
+        ]
+    },
+    {
+        "case": "a vowel sign (Other_Alphabetic) right before it",
+        "text": "<i ाsz={a} />",
+        "name": "sz",
+        "found": []
+    },
+    {
+        "case": "a combining mark that is not alphabetic right before it",
+        "text": "<i ́sz={a} />",
+        "name": "sz",
+        "found": [
+            [
+                4,
+                7
+            ]
+        ]
+    },
+    {
+        "case": "a zero-width non-joiner right before it",
+        "text": "<i ‌sz={a} />",
+        "name": "sz",
+        "found": []
+    }
+]

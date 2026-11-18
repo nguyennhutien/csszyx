@@ -36,6 +36,7 @@ import type {
     GlobalVarUsageDiagnostic,
     GlobalVarUsageQuery,
 } from './global-var-diagnostics.js';
+import type { HtmlClassName } from './mangle-engine.js';
 import type { ModuleLinks, ModuleLinksFile, ModuleLinksQuery } from './module-links.js';
 import { renderThrown } from './thrown-words.js';
 import type {
@@ -95,6 +96,7 @@ interface ParserWasmModule {
     scan_global_var_usages_json(filesJson: string, queryJson: string): string;
     encode(index: number): string;
     compute_mangle_checksum(map: Readonly<Record<string, string>>): string;
+    html_class_names_json(html: string): string;
 }
 
 /**
@@ -484,4 +486,17 @@ export function encodeClassNameWasm(index: number): string {
  */
 export function computeMangleChecksumWasm(map: Readonly<Record<string, string>>): string {
     return requireParserWasm().compute_mangle_checksum(Object.fromEntries(Object.entries(map)));
+}
+
+/**
+ * Every class name of every `class` attribute the HTML tokenizer reads, on
+ * the wasm artifact.
+ *
+ * @internal Used by `@csszyx/unplugin`; not a stable API.
+ * @param html - HTML text.
+ * @returns Each name's spelling, in UTF-16 units, and the name it decodes to.
+ * @throws {WasmTransformUnavailableError} when the wasm artifact is missing.
+ */
+export function htmlClassNamesWasm(html: string): HtmlClassName[] {
+    return JSON.parse(requireParserWasm().html_class_names_json(html)) as HtmlClassName[];
 }

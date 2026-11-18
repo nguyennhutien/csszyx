@@ -352,6 +352,8 @@ export interface NativeMigrateHtmlOptions {
     underscoreReadings?: string[];
     /** The project's Tailwind prefix, as for JSX. */
     prefix?: string;
+    /** The page's path, which each warning starts with. */
+    filePath?: string;
 }
 
 /** The counts of one migrated file. */
@@ -576,6 +578,25 @@ export function engineIdentity(): NativeEngineIdentity | null;
  * @throws CsszyxNativeUnavailableError when the platform package is missing or predates it.
  */
 export function encodeClassName(index: number): string;
+
+/** One class name of a `class` attribute the HTML tokenizer reads. */
+export interface NativeHtmlClassName {
+    /** Where its spelling starts, in UTF-16 units. */
+    start: number;
+    /** Where its spelling ends, in UTF-16 units. */
+    end: number;
+    /** The name it decodes to. */
+    name: string;
+}
+
+/**
+ * Every class name of every `class` attribute the HTML tokenizer reads.
+ *
+ * @param html HTML text.
+ * @returns Each name's spelling and the name it decodes to.
+ * @throws CsszyxNativeUnavailableError when the platform package is missing or predates it.
+ */
+export function htmlClassNames(html: string): NativeHtmlClassName[];
 
 /**
  * The mangle map's checksum, from the map's own entries. Two lists rather

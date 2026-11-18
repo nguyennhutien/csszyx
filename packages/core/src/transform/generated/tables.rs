@@ -677,6 +677,24 @@ pub(crate) fn is_known_special_property(key: &str) -> bool {
     )
 }
 
+/// Whether a `_`-separated segment of a grid template is a track keyword.
+/// Mirrors `GRID_TRACK_KEYWORDS`.
+pub(crate) fn is_grid_track_keyword(segment: &str) -> bool {
+    matches!(
+        segment,
+        "auto" | "min-content" | "max-content" | "none" | "subgrid" | "masonry"
+    )
+}
+
+/// Whether a key's CSS property takes grid line names in its value, the
+/// aliases included. Mirrors `GRID_LINE_NAME_KEYS`.
+pub(crate) fn takes_grid_line_names(key: &str) -> bool {
+    matches!(
+        key,
+        "gridCols" | "gridRows" | "gridTemplateColumns" | "gridTemplateRows"
+    )
+}
+
 /// Whether a value is a CSS-wide keyword. Mirrors `CSS_WIDE_KEYWORDS`.
 pub(crate) fn is_css_wide_keyword(value: &str) -> bool {
     matches!(
