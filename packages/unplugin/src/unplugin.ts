@@ -5714,17 +5714,37 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         const seenTemplatePaths = new Set<string>();
 
         /**
-         * Read one template into the prescan's template queue, once.
+         * Read one template, once: its merge hooks, as any markup file's,
+         * and, when the build processes it and it may hold `sz`, into the
+         * prescan's template queue. One read serves both.
          *
          * @param filePath Template file path.
          * @param framework The framework its extension names.
+         * @param readsHooks Whether its merge hooks are read.
          */
-        function collectTemplateSource(filePath: string, framework: TemplateFramework): void {
+        function collectTemplateSource(
+            filePath: string,
+            framework: TemplateFramework,
+            readsHooks: boolean,
+        ): void {
             const key = normalizePathSeparators(filePath);
             if (seenTemplatePaths.has(key)) return;
             seenTemplatePaths.add(key);
-            const template = templateSourceOf(filePath, framework);
-            if (template !== null) templateSources.push(template);
+            const hooks = readsHooks && !isHardIgnored(filePath) && !isUserExcluded(filePath);
+            const lowers = shouldProcessSource(filePath);
+            if (!hooks && !lowers) return;
+            let content: string;
+            try {
+                content = fs.readFileSync(filePath, 'utf-8');
+            } catch {
+                // Gone since the walk listed it, as the delete race leaves it.
+                return;
+            }
+            const hookText = hooks ? sourceHookText(filePath, content) : null;
+            if (hookText !== null) hookTexts.push(hookText);
+            if (lowers && moduleMayHoldSz(content)) {
+                templateSources.push({ filePath, content, framework });
+            }
         }
 
         /**
@@ -5795,12 +5815,15 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                 collectPrescanSource(filePath, readsHooks);
                 return;
             }
+            const framework = templateFrameworkOf(filePath);
+            if (framework !== null) {
+                collectTemplateSource(filePath, framework, readsHooks);
+                return;
+            }
             if (readsHooks && MARKUP_EXTENSIONS.has(extension)) {
                 const hookText = markupHookText(filePath);
                 if (hookText !== null) hookTexts.push(hookText);
             }
-            const framework = templateFrameworkOf(filePath);
-            if (framework !== null) collectTemplateSource(filePath, framework);
         });
         readSourceHooksOf(hookTexts);
 
@@ -5821,7 +5844,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
         admitNamedSources(model, seenSourcePaths, (filePath, readsHooks) => {
             const framework = templateFrameworkOf(filePath);
             if (framework === null) collectPrescanSource(filePath, readsHooks);
-            else collectTemplateSource(filePath, framework);
+            else collectTemplateSource(filePath, framework, readsHooks);
         });
         const namedElapsed = performance.now() - namedStarted;
         traceBenchTiming(
@@ -5915,28 +5938,6 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             performance.now() - safelistStarted,
         );
         traceBenchTiming('prescan', state.rootDir, performance.now() - prescanStarted);
-    }
-
-    /**
-     * A template the prescan lowers: one of a framework an adapter lowers,
-     * that the build processes and whose text may hold `sz`.
-     *
-     * @param filePath - Absolute path of a walked file.
-     * @param framework - The framework its extension names.
-     * @returns The file with its text and framework, or null.
-     */
-    function templateSourceOf(
-        filePath: string,
-        framework: TemplateFramework,
-    ): PrescanTemplateFile | null {
-        if (!shouldProcessSource(filePath)) return null;
-        let content: string;
-        try {
-            content = fs.readFileSync(filePath, 'utf-8');
-        } catch {
-            return null;
-        }
-        return moduleMayHoldSz(content) ? { filePath, content, framework } : null;
     }
 
     /**
@@ -7417,13 +7418,23 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
      * so those classes are in its output alone, where Tailwind's own scan of
      * the source never looks.
      *
+     * The output is markup, so its `class` attributes are read as the HTML
+     * tokenizer reads them (`htmlClassNames`): text such as `Don't` is text.
+     * The source scanner reads it too, for a binding such as Vue's
+     * `:class="'p-4'"`, which is no `class` attribute; it reads the text as
+     * code, so a quote in it can hide what follows, and only adds names.
+     *
+     * Cost: one tokenizer walk and one scan of the output.
+     *
      * @param id - Its path or bundler id.
      * @param lowered - The adapter's output.
      * @returns The classes the output writes, for the safelist.
      */
     function recordTemplateOutput(id: string, lowered: string): Set<string> {
         recordUnmarkedNames(id, lowered);
-        return collectAuthoredClassNames(lowered, engineOptions());
+        const classes = collectAuthoredClassNames(lowered, engineOptions());
+        for (const { name } of htmlClassNames(lowered, engineOptions())) classes.add(name);
+        return classes;
     }
 
     /**

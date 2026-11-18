@@ -113,6 +113,13 @@ describe('the safelist a template adapter feeds', () => {
             ['p-9', 'hover:bg-blue-700'],
         ],
         ['Svelte', 'B.svelte', '<p sz={{ m: 9 }} />\n', ['m-9']],
+        // Text is text: its `'` opens no string that hides the class after it.
+        [
+            'Vue with a quote in its text',
+            'C.vue',
+            `<template><b>Don't</b><p sz="{ p: 7 }" /></template>\n`,
+            ['p-7'],
+        ],
     ])('names the classes a %s template lowers to', async (_what, file, source, classes) => {
         const lines = await safelistAfter(source, file);
         for (const name of classes) expect(lines).toContain(name);

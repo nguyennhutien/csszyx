@@ -158,16 +158,18 @@ describe('the sz prescan', () => {
             const safelist = await prescan({
                 '.gitignore': 'src/generated/\nsrc/hidden/\n',
                 'src/App.vue': '<template><div sz="{ p: 9 }" /></template>\n',
-                // No `sz`: the adapter is not asked.
+                // No `sz`: the adapter is not asked, so the class its output
+                // would carry stays out of the safelist.
                 'src/Plain.vue': '<template><div class="plain-raw" /></template>\n',
                 'src/generated/Card.svelte': '<div sz={{ m: 9 }} />\n',
                 'src/hidden/Gone.vue': '<template><div sz="{ m: 13 }" /></template>\n',
-                // Named twice, read once.
+                // `App.vue` is both walked and named by `@source`.
                 'src/index.css': `${TW}@source "./generated";\n@source "./App.vue";\n`,
             });
             expect(safelist).toContain('p-9');
             expect(safelist).toContain('m-9');
             expect(safelist).not.toContain('m-13');
+            expect(safelist).not.toContain('plain-raw');
         },
         60_000,
     );
