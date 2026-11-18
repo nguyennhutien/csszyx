@@ -444,6 +444,17 @@ describe('a gitignored module the build lowers', () => {
         expect(warned).toContain('src/generated/Card.vue');
     }, 60_000);
 
+    it('is not named for a script block of a file the prescan does not read', async () => {
+        // An Astro script block is lowered as `.ts`, but the file is `.astro`,
+        // which no prescan reads: an `@source` for it would add nothing.
+        const warned = await warnedAfter(
+            GENERATED,
+            TW,
+            'src/generated/Page.astro?astro&type=script&index=0&lang.ts',
+        );
+        expect(warned).not.toContain('`.gitignore` covers');
+    }, 60_000);
+
     it('writes the file, not its folder, when a pattern of `.gitignore` covers it', async () => {
         // `@source "."` does not take back a file a pattern covers; its
         // own path does.
