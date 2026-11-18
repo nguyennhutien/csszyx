@@ -506,6 +506,33 @@ function collectClassDirective(
 }
 
 /**
+ * Collect the names of a sink's quoted value. `class="…"` is an attribute
+ * string, read as the DOM gets it; `class: "…"` a JavaScript one. A Vue
+ * `:class="…"` holds an expression either way.
+ *
+ * @param target Class candidate sink.
+ * @param value The text between the quotes.
+ * @param sink How the value is written.
+ * @param sink.operator `=` for an attribute, `:` for an object property.
+ * @param sink.vueBinding Whether it is a Vue `:class` binding.
+ * @param sink.options The engine artifact that decodes attribute strings.
+ */
+function collectQuotedSinkValue(
+    target: Set<string>,
+    value: string,
+    sink: { operator: '=' | ':'; vueBinding: boolean; options: MangleEngineOptions },
+): void {
+    const texts =
+        sink.operator === '='
+            ? classAttributeTexts(value, sink.options)
+            : [decodeJavaScriptString(value)];
+    for (const text of texts) {
+        if (sink.vueBinding) collectExpressionTokens(target, text);
+        else collectClassTokens(target, text);
+    }
+}
+
+/**
  * Collect one recognized class/className sink and return its consumed end.
  * @param target Class candidate sink.
  * @param source Complete source text.
@@ -534,15 +561,7 @@ function collectClassSink(
     if (quote === '"' || quote === "'") {
         const end = quotedEnd(source, valueStart, quote);
         const value = source.slice(valueStart + 1, end - 1);
-        // `class="…"` is an attribute string; `class: "…"` a JavaScript one.
-        const texts =
-            operator === '='
-                ? classAttributeTexts(value, options)
-                : [decodeJavaScriptString(value)];
-        for (const text of texts) {
-            if (vueBinding) collectExpressionTokens(target, text);
-            else collectClassTokens(target, text);
-        }
+        collectQuotedSinkValue(target, value, { operator, vueBinding, options });
         return end;
     }
     if (operator === '=' && quote === '{') {
