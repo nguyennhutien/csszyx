@@ -76,3 +76,42 @@ describe('the output folder of a mangle build', () => {
         expect(second).toBe(first);
     }, 120_000);
 });
+
+describe('the output folder of each Vite environment', () => {
+    it('is not read as a source by the prescan', async () => {
+        const { callHooks, removeTailwindProjects, tailwindProject } = await import(
+            './tailwind-project.js'
+        );
+        const { readFileSync } = await import('node:fs');
+        const root = tailwindProject('csszyx-env-outdir-', {
+            'src/index.css': '@import "tailwindcss";\n',
+            'src/A.tsx': 'export const A = () => <div sz={{ p: 7 }} />;\n',
+            // What an earlier build of the `ssr` environment left in its outDir.
+            'server-out/A.js': 'export const A = () => <div sz={{ m: 13 }} />;\n',
+        });
+        try {
+            const call = callHooks(
+                vitePlugin({
+                    build: { cache: false },
+                    production: { mangle: false },
+                }) as unknown as Record<string, unknown>[],
+            );
+            await call('configResolved', {
+                root,
+                command: 'build',
+                build: { outDir: 'dist' },
+                environments: {
+                    client: { build: { outDir: 'dist' } },
+                    ssr: { build: { outDir: 'server-out' } },
+                    // An environment that names no outDir of its own.
+                    edge: {},
+                },
+            });
+            const safelist = readFileSync(join(root, '.csszyx/csszyx-classes.txt'), 'utf8');
+            expect(safelist).toContain('p-7');
+            expect(safelist).not.toContain('m-13');
+        } finally {
+            removeTailwindProjects();
+        }
+    }, 60_000);
+});

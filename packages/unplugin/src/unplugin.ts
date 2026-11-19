@@ -2691,6 +2691,34 @@ function matchesScriptExtension(id: string, extensions: readonly string[]): bool
 }
 
 /**
+ * The folders a Vite build writes to: the top-level `build.outDir` and each
+ * environment's own (`environments.ssr.build.outDir`, Vite 6+), resolved
+ * against the root. The prescan never reads them: a previous bundle holds
+ * every class unmarked.
+ *
+ * @param root - The project root.
+ * @param config - The resolved config's build and environments.
+ * @param config.build - Its top-level build options.
+ * @param config.build.outDir - Its top-level output folder.
+ * @param config.environments - Its environments, by name.
+ * @returns Each folder once, the top-level one first.
+ */
+function viteBuildOutputDirs(
+    root: string,
+    config: {
+        build?: { outDir?: string };
+        environments?: Record<string, { build?: { outDir?: string } }>;
+    },
+): string[] {
+    const dirs = new Set([path.resolve(root, config.build?.outDir ?? 'dist')]);
+    for (const environment of Object.values(config.environments ?? {})) {
+        const outDir = environment.build?.outDir;
+        if (outDir) dirs.add(path.resolve(root, outDir));
+    }
+    return [...dirs];
+}
+
+/**
  * Inserts a runtime import after a top-level client/server directive, preserving
  * leading comments and blank lines. Keeping `'use server'` before generated
  * imports is required for the RSC boundary guard to classify the module
@@ -8511,7 +8539,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     announceActiveParser();
                     const root = config.root || process.cwd();
                     state.rootDir = root;
-                    buildOutputDirs = [path.resolve(root, config.build?.outDir ?? 'dist')];
+                    buildOutputDirs = viteBuildOutputDirs(root, config);
                     await loadProjectDiagnosticPolicy(root);
                     // Vite has already normalized `resolve.alias` into its array
                     // form here, which is also the form this reads — taking it
