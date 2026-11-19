@@ -320,6 +320,7 @@ import {
     type ViteStylesheetResolver,
     viteStylesheetResolver,
 } from './vite-stylesheet-candidates.js';
+import { csszyxCacheDependencies, csszyxCacheVersion } from './webpack-cache-dependencies.js';
 
 // The diagnostic gates moved to their own module so the Next Turbopack loader
 // shares them; they stay importable from here.
@@ -2688,6 +2689,30 @@ const STYLESHEET_FILE_EXTENSIONS = [
  */
 function matchesScriptExtension(id: string, extensions: readonly string[]): boolean {
     return extensions.some(ext => id.endsWith(ext) || id.includes(`${ext}?`));
+}
+
+/**
+ * Make webpack's persistent cache depend on the csszyx code that transforms
+ * a module ({@link csszyxCacheDependencies}, {@link csszyxCacheVersion}). A
+ * memory cache lives for one process and needs none of this.
+ *
+ * @param compiler - The webpack compiler, before its cache is set up.
+ */
+function addCsszyxCacheDependencies(compiler: WebpackCompiler): void {
+    const cache = compiler.options?.cache;
+    if (typeof cache !== 'object' || cache.type !== 'filesystem') return;
+    const require = createRequire(import.meta.url);
+    cache.buildDependencies = {
+        ...cache.buildDependencies,
+        csszyx: csszyxCacheDependencies(fileURLToPath(import.meta.url), require.resolve),
+    };
+    // webpack checks only the dependencies a stored cache recorded, so a cache
+    // written by a csszyx without the list above would still be read once.
+    // The version is compared whatever the cache holds.
+    cache.version = csszyxCacheVersion(cache.version, {
+        plugin: PLUGIN_VERSION,
+        compiler: COMPILER_VERSION,
+    });
 }
 
 /**
@@ -8376,6 +8401,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
              */
             webpack(compiler: WebpackCompiler) {
                 activeFramework = 'webpack';
+                addCsszyxCacheDependencies(compiler);
                 // Write the szcn theme-group registration now, not when the
                 // first module that imports it is transformed. webpack caches
                 // transformed modules across builds, so a rebuild can replay an
