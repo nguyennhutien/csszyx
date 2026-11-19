@@ -1915,6 +1915,33 @@ mod tests {
         assert!(result.classes.iter().any(|class| class == "font-700"));
     }
 
+    /// A number or a string on a key typed `boolean` is reported once per
+    /// site, and its class is still written: a project may define it.
+    #[test]
+    fn a_non_boolean_value_on_a_flag_only_key_is_reported_and_keeps_its_class() {
+        let file = TransformFile {
+            filename: "/repo/App.tsx".to_string(),
+            source:
+                "export const A = () => <div sz={{ truncate: 2, hover: { srOnly: \"yes\" } }} />;"
+                    .to_string(),
+        };
+        let result = transform_file(&file);
+        assert_eq!(
+            lines(&result),
+            [
+                r#"closed-enum-value {"form":"flag","key":"truncate","value":"2"}"#,
+                r#"closed-enum-value {"form":"flag","key":"srOnly","value":"'yes'"}"#,
+            ],
+            "code was: {}",
+            result.code
+        );
+        assert!(result.classes.iter().any(|class| class == "truncate-2"));
+        assert!(result
+            .classes
+            .iter()
+            .any(|class| class == "hover:sr-only-yes"));
+    }
+
     /// The spellings Tailwind does serve stay quiet, or the diagnostic would
     /// be noise on every correct file.
     #[test]
