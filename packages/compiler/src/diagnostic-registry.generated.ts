@@ -114,7 +114,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
         "note": {
             "sibling-group": "`{key}` takes one of: {enumAllowed}.",
             "dead": "the class `{bare}` is still emitted, and only the CSS that Tailwind or your own stylesheet defines for it applies.",
-            "flag": "a class is still emitted for it, and only the CSS that Tailwind or your own stylesheet defines for that class applies."
+            "flag": "the class is still emitted, and only the CSS that Tailwind or your own stylesheet defines for it applies."
         }
     },
     {
