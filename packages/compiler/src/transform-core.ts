@@ -36,6 +36,7 @@ import {
 import { szNodeWarningsUnmuted, szWarningsQuiet } from './sz-dev-warnings.js';
 import {
     BOOLEAN_SHORTHANDS,
+    FLAG_ONLY_KEYS,
     KNOWN_SPECIAL_PROPERTIES,
     KNOWN_VARIANTS,
     MIGRATION_NOTES,
@@ -4395,6 +4396,33 @@ function warnRemovedKey(
     }
 }
 
+/**
+ * Drops a value other than `true` on a key that takes only a boolean, and
+ * reports it: `truncate: 2` would lower to `truncate-2`, which is outside the
+ * key's type and no class (`closed-enum-value`, form `flag`). Mirrors
+ * `collect_non_boolean_flags` and the lowering guard in `lower.rs`.
+ * @param rawKey - The authored key.
+ * @param value - Its value; only a number or a string is dropped.
+ * @returns Whether the value was dropped.
+ */
+function dropNonBooleanFlag(rawKey: string, value: SzValue): boolean {
+    if ((typeof value !== 'number' && typeof value !== 'string') || !FLAG_ONLY_KEYS.has(rawKey)) {
+        return false;
+    }
+    if (process.env.NODE_ENV !== 'production' && szNodeWarningsUnmuted()) {
+        szReport({
+            diagnostic: CLOSED_ENUM_VALUE,
+            args: {
+                form: 'flag',
+                key: rawKey,
+                value: typeof value === 'string' ? `'${value}'` : `${value}`,
+            },
+            at: szWarnLocation,
+        });
+    }
+    return true;
+}
+
 /** Removed shorthands already warned about, so a re-render cannot spam. */
 const warnedRemovedSugar = new Set<string>();
 
@@ -4521,6 +4549,7 @@ function collectTransformProperty(
     if (typeof value === 'string' && ALIGNMENT_KEYS.has(rawKey)) warnAlignmentValue(rawKey, value);
     if (collectRemovedBooleanSugar(rawKey, value)) return;
     if (collectObjectProperty(rawKey, value, prefix, classes)) return;
+    if (dropNonBooleanFlag(rawKey, value)) return;
     if (collectUnresolvedStringProperty(rawKey, value, prefix, classes)) return;
     if (collectUnresolvedDirectProperty(rawKey, value, prefix, classes)) return;
 

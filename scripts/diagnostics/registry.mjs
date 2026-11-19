@@ -368,9 +368,16 @@ export const DIAGNOSTICS = [
         // which does, and moving it here must not make a production page quiet.
         surfaces: { engine: {}, runtime: { production: ['sibling-group'], host: 'browser' } },
         position: 'site',
-        forms: ['sibling-group', 'dead', 'css-value', 'font-style', 'font-smoothing'],
+        forms: ['sibling-group', 'dead', 'css-value', 'font-style', 'font-smoothing', 'flag'],
         args: {
-            form: formArg(['sibling-group', 'dead', 'css-value', 'font-style', 'font-smoothing']),
+            form: formArg([
+                'sibling-group',
+                'dead',
+                'css-value',
+                'font-style',
+                'font-smoothing',
+                'flag',
+            ]),
             key: STRING,
             value: STRING,
             suggestion: OPTIONAL_STRING,
@@ -388,6 +395,7 @@ export const DIAGNOSTICS = [
                 "`{key}: '{value}'` has no Tailwind class, and nothing is emitted for it.",
             'font-smoothing':
                 "`{key}: '{value}'` has no Tailwind class, and nothing is emitted for it.",
+            flag: '`{key}: {value}` emits nothing: `{key}` takes only `true` or `false`.',
         },
         help: {
             'sibling-group':
@@ -397,6 +405,7 @@ export const DIAGNOSTICS = [
             'font-style':
                 "use `'italic'` or `'normal'`; for any other style, such as oblique, write `css: { fontStyle: '{value}' }`.",
             'font-smoothing': "use `'grayscale'` or `'subpixel'`.",
+            flag: 'write `{key}: true` for the class, or a condition that is a boolean (`{key}: isOn`).',
         },
         note: {
             'sibling-group': '`{key}` takes one of: {enumAllowed}.',

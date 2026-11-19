@@ -414,6 +414,28 @@ pub mod issue {
         )
     }
 
+    /// `closed-enum-value` (`flag`): A value a closed-enum key does not take.
+    #[must_use]
+    #[inline]
+    pub fn closed_enum_value_flag(
+        key: &str,
+        value: &str,
+        suggestion: Option<&str>,
+        group_key: Option<&str>,
+        group_value: Option<&str>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::ClosedEnumValue,
+            Args::default()
+                .text("form", "flag")
+                .text("key", key)
+                .text("value", value)
+                .optional_text("suggestion", suggestion)
+                .optional_text("groupKey", group_key)
+                .optional_text("groupValue", group_value),
+        )
+    }
+
     /// `slash-opacity-string`: A colour key given its opacity in a string, which emits nothing; the object form takes it.
     #[must_use]
     #[inline]
@@ -1234,6 +1256,24 @@ mod tests {
         assert_eq!(
             args.to_json(),
             r#"{"form":"font-smoothing","key":"key","value":"value"}"#
+        );
+        let (code, args) = issue::closed_enum_value_flag(
+            "key",
+            "value",
+            Some("suggestion"),
+            Some("groupKey"),
+            Some("groupValue"),
+        );
+        assert_eq!(code, DiagnosticCode::ClosedEnumValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"flag","key":"key","value":"value","suggestion":"suggestion","groupKey":"groupKey","groupValue":"groupValue"}"#
+        );
+        let (code, args) = issue::closed_enum_value_flag("key", "value", None, None, None);
+        assert_eq!(code, DiagnosticCode::ClosedEnumValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"flag","key":"key","value":"value"}"#
         );
         let (code, args) = issue::slash_opacity_string("key", "color", "opacity");
         assert_eq!(code, DiagnosticCode::SlashOpacityString);

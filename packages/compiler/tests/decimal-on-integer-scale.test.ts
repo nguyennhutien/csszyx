@@ -4,10 +4,11 @@
  * Tailwind serves `grow-2`, not `grow-2.5`; `order-1`, not `order-1.5`; and a
  * fraction utility serves `w-1/2`, not `w-2.5/4`. Both engines and the runtime
  * core used to write the decimal bare, a class with no CSS and no report. Which
- * utilities serve a decimal bare (`p-2.5`, `opacity-2.5`) and which serve a
- * decimal fraction bare (`aspect-2.5/4`) is the capability table's `d` and `q`
- * columns, measured on the pinned Tailwind and gated across Tailwind v4 by
- * `scripts/check-tailwind-versions.mjs`.
+ * utilities serve a decimal bare (`p-2.5`, `opacity-2.5`) is the capability
+ * table's `d` column. The lanes bracket only where no Tailwind v4 that
+ * `scripts/check-tailwind-versions.mjs` lists serves the bare decimal, which
+ * that gate asks of every version (`decimal`). A decimal fraction is always
+ * bracketed on a fraction key; `aspect` brackets every ratio already.
  */
 import { describe, expect, it } from 'vitest';
 

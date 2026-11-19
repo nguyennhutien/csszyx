@@ -123,6 +123,11 @@ const CASES: Readonly<Record<string, readonly SzObject[]>> = {
     ],
     'closed-enum-value/font-style': [{ fontStyle: 'oblique' }],
     'closed-enum-value/font-smoothing': [{ fontSmoothing: 'none' }],
+    'closed-enum-value/flag': [
+        { truncate: 2 },
+        { hover: { srOnly: 'yes' } },
+        { not: { supports: { 'display:grid': { numOrdinal: 0.5 } } } },
+    ],
     'slash-opacity-string': [{ bg: 'red-500/50' }],
     'off-scale-value': [
         { p: 1.4 },

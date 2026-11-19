@@ -864,6 +864,7 @@ struct KeyValueFindings {
     property_objects: Vec<(String, Vec<String>, u32)>,
     unknown_variants: Vec<(String, u32)>,
     dead_enums: Vec<(String, String, u32)>,
+    non_boolean_flags: Vec<(String, String, u32)>,
     slash_opacities: Vec<(String, String, u32)>,
     color_slash_opacities: Vec<super::lower::ColorSlashOpacity>,
     invalid_opacities: Vec<super::lower::InvalidOpacity>,
@@ -887,6 +888,7 @@ impl KeyValueFindings {
         self.property_objects.clear();
         self.unknown_variants.clear();
         self.dead_enums.clear();
+        self.non_boolean_flags.clear();
         self.slash_opacities.clear();
         self.color_slash_opacities.clear();
         self.invalid_opacities.clear();
@@ -897,6 +899,29 @@ impl KeyValueFindings {
         self.mask_layers.clear();
         self.globals_before_groups.clear();
         self.runtime_aliases.clear();
+    }
+
+    /// Refill every family from one static object of the group.
+    fn collect(&mut self, object: &super::StaticSzObject) {
+        collect_unknown_sz_keys(object, &mut self.unknown);
+        super::lower::collect_dead_spacing_steps(object, &mut self.dead_steps);
+        super::lower::collect_dead_weight_values(object, &mut self.dead_weights);
+        super::lower::collect_removed_boolean_sugar(object, &mut self.removed_sugar);
+        super::lower::collect_border_side_styles(object, &mut self.border_side_styles);
+        super::lower::collect_property_object_values(object, &mut self.property_objects);
+        super::lower::collect_owned_key_variant_objects(object, &mut self.unknown_variants);
+        super::lower::collect_dead_enum_values(object, &mut self.dead_enums);
+        super::lower::collect_non_boolean_flags(object, &mut self.non_boolean_flags);
+        super::lower::collect_slash_opacity_strings(object, &mut self.slash_opacities);
+        super::lower::collect_color_slash_opacities(object, &mut self.color_slash_opacities);
+        super::lower::collect_invalid_opacities(object, &mut self.invalid_opacities);
+        super::lower::collect_bracketed_values(object, &mut self.bracketed_values);
+        super::lower::collect_underscore_values(object, &mut self.underscore_values);
+        super::lower::collect_moved_values(object, &mut self.moved_values);
+        super::lower::collect_mask_layer_values(object, &mut self.mask_layers);
+        super::lower::collect_globals_before_groups(object, &mut self.globals_before_groups);
+        super::lower::collect_unknown_mask_slot_members(object, &mut self.mask_members);
+        super::lower::collect_unknown_color_object_members(object, &mut self.mask_members);
     }
 }
 
@@ -921,24 +946,7 @@ fn push_group_key_value_diagnostics<'a>(
 ) {
     found.clear();
     for object in objects {
-        collect_unknown_sz_keys(object, &mut found.unknown);
-        super::lower::collect_dead_spacing_steps(object, &mut found.dead_steps);
-        super::lower::collect_dead_weight_values(object, &mut found.dead_weights);
-        super::lower::collect_removed_boolean_sugar(object, &mut found.removed_sugar);
-        super::lower::collect_border_side_styles(object, &mut found.border_side_styles);
-        super::lower::collect_property_object_values(object, &mut found.property_objects);
-        super::lower::collect_owned_key_variant_objects(object, &mut found.unknown_variants);
-        super::lower::collect_dead_enum_values(object, &mut found.dead_enums);
-        super::lower::collect_slash_opacity_strings(object, &mut found.slash_opacities);
-        super::lower::collect_color_slash_opacities(object, &mut found.color_slash_opacities);
-        super::lower::collect_invalid_opacities(object, &mut found.invalid_opacities);
-        super::lower::collect_bracketed_values(object, &mut found.bracketed_values);
-        super::lower::collect_underscore_values(object, &mut found.underscore_values);
-        super::lower::collect_moved_values(object, &mut found.moved_values);
-        super::lower::collect_mask_layer_values(object, &mut found.mask_layers);
-        super::lower::collect_globals_before_groups(object, &mut found.globals_before_groups);
-        super::lower::collect_unknown_mask_slot_members(object, &mut found.mask_members);
-        super::lower::collect_unknown_color_object_members(object, &mut found.mask_members);
+        found.collect(object);
     }
     if !repeat_free {
         let seen = &mut std::collections::HashSet::new();
@@ -959,6 +967,7 @@ fn push_group_key_value_diagnostics<'a>(
         retain_first_occurrence(&mut found.invalid_opacities, 14, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.bracketed_values, 15, seen, |found| found.at);
         retain_first_occurrence(&mut found.underscore_values, 16, seen, |found| found.at);
+        retain_first_occurrence(&mut found.non_boolean_flags, 17, seen, |(.., at)| *at);
     }
     // Only the removed-key drops belong in this pass. A key dropped for having
     // no var form is still a supported key, and reporting it as unknown would
@@ -989,6 +998,12 @@ fn push_group_key_value_diagnostics<'a>(
     push_property_object_diagnostics(&found.property_objects, out);
     push_owned_key_variant_diagnostics(&found.unknown_variants, out);
     push_dead_enum_diagnostics(&found.dead_enums, out);
+    for (key, value, offset) in &found.non_boolean_flags {
+        out.push_issue(
+            issue::closed_enum_value_flag(key, value, None, None, None),
+            *offset,
+        );
+    }
     push_slash_opacity_diagnostics(&found.slash_opacities, out);
     push_color_slash_opacity_diagnostics(&found.color_slash_opacities, out);
     for (key, op, percent, offset) in &found.invalid_opacities {

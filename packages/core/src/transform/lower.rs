@@ -469,6 +469,37 @@ pub(crate) fn collect_removed_boolean_sugar(
     }
 }
 
+/// Collects each value other than `true` on a key that takes only a boolean
+/// (`truncate: 2`), with the value as written and where: the lowering emits
+/// nothing for it. A trailing `!` is the class's, not the value's, as in the
+/// lowering.
+///
+/// Same descent rules as [`collect_dead_spacing_steps`].
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_non_boolean_flags(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, String, u32)>,
+) {
+    for property in &object.properties {
+        let written = match &property.value {
+            StaticSzValue::Number(value) => Some(format_number_literal(*value)),
+            StaticSzValue::String(value) => Some(format!("'{}'", split_important(value).0)),
+            StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
+                for_each_sz_object_in(&property.key, nested, &mut |object| {
+                    collect_non_boolean_flags(object, out);
+                });
+                None
+            }
+            _ => None,
+        };
+        if let Some(written) =
+            written.filter(|_| super::generated::tables::is_flag_only(&property.key))
+        {
+            out.push((property.key.clone(), written, property.span.start));
+        }
+    }
+}
+
 /// Collects `weight` values written as a numeric STRING.
 ///
 /// Tailwind spells weights through `--font-weight-*`, so `font-700` is not a
@@ -2013,6 +2044,13 @@ fn animation_delay_value(value: &StaticSzValue) -> Option<String> {
 /// below read the value as written.
 #[allow(clippy::too_many_lines)]
 fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> Option<String> {
+    // A key that takes only a boolean has no class for any other value:
+    // `truncate: 2` would write `truncate-2`. `collect_non_boolean_flags`
+    // reports it. Mirrors `dropNonBooleanFlag` in `transform-core.ts`.
+    if super::generated::tables::is_flag_only(key) && !matches!(value, StaticSzValue::Boolean(true))
+    {
+        return None;
+    }
     if key == "animationDelay" {
         return animation_delay_value(value)
             .map(|delay| format!("{prefix}[animation-delay:{delay}]"));
@@ -3712,6 +3750,8 @@ mod tests {
     #[cfg(feature = "native-engine")]
     use super::collect_mask_layer_values;
     #[cfg(feature = "native-engine")]
+    use super::collect_non_boolean_flags;
+    #[cfg(feature = "native-engine")]
     use super::collect_owned_key_variant_objects;
     #[cfg(feature = "native-engine")]
     use super::collect_underscore_values;
@@ -4272,6 +4312,47 @@ mod tests {
             .len(),
             1,
             "a variant key is searched even with a colour"
+        );
+    }
+
+    /// A key that takes only a boolean emits nothing for a number or a string,
+    /// at any depth, and each such value is collected as written; `true`, a
+    /// valued shorthand and a colour object are not.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn a_non_boolean_value_on_a_flag_only_key_emits_nothing_and_is_collected() {
+        let text = |value: &str| StaticSzValue::String(value.to_string());
+        let source = StaticSzObject {
+            properties: vec![
+                property("truncate", StaticSzValue::Number(2.0)),
+                property("srOnly", text("yes!")),
+                property(
+                    "hover",
+                    object(vec![
+                        property("numOrdinal", StaticSzValue::Number(0.5)),
+                        property("containPaint", StaticSzValue::Boolean(true)),
+                    ]),
+                ),
+                property("ring", StaticSzValue::Number(2.0)),
+                property("bg", object(vec![property("color", text("red-500"))])),
+            ],
+        };
+        assert_eq!(
+            lower_static_sz_object(&source),
+            ["hover:contain-paint", "ring-2", "bg-red-500"]
+        );
+        let mut found = Vec::new();
+        collect_non_boolean_flags(&source, &mut found);
+        assert_eq!(
+            found
+                .iter()
+                .map(|(key, value, _)| (key.as_str(), value.as_str()))
+                .collect::<Vec<_>>(),
+            [
+                ("truncate", "2"),
+                ("srOnly", "'yes'"),
+                ("numOrdinal", "0.5")
+            ]
         );
     }
 

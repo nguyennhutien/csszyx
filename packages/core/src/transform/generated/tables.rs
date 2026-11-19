@@ -619,6 +619,29 @@ pub(crate) fn is_boolean_shorthand(key: &str) -> bool {
     )
 }
 
+/// Returns true when a key takes only `true` or `false`: any other value
+/// emits nothing and is reported (`closed-enum-value`, form `flag`).
+pub(crate) fn is_flag_only(key: &str) -> bool {
+    matches!(
+        key,
+        "truncate"
+            | "textEllipsis"
+            | "textClip"
+            | "srOnly"
+            | "notSrOnly"
+            | "numOrdinal"
+            | "numSlashedZero"
+            | "touchPinchZoom"
+            | "containLayout"
+            | "containPaint"
+            | "containStyle"
+            | "divideXReverse"
+            | "divideYReverse"
+            | "spaceXReverse"
+            | "spaceYReverse"
+    )
+}
+
 /// Returns true when a key's DYNAMIC value must lower to a conditional bare
 /// class through __szBoolClass instead of the css-var strategy: React drops
 /// booleans in `style`, and the valued utility targets a different CSS

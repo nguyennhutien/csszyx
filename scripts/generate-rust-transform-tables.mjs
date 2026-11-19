@@ -84,6 +84,7 @@ function readTables() {
             variantMap: core.stringObject('VARIANT_MAP'),
             booleanToClass: core.stringObject('BOOLEAN_TO_CLASS'),
             booleanShorthands: keyTables.stringSet('BOOLEAN_SHORTHANDS'),
+            flagOnlyKeys: keyTables.stringSet('FLAG_ONLY_KEYS'),
             booleanOnlyDynamicKeys: core.objectKeys('BOOLEAN_ONLY_DYNAMIC_VOCABULARY'),
             knownSpecialProperties: keyTables.stringSet('KNOWN_SPECIAL_PROPERTIES'),
             cssWideKeywords: core.stringSet('CSS_WIDE_KEYWORDS'),
@@ -161,6 +162,7 @@ function renderRust({
     variantMap,
     booleanToClass,
     booleanShorthands,
+    flagOnlyKeys,
     booleanOnlyDynamicKeys,
     knownSpecialProperties,
     cssWideKeywords,
@@ -279,6 +281,15 @@ pub(crate) fn is_boolean_shorthand(key: &str) -> bool {
     matches!(
         key,
 ${renderMatchPatterns(booleanShorthands)}
+    )
+}
+
+/// Returns true when a key takes only \`true\` or \`false\`: any other value
+/// emits nothing and is reported (\`closed-enum-value\`, form \`flag\`).
+pub(crate) fn is_flag_only(key: &str) -> bool {
+    matches!(
+        key,
+${renderMatchPatterns(flagOnlyKeys)}
     )
 }
 

@@ -49,7 +49,7 @@ export interface SzDiagnosticArgs {
     'canonical-key': { readonly form: 'alias' | 'font' | 'scrollbar-color'; readonly key: string };
     'removed-key': { readonly form: 'runtime-alias' | 'sugar-replaced' | 'sugar' | 'removed' | 'replaced'; readonly key: string; readonly replacement?: string };
     'numeric-key': { readonly key: string };
-    'closed-enum-value': { readonly form: 'sibling-group' | 'dead' | 'css-value' | 'font-style' | 'font-smoothing'; readonly key: string; readonly value: string; readonly suggestion?: string; readonly groupKey?: string; readonly groupValue?: string };
+    'closed-enum-value': { readonly form: 'sibling-group' | 'dead' | 'css-value' | 'font-style' | 'font-smoothing' | 'flag'; readonly key: string; readonly value: string; readonly suggestion?: string; readonly groupKey?: string; readonly groupValue?: string };
     'slash-opacity-string': { readonly key: string; readonly color: string; readonly opacity: string };
     'off-scale-value': { readonly key: string; readonly value: string };
     'numeric-font-weight': { readonly value: string };

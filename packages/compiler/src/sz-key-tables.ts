@@ -754,3 +754,28 @@ export const BOOLEAN_SHORTHANDS: ReadonlySet<string> = new Set([
     // Outline
     'outline',
 ]);
+
+// The shorthands whose type is `boolean` alone: `true` is the class, `false`
+// is none, and any other value is outside the key's type, so it emits nothing
+// and is reported (`closed-enum-value`, form `flag`) instead of lowering to a
+// class such as `truncate-2`. `container`, `prose` and `proseInvert` are left
+// out: a plugin owns their names. Generated into the engine's tables
+// (`is_flag_only`); `flag-only-keys.test.ts` holds it to `sz-props.ts`.
+/** @internal Used by csszyx's own packages; not a stable API. */
+export const FLAG_ONLY_KEYS: ReadonlySet<string> = new Set([
+    'truncate',
+    'textEllipsis',
+    'textClip',
+    'srOnly',
+    'notSrOnly',
+    'numOrdinal',
+    'numSlashedZero',
+    'touchPinchZoom',
+    'containLayout',
+    'containPaint',
+    'containStyle',
+    'divideXReverse',
+    'divideYReverse',
+    'spaceXReverse',
+    'spaceYReverse',
+]);
