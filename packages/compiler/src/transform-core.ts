@@ -28,7 +28,11 @@ import type { TokenData } from './manifest.js';
 import { own } from './own.js';
 import type { ParserMode } from './parser-mode.js';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
-import { SZ_CAP_CSS_WIDE_BRACKET, SZ_CAPABILITIES } from './sz-capabilities.generated.js';
+import {
+    SZ_CAP_CSS_WIDE_BRACKET,
+    SZ_CAP_DECIMAL_NUMBER,
+    SZ_CAPABILITIES,
+} from './sz-capabilities.generated.js';
 import { szNodeWarningsUnmuted, szWarningsQuiet } from './sz-dev-warnings.js';
 import {
     BOOLEAN_SHORTHANDS,
@@ -864,6 +868,19 @@ function warnDeadSpacingStep(key: string, value: number): void {
 function capabilityRow(rawKey: string): string | undefined {
     if (typeof own(PROPERTY_MAP, rawKey) !== 'string') return undefined;
     return own(SZ_CAPABILITIES, rawKey) ?? '';
+}
+
+/**
+ * Whether a known key's utility serves a decimal number only in the bracket:
+ * Tailwind serves `grow-2`, not `grow-2.5`. The capability table's `d` column
+ * says where the bare form is served (`p-2.5`, `opacity-2.5`). Mirrors
+ * `brackets_decimal` in `lower.rs`.
+ * @param rawKey - The sz key as written.
+ * @returns True when the decimal takes the bracket.
+ */
+function bracketsDecimal(rawKey: string): boolean {
+    const row = capabilityRow(rawKey);
+    return row !== undefined && !row.includes(SZ_CAP_DECIMAL_NUMBER);
 }
 
 /** Per-side border keys: the sides Tailwind can size and colour one at a time. */
@@ -3842,6 +3859,16 @@ function normalizeRatioValue(rawKey: string, key: string, value: string): string
     if (/^\d+\/\d+$/.test(value)) {
         return FRACTION_SUPPORTED_PROPS.has(rawKey) ? value : `[${value}]`;
     }
+    // A fraction utility serves whole terms only bare (`w-1/2`, not
+    // `w-2.5/4`); `aspect` brackets its own ratios below. Elsewhere a slash is
+    // no fraction (`bg: 'red/2.5'`), and the value is left as written.
+    if (
+        key !== 'aspect' &&
+        FRACTION_SUPPORTED_PROPS.has(rawKey) &&
+        /^\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(value)
+    ) {
+        return `[${value}]`;
+    }
     // A signed ratio keeps its sign in the bracket, as `is_decimal_ratio` reads it.
     if (key !== 'aspect' || !/^-?\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(value)) return null;
     return `[${value}]`;
@@ -4028,6 +4055,10 @@ function collectNumericProperty(
     // the author wrote, which is exactly what `{ weight: N }` asks for, and
     // needs no theme declaration. Same reasoning as the leading ratio above.
     if (rawKey === 'weight') {
+        classes.push(`${prefix}${key}-[${value}]`);
+        return;
+    }
+    if (!Number.isInteger(value) && bracketsDecimal(rawKey)) {
         classes.push(`${prefix}${key}-[${value}]`);
         return;
     }

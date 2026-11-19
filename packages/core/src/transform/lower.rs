@@ -2065,6 +2065,15 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                     format_number_literal(*value)
                 ));
             }
+            // A decimal on a utility that serves whole numbers only
+            // (`grow-2.5`) is served in the bracket alone.
+            if value.fract() != 0.0 && brackets_decimal(key) {
+                return Some(format!(
+                    "{prefix}{}-[{}]",
+                    class_key.as_ref(),
+                    format_number_literal(*value)
+                ));
+            }
             Some(format_number_class(class_key.as_ref(), *value, prefix))
         }
         StaticSzValue::String(value) => {
@@ -2375,6 +2384,17 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                         format!("{prefix}{class_key}-[{value}]")
                     },
                 );
+            }
+            // A fraction utility serves whole terms only bare (`w-1/2`, not
+            // `w-2.5/4`); `aspect` brackets its own ratios. Elsewhere a slash
+            // is no fraction (`bg: 'red/2.5'`). Mirrors `normalizeRatioValue`
+            // in `transform-core.ts`.
+            if class_key.as_ref() != "aspect"
+                && super::generated::tables::is_fraction_supported_prop(key)
+                && !value.starts_with('-')
+                && is_decimal_ratio(value)
+            {
+                return Some(format!("{prefix}{class_key}-[{value}]"));
             }
 
             // A CSS-wide keyword is valid CSS on every property, but Tailwind
@@ -3151,6 +3171,17 @@ fn format_content(value: &str, prefix: &str) -> String {
         value.to_string()
     };
     format!("{prefix}content-[{inner}]")
+}
+
+/// Whether a known key's utility serves a decimal number only in the bracket:
+/// Tailwind serves `grow-2`, not `grow-2.5`. The capability table's `d` column
+/// says where the bare form is served (`p-2.5`). Mirrors `bracketsDecimal` in
+/// `transform-core.ts`.
+fn brackets_decimal(key: &str) -> bool {
+    super::generated::tables::property_prefix(key).is_some()
+        && super::generated::tables::sz_capabilities(key)
+            & super::generated::tables::SZ_CAP_DECIMAL_NUMBER
+            == 0
 }
 
 fn format_number_class(key: &str, value: f64, prefix: &str) -> String {

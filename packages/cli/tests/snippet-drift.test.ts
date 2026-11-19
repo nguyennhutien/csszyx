@@ -38,17 +38,11 @@ const fixture = JSON.parse(
  * engines — they agree with each other and disagree with Tailwind, which is why
  * neither the differential nor the metamorphic harness can see them.
  *
- * The shape is one family: a decimal or a non-integer fraction needs arbitrary
- * brackets, and both engines emit it bare.
+ * Empty since the decimal family was fixed: a decimal or a decimal fraction on
+ * a utility that serves whole terms only now takes the bracket on every lane
+ * (the capability table's `d` and `q` columns).
  */
-const COMPILER_EMITS_DEAD_CLASS: readonly string[] = [
-    '{"basis":"2.5/4"} basis-[2.5/4] -> basis-2.5/4',
-    '{"flex":"3.5/4"} flex-[3.5/4] -> flex-3.5/4',
-    '{"flex":3.5} flex-[3.5] -> flex-3.5',
-    '{"grow":2.5} grow-[2.5] -> grow-2.5',
-    '{"shrink":2.5} shrink-[2.5] -> shrink-2.5',
-    '{"strokeWidth":0.5} stroke-[0.5] -> stroke-0.5',
-];
+const COMPILER_EMITS_DEAD_CLASS: readonly string[] = [];
 
 /**
  * Rows where both spellings produce CSS, so neither side is wrong: the snippet
