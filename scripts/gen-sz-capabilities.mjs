@@ -64,7 +64,6 @@ export const COLUMNS = [
     ['signNumber', 'n', 'a sign on a number (`-mt-2`)'],
     ['signFraction', 'f', 'a sign on a fraction (`-translate-x-1/2`)'],
     ['cssWideBracket', 'w', 'a CSS-wide keyword in brackets (`cursor-[inherit]`)'],
-    ['decimalNumber', 'd', 'a decimal number bare (`p-2.5`)'],
 ];
 
 /**
@@ -84,13 +83,11 @@ export const SHARED_PREFIX_COLUMNS = {
         signNumber: ['start', 'insetS'],
         signFraction: ['start', 'insetS'],
         cssWideBracket: ['start', 'insetS'],
-        decimalNumber: ['start', 'insetS'],
     },
     end: {
         signNumber: ['end', 'insetE'],
         signFraction: ['end', 'insetE'],
         cssWideBracket: ['end', 'insetE'],
-        decimalNumber: ['end', 'insetE'],
     },
     // The bracket sets `border-color`; the style key lowers on its own path.
     divide: { cssWideBracket: ['divideColor'] },
@@ -126,11 +123,6 @@ export const OWN_VALUE_SAMPLES = ['4', '[4px]', '[1]', '2', '1', '[2]', '[10%]',
 export const COLUMN_PROBES = {
     signNumber: { probe: prefix => `-${prefix}-2`, plain: prefix => [`${prefix}-2`] },
     signFraction: { probe: prefix => `-${prefix}-1/2`, plain: prefix => [`${prefix}-1/2`] },
-    // Many utilities take integers only (`grow-2`, `order-1`, `z-10`), where a
-    // decimal is no class (`grow-2.5`) and only the bracket serves it. The
-    // lanes bracket only where no listed Tailwind serves the bare decimal;
-    // `check-tailwind-versions.mjs` (`decimal`) asks every one of them.
-    decimalNumber: { probe: prefix => `${prefix}-2.5`, plain: prefix => [`${prefix}-2`] },
     cssWideBracket: {
         probe: prefix => `${prefix}-[inherit]`,
         plain: prefix => OWN_VALUE_SAMPLES.map(sample => `${prefix}-${sample}`),
@@ -261,7 +253,6 @@ export function tailwindColumns(cssFor) {
         const served = new Set();
         if (css(COLUMN_PROBES.signNumber.probe(prefix))) served.add('signNumber');
         if (css(COLUMN_PROBES.signFraction.probe(prefix))) served.add('signFraction');
-        if (css(COLUMN_PROBES.decimalNumber.probe(prefix))) served.add('decimalNumber');
         const declarations = className => declarationsOf(className, css(className));
         const own =
             COLUMN_PROBES.cssWideBracket

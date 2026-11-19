@@ -348,10 +348,8 @@ describe('csszyx check [dir]', () => {
  */
 describe('csszyx check — the files a default run reads', () => {
     // `outline-offset` takes whole pixels: Tailwind serves no `-0.5` step.
-    // `p-1.4` is off the spacing scale: lowered as written, with a warning,
-    // so it stays a class no stylesheet serves on every lane.
     const STYLES = `import { szv } from 'csszyx';
-export const button = szv({ base: { p: 1.4 } });
+export const button = szv({ base: { outlineOffset: 0.5 } });
 `;
 
     it('reports a dead class from a `.ts` module the build lowers', async () => {

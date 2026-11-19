@@ -125,8 +125,8 @@ describe('misc utilities — svg stroke width', () => {
         expect(t({ strokeWidth: 2 })).toBe('stroke-2');
     });
 
-    it('{ strokeWidth: 0.5 } → stroke-[0.5]: Tailwind serves whole numbers only bare', () => {
-        expect(t({ strokeWidth: 0.5 })).toBe('stroke-[0.5]');
+    it('{ strokeWidth: 0.5 } → stroke-0.5', () => {
+        expect(t({ strokeWidth: 0.5 })).toBe('stroke-0.5');
     });
 
     it('{ strokeWidth: "0.5rem" } → stroke-[0.5rem] (arbitrary css unit)', () => {

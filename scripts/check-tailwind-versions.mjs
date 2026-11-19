@@ -32,12 +32,7 @@
  *   where Tailwind keeps an `_`, and the build's `underscore-space` asks the
  *   project's own Tailwind either way.
  *
- * - `decimal`: a key the lanes bracket a decimal on (`grow-[2.5]`, no `d` in
- *   its row) where this version serves the bare decimal, or serves the
- *   utility but not the bracket — so the bracket rule is measured on every
- *   listed Tailwind, not taken from the pin. This one has no baseline.
- *
- * Each other list, per version, is a ratchet baseline in
+ * Each list, per version, is a ratchet baseline in
  * `packages/tailwind-oracle/tests/fixtures/tailwind-versions-baseline.json`:
  * a finding not listed fails, and a listed one that no longer holds fails until
  * it is removed, so the lists only shrink. Rewrite it with `--update` (or
@@ -266,54 +261,6 @@ export function spellingFindings(propertyMap, pinned, alive) {
         }
     }
     return findings;
-}
-
-/** The decimal the bracket rule is asked about, bare and bracketed. */
-const DECIMAL_SAMPLE = '2.5';
-
-/**
- * Where the lanes' decimal rule does not hold on a version.
- *
- * The lanes write a decimal bare (`p-2.5`) on a key whose row has `d`, and in
- * brackets (`grow-[2.5]`) on any other key. The bracket is right only when no
- * listed Tailwind serves the bare decimal and every one that has the utility
- * serves the bracket, so both are asked of each version. Unlike the other
- * kinds, these findings have no baseline: a person changes the rule or the
- * table, not the list.
- *
- * @param {Readonly<Record<string, string>>} propertyMap - sz key to prefix.
- * @param {Readonly<Record<string, string>>} pinned - The pinned table.
- * @param {(token: string) => boolean} alive - Whether the version serves a class.
- * @returns {string[]} One line per key, in key order.
- */
-export function decimalRuleFindings(propertyMap, pinned, alive) {
-    const findings = [];
-    for (const [key, prefix] of Object.entries(propertyMap)) {
-        if ((pinned[key] ?? '').includes('d')) continue;
-        const bare = `${prefix}-${DECIMAL_SAMPLE}`;
-        const bracketed = `${prefix}-[${DECIMAL_SAMPLE}]`;
-        if (alive(bare)) {
-            findings.push(
-                `${key}: the lanes write ${bracketed}, this Tailwind serves ${bare} bare`,
-            );
-            continue;
-        }
-        const plain = COLUMN_PROBES.decimalNumber.plain(prefix).find(alive);
-        if (plain !== undefined && !alive(bracketed)) {
-            findings.push(`${key}: the lanes write ${bracketed}, dead while ${plain} is served`);
-        }
-    }
-    return findings;
-}
-
-/**
- * The classes {@link decimalRuleFindings} asks about.
- *
- * @param {string} prefix - A prefix.
- * @returns {string[]} Its bare and bracketed decimal.
- */
-export function decimalRuleClasses(prefix) {
-    return [`${prefix}-${DECIMAL_SAMPLE}`, `${prefix}-[${DECIMAL_SAMPLE}]`];
 }
 
 /**
@@ -545,14 +492,7 @@ async function main() {
     const probes = prefixes.flatMap(prefix =>
         Object.values(COLUMN_PROBES).map(({ probe }) => probe(prefix)),
     );
-    const asked = [
-        ...new Set([
-            ...tokens,
-            ...[...utilityOf.values()].flat(),
-            ...probes,
-            ...prefixes.flatMap(decimalRuleClasses),
-        ]),
-    ];
+    const asked = [...new Set([...tokens, ...[...utilityOf.values()].flat(), ...probes])];
     const lowerMs = performance.now() - started;
 
     const root =
@@ -586,7 +526,6 @@ async function main() {
         const existing = new Set(prefixes.filter(prefix => utilityOf.get(prefix).some(alive)));
         perVersion.set(version, {
             spelling: spellingFindings(PROPERTY_MAP, SZ_CAPABILITIES, alive),
-            decimal: decimalRuleFindings(PROPERTY_MAP, SZ_CAPABILITIES, alive),
             table: tableFindings(PROPERTY_MAP, SZ_CAPABILITIES, rows, prefix =>
                 existing.has(prefix),
             ),
@@ -646,9 +585,6 @@ async function main() {
         );
         for (const line of compareWithBaseline(found[version], baseline.versions?.[version])) {
             problems.push(`${version} ${line}`);
-        }
-        for (const line of perVersion.get(version).decimal) {
-            problems.push(`${version} decimal: ${line}`);
         }
     }
     for (const version of Object.keys(baseline.versions ?? {})) {

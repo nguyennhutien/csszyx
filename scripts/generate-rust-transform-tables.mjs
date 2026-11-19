@@ -28,7 +28,6 @@ const CAPABILITY_COLUMNS = [
     'SZ_CAP_SIGN_NUMBER',
     'SZ_CAP_SIGN_FRACTION',
     'SZ_CAP_CSS_WIDE_BRACKET',
-    'SZ_CAP_DECIMAL_NUMBER',
 ];
 
 const tables = readTables();

@@ -71,8 +71,8 @@ describe('flexbox & grid — flex grow', () => {
         expect(t({ grow: 0 })).toBe('grow-0');
     });
 
-    it('{ grow: 2.5 } → grow-[2.5]: Tailwind serves whole numbers only bare', () => {
-        expect(t({ grow: 2.5 })).toBe('grow-[2.5]');
+    it('{ grow: 2.5 } → grow-2.5 (arbitrary)', () => {
+        expect(t({ grow: 2.5 })).toBe('grow-2.5');
     });
 
     it('{ grow: "calc(1rem + 2px)" } → grow-[calc(1rem_+_2px)] (arbitrary)', () => {
@@ -93,8 +93,8 @@ describe('flexbox & grid — flex shrink', () => {
         expect(t({ shrink: 0 })).toBe('shrink-0');
     });
 
-    it('{ shrink: 2.5 } → shrink-[2.5]: Tailwind serves whole numbers only bare', () => {
-        expect(t({ shrink: 2.5 })).toBe('shrink-[2.5]');
+    it('{ shrink: 2.5 } → shrink-2.5 (arbitrary)', () => {
+        expect(t({ shrink: 2.5 })).toBe('shrink-2.5');
     });
 
     it('{ shrink: "--shrink" } → shrink-(--shrink) (css variable)', () => {
@@ -123,8 +123,8 @@ describe('flexbox & grid — flex', () => {
         expect(t({ flex: 'none' })).toBe('flex-none');
     });
 
-    it('{ flex: 3.5 } → flex-[3.5]: Tailwind serves whole numbers only bare', () => {
-        expect(t({ flex: 3.5 })).toBe('flex-[3.5]');
+    it('{ flex: 3.5 } → flex-3.5 (arbitrary)', () => {
+        expect(t({ flex: 3.5 })).toBe('flex-3.5');
     });
 
     it('{ flex: "2 2 0%" } → flex-[2_2_0%] (arbitrary)', () => {
