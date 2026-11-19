@@ -101,7 +101,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
             "css-value": "`{key}: '{value}'` is a CSS value, and `{key}-{value}` produces no CSS.",
             "font-style": "`{key}: '{value}'` has no Tailwind class, and nothing is emitted for it.",
             "font-smoothing": "`{key}: '{value}'` has no Tailwind class, and nothing is emitted for it.",
-            "flag": "`{key}: {value}` emits nothing: `{key}` takes only `true` or `false`."
+            "flag": "`{key}: {value}` is not a `{key}` value: `{key}` takes only `true` or `false`."
         },
         "help": {
             "sibling-group": "write `{ {groupKey}: {groupLiteral} }`, so it combines with the other groups instead of resetting them.",
@@ -113,7 +113,8 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
         },
         "note": {
             "sibling-group": "`{key}` takes one of: {enumAllowed}.",
-            "dead": "the class `{bare}` is still emitted, and only the CSS that Tailwind or your own stylesheet defines for it applies."
+            "dead": "the class `{bare}` is still emitted, and only the CSS that Tailwind or your own stylesheet defines for it applies.",
+            "flag": "a class is still emitted for it, and only the CSS that Tailwind or your own stylesheet defines for that class applies."
         }
     },
     {

@@ -4366,17 +4366,18 @@ function warnRemovedKey(
 }
 
 /**
- * Drops a value other than `true` on a key that takes only a boolean, and
- * reports it: `truncate: 2` would lower to `truncate-2`, which is outside the
- * key's type and no class (`closed-enum-value`, form `flag`). Mirrors
- * `collect_non_boolean_flags` and the lowering guard in `lower.rs`.
+ * Reports a value other than a boolean on a key that takes only a boolean:
+ * `truncate: 2` lowers to `truncate-2`, which is outside the key's type
+ * (`closed-enum-value`, form `flag`). The class is still written, as for any
+ * other value the project's Tailwind may not serve: a project that defines
+ * `@utility truncate-*` keeps it, and `dead-class` judges the rest. Mirrors
+ * `collect_non_boolean_flags` in `lower.rs`.
  * @param rawKey - The authored key.
- * @param value - Its value; only a number or a string is dropped.
- * @returns Whether the value was dropped.
+ * @param value - Its value; only a number or a string is reported.
  */
-function dropNonBooleanFlag(rawKey: string, value: SzValue): boolean {
+function reportNonBooleanFlag(rawKey: string, value: SzValue): void {
     if ((typeof value !== 'number' && typeof value !== 'string') || !FLAG_ONLY_KEYS.has(rawKey)) {
-        return false;
+        return;
     }
     if (process.env.NODE_ENV !== 'production' && szNodeWarningsUnmuted()) {
         szReport({
@@ -4389,7 +4390,6 @@ function dropNonBooleanFlag(rawKey: string, value: SzValue): boolean {
             at: szWarnLocation,
         });
     }
-    return true;
 }
 
 /** Removed shorthands already warned about, so a re-render cannot spam. */
@@ -4518,7 +4518,7 @@ function collectTransformProperty(
     if (typeof value === 'string' && ALIGNMENT_KEYS.has(rawKey)) warnAlignmentValue(rawKey, value);
     if (collectRemovedBooleanSugar(rawKey, value)) return;
     if (collectObjectProperty(rawKey, value, prefix, classes)) return;
-    if (dropNonBooleanFlag(rawKey, value)) return;
+    reportNonBooleanFlag(rawKey, value);
     if (collectUnresolvedStringProperty(rawKey, value, prefix, classes)) return;
     if (collectUnresolvedDirectProperty(rawKey, value, prefix, classes)) return;
 

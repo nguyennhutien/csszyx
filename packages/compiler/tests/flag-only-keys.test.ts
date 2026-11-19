@@ -1,13 +1,14 @@
 /**
- * A key that takes only `true` or `false` emits nothing for any other value.
+ * A key that takes only `true` or `false` reports any other value, and still
+ * writes its class.
  *
  * `truncate`, `srOnly`, `numOrdinal` and the other {@link FLAG_ONLY_KEYS} are
- * typed `boolean` in `SzProps`. A number or a string on one used to lower to a
- * class such as `truncate-2` or `sr-only-yes`, which no Tailwind serves, with
- * no report. Every lane now drops the value and reports `closed-enum-value`,
- * form `flag`, the way a runtime value on the same key is dropped by
- * `__szBoolClass`. Whether a value is a boolean is the key's type, not a
- * question for Tailwind, so the answer is the same on every version.
+ * typed `boolean` in `SzProps`. A number or a string on one lowers to a class
+ * such as `truncate-2` or `sr-only-yes`, which stock Tailwind does not serve,
+ * and used to say nothing. Every lane now reports `closed-enum-value`, form
+ * `flag`. The class stays: a project may define it (`@utility truncate-*`),
+ * and whether a class has CSS is the project's Tailwind to answer, through
+ * `dead-class` (ADR 0029 rejects dropping a class for a wrong value).
  */
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,12 +20,12 @@ import { szCodeOf } from './helpers/sz-console-line.js';
 
 /** sz object, the class every lane writes for it, and whether it is reported. */
 const CASES: ReadonlyArray<readonly [Record<string, unknown>, string, boolean]> = [
-    [{ truncate: 2 }, '', true],
-    [{ truncate: 'yes' }, '', true],
-    [{ numOrdinal: 0 }, '', true],
-    [{ hover: { srOnly: 1 } }, '', true],
-    [{ containPaint: 'paint' }, '', true],
-    [{ spaceXReverse: 1, p: 4 }, 'p-4', true],
+    [{ truncate: 2 }, 'truncate-2', true],
+    [{ truncate: 'yes' }, 'truncate-yes', true],
+    [{ numOrdinal: 0 }, 'num-ordinal-0', true],
+    [{ hover: { srOnly: 1 } }, 'hover:sr-only-1', true],
+    [{ containPaint: 'paint' }, 'contain-paint-paint', true],
+    [{ spaceXReverse: 1, p: 4 }, 'space-xreverse-1 p-4', true],
     // `true` is the class and `false` is none, as before.
     [{ truncate: true }, 'truncate', false],
     [{ hover: { srOnly: true } }, 'hover:sr-only', false],
@@ -62,8 +63,7 @@ describe.each(CASES)('%j', (sz, expected, reported) => {
         const source = `export const A = () => <div sz={${JSON.stringify(sz)}} />;`;
         const { code = '', issues = [] } = engine(source, { filename: '/p/src/Flag.tsx' });
         expect(code).not.toContain('sz=');
-        if (expected === '') expect(code).not.toMatch(/className="[^"]*"/);
-        else expect(code).toContain(`className="${expected}"`);
+        expect(code).toContain(`className="${expected}"`);
         const flagged = issues.filter(
             issue => issue.code === 'closed-enum-value' && issue.args?.form === 'flag',
         );

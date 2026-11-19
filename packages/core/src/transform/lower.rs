@@ -470,8 +470,8 @@ pub(crate) fn collect_removed_boolean_sugar(
 }
 
 /// Collects each value other than `true` on a key that takes only a boolean
-/// (`truncate: 2`), with the value as written and where: the lowering emits
-/// nothing for it. A trailing `!` is the class's, not the value's, as in the
+/// (`truncate: 2`), with the value as written and where. The lowering still
+/// writes the class (`truncate-2`): a project's own `@utility` may serve it. A trailing `!` is the class's, not the value's, as in the
 /// lowering.
 ///
 /// Same descent rules as [`collect_dead_spacing_steps`].
@@ -2047,13 +2047,6 @@ fn animation_delay_value(value: &StaticSzValue) -> Option<String> {
 /// below read the value as written.
 #[allow(clippy::too_many_lines)]
 fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> Option<String> {
-    // A key that takes only a boolean has no class for any other value:
-    // `truncate: 2` would write `truncate-2`. `collect_non_boolean_flags`
-    // reports it. Mirrors `dropNonBooleanFlag` in `transform-core.ts`.
-    if super::generated::tables::is_flag_only(key) && !matches!(value, StaticSzValue::Boolean(true))
-    {
-        return None;
-    }
     if key == "animationDelay" {
         return animation_delay_value(value)
             .map(|delay| format!("{prefix}[animation-delay:{delay}]"));
@@ -4287,12 +4280,12 @@ mod tests {
         );
     }
 
-    /// A key that takes only a boolean emits nothing for a number or a string,
-    /// at any depth, and each such value is collected as written; `true`, a
+    /// A key that takes only a boolean still writes a class for a number or a
+    /// string, at any depth, and each such value is collected as written; `true`, a
     /// valued shorthand and a colour object are not.
     #[cfg(feature = "native-engine")]
     #[test]
-    fn a_non_boolean_value_on_a_flag_only_key_emits_nothing_and_is_collected() {
+    fn a_non_boolean_value_on_a_flag_only_key_keeps_its_class_and_is_collected() {
         let text = |value: &str| StaticSzValue::String(value.to_string());
         let source = StaticSzObject {
             properties: vec![
@@ -4312,7 +4305,14 @@ mod tests {
         };
         assert_eq!(
             lower_static_sz_object(&source),
-            ["hover:contain-paint", "ring-2", "bg-red-500"]
+            [
+                "truncate-2",
+                "sr-only-yes!",
+                "hover:num-ordinal-0.5",
+                "hover:contain-paint",
+                "ring-2",
+                "bg-red-500"
+            ]
         );
         let mut found = Vec::new();
         collect_non_boolean_flags(&source, &mut found);
