@@ -9,6 +9,7 @@ import {
     compareVersions,
     compareWithBaseline,
     deadBeyondPin,
+    decimalRuleFindings,
     readBaseline,
     regressions,
     renderBaseline,
@@ -103,6 +104,22 @@ test('flags a table row that disagrees where the utility exists', () => {
     assert.deepEqual(
         tableFindings(map, pinned, measured, prefix => prefix !== 'inset-s'),
         ["col: pinned 'nw', measured 'w'"],
+    );
+});
+
+test('refuses a bracketed decimal where a version serves it bare, or serves neither', () => {
+    // The lanes bracket a decimal (`grow-[2.5]`) only on keys whose row has no
+    // `d`: that must hold on every listed Tailwind, not on the pin alone.
+    const map = { grow: 'grow', order: 'order', p: 'p', autoCols: 'auto-cols' };
+    const pinned = { grow: 'w', order: '', p: 'wd', autoCols: 'wd' };
+    const alive = new Set(['grow-2', 'grow-2.5', 'order-2', 'p-2', 'p-2.5', 'auto-cols-2']);
+
+    assert.deepEqual(
+        decimalRuleFindings(map, pinned, token => alive.has(token)),
+        [
+            'grow: the lanes write grow-[2.5], this Tailwind serves grow-2.5 bare',
+            'order: the lanes write order-[2.5], dead while order-2 is served',
+        ],
     );
 });
 

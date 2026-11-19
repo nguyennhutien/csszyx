@@ -127,7 +127,9 @@ export const COLUMN_PROBES = {
     signNumber: { probe: prefix => `-${prefix}-2`, plain: prefix => [`${prefix}-2`] },
     signFraction: { probe: prefix => `-${prefix}-1/2`, plain: prefix => [`${prefix}-1/2`] },
     // Many utilities take integers only (`grow-2`, `order-1`, `z-10`), where a
-    // decimal is no class (`grow-2.5`) and only the bracket serves it.
+    // decimal is no class (`grow-2.5`) and only the bracket serves it. The
+    // lanes bracket only where no listed Tailwind serves the bare decimal;
+    // `check-tailwind-versions.mjs` (`decimal`) asks every one of them.
     decimalNumber: { probe: prefix => `${prefix}-2.5`, plain: prefix => [`${prefix}-2`] },
     cssWideBracket: {
         probe: prefix => `${prefix}-[inherit]`,
