@@ -13,6 +13,7 @@
  * content in a workspace.
  */
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -62,10 +63,23 @@ describe('the webpack persistent cache', () => {
         expect(dependencies.csszyx).toContain(
             fileURLToPath(new URL('../src/unplugin.ts', import.meta.url)),
         );
-        expect(dependencies.csszyx?.some(file => file.includes('compiler'))).toBe(true);
+        const fromSource = createRequire(new URL('../src/unplugin.ts', import.meta.url));
+        expect(dependencies.csszyx).toContain(fromSource.resolve('@csszyx/compiler'));
         expect(dependencies.csszyx?.some(file => file.endsWith('csszyx_core.js'))).toBe(true);
         expect(dependencies.csszyx?.some(file => file.endsWith('native/index.js'))).toBe(true);
         for (const file of dependencies.csszyx ?? []) expect(existsSync(file), file).toBe(true);
+    });
+
+    it('keeps a list the project put under the same name', () => {
+        const cache = applyWith({
+            type: 'filesystem',
+            buildDependencies: { csszyx: ['/p/csszyx.config.mjs'] },
+        });
+        const csszyx = (cache as { buildDependencies: Record<string, string[]> }).buildDependencies
+            .csszyx;
+
+        expect(csszyx?.[0]).toBe('/p/csszyx.config.mjs');
+        expect(csszyx).toContain(fileURLToPath(new URL('../src/unplugin.ts', import.meta.url)));
     });
 
     it('is left alone when it is not on the filesystem', () => {

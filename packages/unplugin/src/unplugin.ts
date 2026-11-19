@@ -2704,7 +2704,11 @@ function addCsszyxCacheDependencies(compiler: WebpackCompiler): void {
     const require = createRequire(import.meta.url);
     cache.buildDependencies = {
         ...cache.buildDependencies,
-        csszyx: csszyxCacheDependencies(fileURLToPath(import.meta.url), require.resolve),
+        // Beside a list of the project's own under the same name, not over it.
+        csszyx: [
+            ...(cache.buildDependencies?.csszyx ?? []),
+            ...csszyxCacheDependencies(fileURLToPath(import.meta.url), require.resolve),
+        ],
     };
     // webpack checks only the dependencies a stored cache recorded, so a cache
     // written by a csszyx without the list above would still be read once.
