@@ -71,6 +71,21 @@ describe.each(CASES)('%j', (sz, expected, reported) => {
     });
 });
 
+describe('a production runtime', () => {
+    it('writes the class and prints nothing', () => {
+        __resetSzWarnDedupForTests();
+        vi.stubEnv('NODE_ENV', 'production');
+        const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            expect(transform({ truncate: 2 } as SzObject).className).toBe('truncate-2');
+            expect(spy).not.toHaveBeenCalled();
+        } finally {
+            spy.mockRestore();
+            vi.unstubAllEnvs();
+        }
+    });
+});
+
 describe('the flag-only keys', () => {
     const types = readFileSync(new URL('../src/types/sz-props.ts', import.meta.url), 'utf8');
     const lines = types.split('\n').map(line => line.trim());
