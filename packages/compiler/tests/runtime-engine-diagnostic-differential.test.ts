@@ -138,6 +138,9 @@ const CASES: Readonly<Record<string, readonly SzObject[]>> = {
         { w: '[100px]' },
         { hover: { top: '-[1px]' } },
         { md: { gridRows: '[[a]_1fr]' } },
+        // Reported once, as `bracketed-value`: a flag-only key adds no
+        // `flag` line for a bracketed value.
+        { truncate: '[2]' },
     ],
     'bracketed-value/escape': [{ p: '[a]_1_[b]' }, { md: { w: '[[a]_1fr]' } }],
     'opacity-value/range': [

@@ -61,8 +61,9 @@ describe.each(CASES)('%j', (sz, expected, reported) => {
     it.each(ENGINES)('lowers through the %s engine, and reports it', (_name, engine) => {
         const source = `export const A = () => <div sz={${JSON.stringify(sz)}} />;`;
         const { code = '', issues = [] } = engine(source, { filename: '/p/src/Flag.tsx' });
-        expect(code).toContain(expected === '' ? 'export const A' : `className="${expected}"`);
-        if (expected === '') expect(code).not.toMatch(/className="[^"]+"/);
+        expect(code).not.toContain('sz=');
+        if (expected === '') expect(code).not.toMatch(/className="[^"]*"/);
+        else expect(code).toContain(`className="${expected}"`);
         const flagged = issues.filter(
             issue => issue.code === 'closed-enum-value' && issue.args?.form === 'flag',
         );

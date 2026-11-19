@@ -483,6 +483,9 @@ pub(crate) fn collect_non_boolean_flags(
     for property in &object.properties {
         let written = match &property.value {
             StaticSzValue::Number(value) => Some(format_number_literal(*value)),
+            // A bracketed value is `collect_bracketed_values`'s to report,
+            // and the lowering skips it before any flag check.
+            StaticSzValue::String(value) if bracketed_inner(&property.key, value).is_some() => None,
             StaticSzValue::String(value) => Some(format!("'{}'", split_important(value).0)),
             StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
                 for_each_sz_object_in(&property.key, nested, &mut |object| {
@@ -4295,6 +4298,7 @@ mod tests {
             properties: vec![
                 property("truncate", StaticSzValue::Number(2.0)),
                 property("srOnly", text("yes!")),
+                property("textClip", text("[2]")),
                 property(
                     "hover",
                     object(vec![
