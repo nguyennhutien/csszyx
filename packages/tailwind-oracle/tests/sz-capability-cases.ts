@@ -18,6 +18,7 @@ import {
     PROPERTY_MAP,
     transform,
 } from '../../compiler/src/transform-core.js';
+import { escapeUnsafeChars } from '../../mcp-server/src/tools/source-literal.js';
 
 /** An sz object, as an author writes it. */
 type SzObject = Record<string, unknown>;
@@ -136,7 +137,8 @@ export function runtimeCase(sz: SzObject): LaneOutput {
  */
 export function engineCases(engine: CapabilityEngine, key: string): LaneOutput[] {
     const lines = SHAPES.map(
-        ([, sz], index) => `<p data-i="${index}" sz={${JSON.stringify(sz(key))}} />`,
+        ([, sz], index) =>
+            `<p data-i="${index}" sz={${escapeUnsafeChars(JSON.stringify(sz(key)))}} />`,
     );
     const source = `export const A = () => (<>\n${lines.join('\n')}\n</>);`;
     const result = engine(source, { filename: '/p/src/Capability.jsx' });
