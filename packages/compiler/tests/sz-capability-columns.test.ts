@@ -11,6 +11,7 @@
  * file pins the decisions by example, so a failure names one.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
+import { escapeUnsafeChars } from '../../core/tests/helpers/sz-fuzz.js';
 import { __resetSzWarnDedupForTests, transform } from '../src/transform-core.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
 import { szReportedCodes } from './helpers/sz-console-line.js';
@@ -57,7 +58,7 @@ const LANES: ReadonlyArray<readonly [string, Lane]> = [
                     // JSON is a JSX expression, so the engines read the same object.
                     const run = captureWarnings(
                         engine,
-                        `export const A = () => <p sz={${JSON.stringify(sz)}} />;`,
+                        `export const A = () => <p sz={${escapeUnsafeChars(JSON.stringify(sz))}} />;`,
                         '/p/src/Capability.jsx',
                     );
                     return {

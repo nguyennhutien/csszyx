@@ -7,6 +7,15 @@ import test from 'node:test';
 
 import { readTrackedSymlinks, validateTrackedSymlinks } from './validate-tracked-symlinks.mjs';
 
+// A git hook runs this suite with `GIT_DIR` (and in a worktree, more `GIT_*`)
+// pointing at the checkout being pushed. Every `git` this file starts would
+// inherit it and act on that repository instead of the scratch one: `git init`
+// there sets `core.bare = true` on the real repository. Measured 2026-11-20 on
+// a pre-push from a worktree.
+for (const name of Object.keys(process.env)) {
+    if (name.startsWith('GIT_')) delete process.env[name];
+}
+
 const repositoryRoot = path.resolve('/workspace/project');
 const existingPaths = new Set([
     path.join(repositoryRoot, 'packages/core/src'),

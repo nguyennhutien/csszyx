@@ -9,6 +9,7 @@
  * and the native engine must write the same bytes and report the same kinds.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { escapeUnsafeChars } from '../../core/tests/helpers/sz-fuzz.js';
 import { __resetSzWarnDedupForTests, setSzWarnLocation, transform } from '../src/transform-core.js';
 import { engineMessage, productionMessage } from './engine-message.js';
 import { captureWarnings, ENGINES } from './engine-parity-harness.js';
@@ -56,7 +57,7 @@ const LANES: ReadonlyArray<readonly [string, Lane]> = [
                     // JSON is a JSX expression, so the engines read the same object.
                     const run = captureWarnings(
                         engine,
-                        `export const A = () => <p sz={${JSON.stringify(sz)}} />;`,
+                        `export const A = () => <p sz={${escapeUnsafeChars(JSON.stringify(sz))}} />;`,
                         '/p/src/Spelling.jsx',
                     );
                     return {

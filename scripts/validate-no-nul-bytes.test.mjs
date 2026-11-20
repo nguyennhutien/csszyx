@@ -11,6 +11,15 @@ import {
     listTrackedTextFiles,
 } from './validate-no-nul-bytes.mjs';
 
+// A git hook runs this suite with `GIT_DIR` (and in a worktree, more `GIT_*`)
+// pointing at the checkout being pushed. Every `git` this file starts would
+// inherit it and act on that repository instead of the scratch one: `git init`
+// there sets `core.bare = true` on the real repository. Measured 2026-11-20 on
+// a pre-push from a worktree.
+for (const name of Object.keys(process.env)) {
+    if (name.startsWith('GIT_')) delete process.env[name];
+}
+
 test('checks text formats and skips binary-capable extensions', () => {
     assert.equal(isCheckedTextFile('packages/compiler/src/template-sz.ts'), true);
     assert.equal(isCheckedTextFile('packages/core/src/transform/parser.rs'), true);
