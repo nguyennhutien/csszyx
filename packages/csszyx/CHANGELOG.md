@@ -1,5 +1,74 @@
 # csszyx
 
+## [0.18.1](https://github.com/nguyennhutien/csszyx/compare/v0.18.0...v0.18.1) (2026-11-20)
+
+### Bug Fixes
+
+* **vscode:** publish with the Entra token even when a PAT is set ([#433](https://github.com/nguyennhutien/csszyx/issues/433))
+* **unplugin:** read only the top level of a runtime `_sz` object ([#434](https://github.com/nguyennhutien/csszyx/issues/434))
+* **tailwind-oracle:** read `.gitignore` with the latest `ignore` ([#450](https://github.com/nguyennhutien/csszyx/issues/450))
+* **runtime:** name the setup-file route in `merge-table-missing` help ([#457](https://github.com/nguyennhutien/csszyx/issues/457))
+* **core:** merge class names across a spread that carries no class ([#459](https://github.com/nguyennhutien/csszyx/issues/459))
+* **core:** read `null`, `undefined` and `false` branches as class-free ([#459](https://github.com/nguyennhutien/csszyx/issues/459))
+* type project breakpoints and `szv` selections under every package manager ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **runtime:** keep the `szv` selection type mutable ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **compiler:** type `snapStrictness` on `SzProps` ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **unplugin:** import `SzProps` for breakpoints in `theme.d.ts` ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **unplugin:** augment `csszyx` in the generated theme declaration ([#460](https://github.com/nguyennhutien/csszyx/issues/460))
+* **core:** lower grid line names and name only one outer bracket pair in `bracketed-value` ([#461](https://github.com/nguyennhutien/csszyx/issues/461))
+* **unplugin:** emit the webpack manifest from the parent compilation only ([#462](https://github.com/nguyennhutien/csszyx/issues/462))
+* warn when an `_` in an `sz` value styles a space, and keep the one migrate should keep ([#463](https://github.com/nguyennhutien/csszyx/issues/463))
+* warn when an `_` in an `sz` value styles a space ([#463](https://github.com/nguyennhutien/csszyx/issues/463))
+* **migrate:** keep the `_` the project's Tailwind keeps in an arbitrary value ([#463](https://github.com/nguyennhutien/csszyx/issues/463))
+* scan every module the build lowers in `check`, and follow `.gitignore` in the sz walk ([#464](https://github.com/nguyennhutien/csszyx/issues/464))
+* **cli:** scan every module the build lowers in `csszyx check` ([#464](https://github.com/nguyennhutien/csszyx/issues/464))
+* lower `.cts`, `.mts` and `.cjs` modules in the Next scan and jest ([#464](https://github.com/nguyennhutien/csszyx/issues/464))
+* skip what `.gitignore` covers in the sz walk and `check`, and read what `@source` names ([#464](https://github.com/nguyennhutien/csszyx/issues/464))
+* read whitespace as Unicode White_Space in the runtime `transform`, as the engine does ([#471](https://github.com/nguyennhutien/csszyx/issues/471))
+* name a colour object member other than `color` and `op` instead of dropping it ([#468](https://github.com/nguyennhutien/csszyx/issues/468))
+* ask each stylesheet under its own prefix when the MCP tools check an `_` ([#467](https://github.com/nguyennhutien/csszyx/issues/467))
+* **mcp-server:** show the classes under the project's prefix, or say they are not its ([#466](https://github.com/nguyennhutien/csszyx/issues/466))
+* **unplugin:** emit the webpack manifest only when `build.emitManifest` asks for it ([#469](https://github.com/nguyennhutien/csszyx/issues/469))
+* rename only the class strings the compiler marks in a mangle build ([#475](https://github.com/nguyennhutien/csszyx/issues/475))
+* **core:** update oxc and keep lone-surrogate strings at runtime ([#478](https://github.com/nguyennhutien/csszyx/issues/478))
+* **core:** keep sibling classes and css scans whole around a lone surrogate ([#478](https://github.com/nguyennhutien/csszyx/issues/478))
+* bind compiled class marks and helper calls to csszyx in a mangle build ([#480](https://github.com/nguyennhutien/csszyx/issues/480))
+* read directives, whitespace and szs escapes through shared helpers ([#481](https://github.com/nguyennhutien/csszyx/issues/481))
+* **unplugin:** read comments and code through one shared lexer ([#484](https://github.com/nguyennhutien/csszyx/issues/484))
+* **unplugin:** mangle an Astro build that a content sync served first ([#485](https://github.com/nguyennhutien/csszyx/issues/485))
+* **core:** read a JSX attribute string as JSX decodes it ([#486](https://github.com/nguyennhutien/csszyx/issues/486))
+* read HTML `class` and JSX attributes as their parsers do ([#492](https://github.com/nguyennhutien/csszyx/issues/492))
+* **cli:** migrate an attribute written with spaces around its `=` ([#492](https://github.com/nguyennhutien/csszyx/issues/492))
+* read a JSX attribute the same way wherever it is looked for ([#492](https://github.com/nguyennhutien/csszyx/issues/492))
+* read HTML `class` with one tokenizer in the engine ([#492](https://github.com/nguyennhutien/csszyx/issues/492))
+* **unplugin:** mangle the pages and files a later webpack stage adds ([#492](https://github.com/nguyennhutien/csszyx/issues/492))
+* read class attributes and Vue and Svelte templates as the DOM gets them ([#494](https://github.com/nguyennhutien/csszyx/issues/494))
+* read class attributes as the DOM gets them in the mangle census ([#494](https://github.com/nguyennhutien/csszyx/issues/494))
+* **cli:** migrate a className as JSX decodes its character references ([#494](https://github.com/nguyennhutien/csszyx/issues/494))
+* **unplugin:** safelist the classes a template adapter writes ([#494](https://github.com/nguyennhutien/csszyx/issues/494))
+* read the HTML5 names that stand for one ASCII character ([#494](https://github.com/nguyennhutien/csszyx/issues/494))
+* **unplugin:** safelist the classes a template lowers in a production build ([#494](https://github.com/nguyennhutien/csszyx/issues/494))
+* **unplugin:** read a template's lowered classes as HTML, not as code ([#494](https://github.com/nguyennhutien/csszyx/issues/494))
+* read a Vue or Svelte file's classes with its framework's parser ([#494](https://github.com/nguyennhutien/csszyx/issues/494))
+* **unplugin:** read a template as markup when its framework is missing ([#494](https://github.com/nguyennhutien/csszyx/issues/494))
+* report a non-boolean value on a boolean key, and keep stale output out of two build caches ([#495](https://github.com/nguyennhutien/csszyx/issues/495))
+* bracket a decimal on a utility whose scale takes whole numbers ([#495](https://github.com/nguyennhutien/csszyx/issues/495))
+* **unplugin:** keep every Vite environment's output out of the prescan ([#495](https://github.com/nguyennhutien/csszyx/issues/495))
+* drop a non-boolean value on a key that takes only a boolean ([#495](https://github.com/nguyennhutien/csszyx/issues/495))
+* **unplugin:** make webpack's persistent cache depend on csszyx ([#495](https://github.com/nguyennhutien/csszyx/issues/495))
+* report a bracketed value on a flag-only key once ([#495](https://github.com/nguyennhutien/csszyx/issues/495))
+* **unplugin:** keep a project's own `buildDependencies.csszyx` entries ([#495](https://github.com/nguyennhutien/csszyx/issues/495))
+* keep the class for a non-boolean value on a flag-only key ([#495](https://github.com/nguyennhutien/csszyx/issues/495))
+* word the flag-only note like the closed-enum one ([#495](https://github.com/nguyennhutien/csszyx/issues/495))
+
+### Performance
+
+* load the template adapters' kit only for a template file ([#443](https://github.com/nguyennhutien/csszyx/issues/443))
+
+### Reverts
+
+* keep a decimal on a whole-number utility as written ([#495](https://github.com/nguyennhutien/csszyx/issues/495))
+
 ## [0.18.0](https://github.com/nguyennhutien/csszyx/compare/v0.17.2...v0.18.0) (2026-11-03)
 
 ### ⚠ BREAKING CHANGES
