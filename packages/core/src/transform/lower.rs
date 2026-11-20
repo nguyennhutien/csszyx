@@ -846,6 +846,11 @@ pub(crate) fn unclassed_value(key: &str, value: &str) -> Option<UnclassedValue> 
 /// class. Descends like the lowering does, so a value nested under a variant
 /// is reported too. The important modifier is split off first, as
 /// `format_static_class` does: `flex!` is a legal value with a legal suffix.
+///
+/// A number or a string on a key that takes only a boolean (`truncate: 2`) is
+/// collected here too, as written (`2`, `'yes'`): the same walk, and the same
+/// diagnostic under its `flag` form. The lowering still writes the class
+/// (`truncate-2`): a project's own `@utility` may serve it.
 #[cfg(feature = "native-engine")]
 pub(crate) fn collect_dead_enum_values(
     object: &StaticSzObject,
@@ -874,7 +879,24 @@ pub(crate) fn collect_dead_enum_values(
                         || unclassed_value(&property.key, base).is_some())
                 {
                     out.push((property.key.clone(), base.to_string(), property.span.start));
+                } else if super::generated::tables::is_flag_only(&property.key)
+                    && bracketed_inner(&property.key, value).is_none()
+                {
+                    out.push((
+                        property.key.clone(),
+                        format!("'{base}'"),
+                        property.span.start,
+                    ));
                 }
+            }
+            StaticSzValue::Number(value)
+                if super::generated::tables::is_flag_only(&property.key) =>
+            {
+                out.push((
+                    property.key.clone(),
+                    format_number_literal(*value),
+                    property.span.start,
+                ));
             }
             StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
                 for_each_sz_object_in(&property.key, nested, &mut |object| {
@@ -4241,6 +4263,63 @@ mod tests {
             .len(),
             1,
             "a variant key is searched even with a colour"
+        );
+    }
+
+    /// A key that takes only a boolean still writes a class for a number or a
+    /// string, at any depth, and each such value is collected as written; `true`, a
+    /// valued shorthand and a colour object are not.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn a_non_boolean_value_on_a_flag_only_key_keeps_its_class_and_is_collected() {
+        let text = |value: &str| StaticSzValue::String(value.to_string());
+        let source = StaticSzObject {
+            properties: vec![
+                property("truncate", StaticSzValue::Number(2.0)),
+                property("srOnly", text("yes!")),
+                property("textClip", text("[2]")),
+                property(
+                    "hover",
+                    object(vec![
+                        property("numOrdinal", StaticSzValue::Number(0.5)),
+                        property("containPaint", StaticSzValue::Boolean(true)),
+                    ]),
+                ),
+                property("ring", StaticSzValue::Number(2.0)),
+                // A colour object's members are fields, not sz keys: nothing
+                // under it is collected.
+                property(
+                    "bg",
+                    object(vec![
+                        property("color", text("red-500")),
+                        property("truncate", StaticSzValue::Number(3.0)),
+                    ]),
+                ),
+            ],
+        };
+        assert_eq!(
+            lower_static_sz_object(&source),
+            [
+                "truncate-2",
+                "sr-only-yes!",
+                "hover:num-ordinal-0.5",
+                "hover:contain-paint",
+                "ring-2",
+                "bg-red-500"
+            ]
+        );
+        let mut found = Vec::new();
+        collect_dead_enum_values(&source, &mut found);
+        assert_eq!(
+            found
+                .iter()
+                .map(|(key, value, _)| (key.as_str(), value.as_str()))
+                .collect::<Vec<_>>(),
+            [
+                ("truncate", "2"),
+                ("srOnly", "'yes'"),
+                ("numOrdinal", "0.5")
+            ]
         );
     }
 

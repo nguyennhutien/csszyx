@@ -320,6 +320,7 @@ import {
     type ViteStylesheetResolver,
     viteStylesheetResolver,
 } from './vite-stylesheet-candidates.js';
+import { csszyxCacheDependencies, csszyxCacheVersion } from './webpack-cache-dependencies.js';
 
 // The diagnostic gates moved to their own module so the Next Turbopack loader
 // shares them; they stay importable from here.
@@ -2688,6 +2689,62 @@ const STYLESHEET_FILE_EXTENSIONS = [
  */
 function matchesScriptExtension(id: string, extensions: readonly string[]): boolean {
     return extensions.some(ext => id.endsWith(ext) || id.includes(`${ext}?`));
+}
+
+/**
+ * Make webpack's persistent cache depend on the csszyx code that transforms
+ * a module ({@link csszyxCacheDependencies}, {@link csszyxCacheVersion}). A
+ * memory cache lives for one process and needs none of this.
+ *
+ * @param compiler - The webpack compiler, before its cache is set up.
+ */
+function addCsszyxCacheDependencies(compiler: WebpackCompiler): void {
+    const cache = compiler.options?.cache;
+    if (typeof cache !== 'object' || cache.type !== 'filesystem') return;
+    const require = createRequire(import.meta.url);
+    cache.buildDependencies = {
+        ...cache.buildDependencies,
+        // Beside a list of the project's own under the same name, not over it.
+        csszyx: [
+            ...(cache.buildDependencies?.csszyx ?? []),
+            ...csszyxCacheDependencies(fileURLToPath(import.meta.url), require.resolve),
+        ],
+    };
+    // webpack checks only the dependencies a stored cache recorded, so a cache
+    // written by a csszyx without the list above would still be read once.
+    // The version is compared whatever the cache holds.
+    cache.version = csszyxCacheVersion(cache.version, {
+        plugin: PLUGIN_VERSION,
+        compiler: COMPILER_VERSION,
+    });
+}
+
+/**
+ * The folders a Vite build writes to: the top-level `build.outDir` and each
+ * environment's own (`environments.ssr.build.outDir`, Vite 6+), resolved
+ * against the root. The prescan never reads them: a previous bundle holds
+ * every class unmarked.
+ *
+ * @param root - The project root.
+ * @param config - The resolved config's build and environments.
+ * @param config.build - Its top-level build options.
+ * @param config.build.outDir - Its top-level output folder.
+ * @param config.environments - Its environments, by name.
+ * @returns Each folder once, the top-level one first.
+ */
+function viteBuildOutputDirs(
+    root: string,
+    config: {
+        build?: { outDir?: string };
+        environments?: Record<string, { build?: { outDir?: string } }>;
+    },
+): string[] {
+    const dirs = new Set([path.resolve(root, config.build?.outDir ?? 'dist')]);
+    for (const environment of Object.values(config.environments ?? {})) {
+        const outDir = environment.build?.outDir;
+        if (outDir) dirs.add(path.resolve(root, outDir));
+    }
+    return [...dirs];
 }
 
 /**
@@ -8348,6 +8405,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
              */
             webpack(compiler: WebpackCompiler) {
                 activeFramework = 'webpack';
+                addCsszyxCacheDependencies(compiler);
                 // Write the szcn theme-group registration now, not when the
                 // first module that imports it is transformed. webpack caches
                 // transformed modules across builds, so a rebuild can replay an
@@ -8511,7 +8569,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
                     announceActiveParser();
                     const root = config.root || process.cwd();
                     state.rootDir = root;
-                    buildOutputDirs = [path.resolve(root, config.build?.outDir ?? 'dist')];
+                    buildOutputDirs = viteBuildOutputDirs(root, config);
                     await loadProjectDiagnosticPolicy(root);
                     // Vite has already normalized `resolve.alias` into its array
                     // form here, which is also the form this reads — taking it

@@ -898,6 +898,28 @@ impl KeyValueFindings {
         self.globals_before_groups.clear();
         self.runtime_aliases.clear();
     }
+
+    /// Refill every family from one static object of the group.
+    fn collect(&mut self, object: &super::StaticSzObject) {
+        collect_unknown_sz_keys(object, &mut self.unknown);
+        super::lower::collect_dead_spacing_steps(object, &mut self.dead_steps);
+        super::lower::collect_dead_weight_values(object, &mut self.dead_weights);
+        super::lower::collect_removed_boolean_sugar(object, &mut self.removed_sugar);
+        super::lower::collect_border_side_styles(object, &mut self.border_side_styles);
+        super::lower::collect_property_object_values(object, &mut self.property_objects);
+        super::lower::collect_owned_key_variant_objects(object, &mut self.unknown_variants);
+        super::lower::collect_dead_enum_values(object, &mut self.dead_enums);
+        super::lower::collect_slash_opacity_strings(object, &mut self.slash_opacities);
+        super::lower::collect_color_slash_opacities(object, &mut self.color_slash_opacities);
+        super::lower::collect_invalid_opacities(object, &mut self.invalid_opacities);
+        super::lower::collect_bracketed_values(object, &mut self.bracketed_values);
+        super::lower::collect_underscore_values(object, &mut self.underscore_values);
+        super::lower::collect_moved_values(object, &mut self.moved_values);
+        super::lower::collect_mask_layer_values(object, &mut self.mask_layers);
+        super::lower::collect_globals_before_groups(object, &mut self.globals_before_groups);
+        super::lower::collect_unknown_mask_slot_members(object, &mut self.mask_members);
+        super::lower::collect_unknown_color_object_members(object, &mut self.mask_members);
+    }
 }
 
 /// Run every key and value family over one group of static objects, reporting
@@ -921,24 +943,7 @@ fn push_group_key_value_diagnostics<'a>(
 ) {
     found.clear();
     for object in objects {
-        collect_unknown_sz_keys(object, &mut found.unknown);
-        super::lower::collect_dead_spacing_steps(object, &mut found.dead_steps);
-        super::lower::collect_dead_weight_values(object, &mut found.dead_weights);
-        super::lower::collect_removed_boolean_sugar(object, &mut found.removed_sugar);
-        super::lower::collect_border_side_styles(object, &mut found.border_side_styles);
-        super::lower::collect_property_object_values(object, &mut found.property_objects);
-        super::lower::collect_owned_key_variant_objects(object, &mut found.unknown_variants);
-        super::lower::collect_dead_enum_values(object, &mut found.dead_enums);
-        super::lower::collect_slash_opacity_strings(object, &mut found.slash_opacities);
-        super::lower::collect_color_slash_opacities(object, &mut found.color_slash_opacities);
-        super::lower::collect_invalid_opacities(object, &mut found.invalid_opacities);
-        super::lower::collect_bracketed_values(object, &mut found.bracketed_values);
-        super::lower::collect_underscore_values(object, &mut found.underscore_values);
-        super::lower::collect_moved_values(object, &mut found.moved_values);
-        super::lower::collect_mask_layer_values(object, &mut found.mask_layers);
-        super::lower::collect_globals_before_groups(object, &mut found.globals_before_groups);
-        super::lower::collect_unknown_mask_slot_members(object, &mut found.mask_members);
-        super::lower::collect_unknown_color_object_members(object, &mut found.mask_members);
+        found.collect(object);
     }
     if !repeat_free {
         let seen = &mut std::collections::HashSet::new();
@@ -1299,6 +1304,14 @@ fn push_owned_key_variant_diagnostics(found: &[(String, u32)], out: &mut Diagnos
 fn push_dead_enum_diagnostics(found: &[(String, String, u32)], out: &mut Diagnostics) {
     use super::lower::UnclassedValue;
     for (key, value, offset) in found {
+        // A key that takes only a boolean: the value is as written.
+        if super::generated::tables::is_flag_only(key) {
+            out.push_issue(
+                issue::closed_enum_value_flag(key, value, None, None, None),
+                *offset,
+            );
+            continue;
+        }
         if let Some(unclassed) = super::lower::unclassed_value(key, value) {
             let issue = match unclassed {
                 UnclassedValue::CssValue(short) => {
@@ -1898,6 +1911,33 @@ mod tests {
         // The class is still emitted: the diagnostic reports what Tailwind
         // will do with what the author wrote, it does not rewrite it.
         assert!(result.classes.iter().any(|class| class == "font-700"));
+    }
+
+    /// A number or a string on a key typed `boolean` is reported once per
+    /// site, and its class is still written: a project may define it.
+    #[test]
+    fn a_non_boolean_value_on_a_flag_only_key_is_reported_and_keeps_its_class() {
+        let file = TransformFile {
+            filename: "/repo/App.tsx".to_string(),
+            source:
+                "export const A = () => <div sz={{ truncate: 2, hover: { srOnly: \"yes\" } }} />;"
+                    .to_string(),
+        };
+        let result = transform_file(&file);
+        assert_eq!(
+            lines(&result),
+            [
+                r#"closed-enum-value {"form":"flag","key":"truncate","value":"2"}"#,
+                r#"closed-enum-value {"form":"flag","key":"srOnly","value":"'yes'"}"#,
+            ],
+            "code was: {}",
+            result.code
+        );
+        assert!(result.classes.iter().any(|class| class == "truncate-2"));
+        assert!(result
+            .classes
+            .iter()
+            .any(|class| class == "hover:sr-only-yes"));
     }
 
     /// The spellings Tailwind does serve stay quiet, or the diagnostic would

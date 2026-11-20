@@ -606,7 +606,14 @@ export const SIZE_BUDGETS = [
         // as HTML read it, so the mangle census reads `className="p&#45;4"`
         // as `p-4`. This script reads 599,257 with no wasm-opt (container).
         // ~300 bytes of headroom.
-        maxGzipBytes: 599_560,
+        //
+        // Raised from 599,560 on 2026-11-20: a number or a string on a key
+        // typed `boolean` (`truncate: 2`) is reported as `closed-enum-value`,
+        // form `flag`. CI read 600,082 before a second walk over every sz
+        // object was folded into the closed-enum collector (-140 gzip -9
+        // bytes, 596,624 -> 596,484 on one host, no wasm-opt). ~300 bytes
+        // of headroom, on the user's call.
+        maxGzipBytes: 600_250,
     },
     // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
     // bundles from the compiler's source, unminified, and that every editor
@@ -729,12 +736,17 @@ export const SIZE_BUDGETS = [
     // module leaves its words out. Budget 265 above, on the user's
     // call. Raised from 23,550 to 23,900 on 2026-11-07, measured 23,629,
     // over the old budget: grid line names lowering (see the compiler's
-    // budget). Budget 271 above, about the same margin.
+    // budget). Budget 271 above, about the same margin. Raised from 23,900
+    // to 24,200 on 2026-11-20, measured 23,940, over the old budget: a
+    // number or a string on a key typed `boolean` (`truncate: 2`) is
+    // reported in development (`closed-enum-value`, form `flag`), which
+    // ships the list of those keys and the form's words. Production is
+    // unchanged. Budget 260 above, on the user's call.
     {
         name: 'csszyx CDN development bundle',
         kind: 'file',
         target: 'packages/csszyx/dist/browser.dev.iife.js',
-        maxGzipBytes: 23_900,
+        maxGzipBytes: 24_200,
         build: cdnBuildOptions('development'),
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
@@ -935,7 +947,11 @@ export const SIZE_BUDGETS = [
         // 126,100 on 2026-11-18, measured 125,777: a template's classes are
         // read by its adapter's framework parser, cached per file, with the
         // HTML reader as the fallback. ~300 bytes of headroom.
-        maxGzipBytes: 126_100,
+        // 126,500 on 2026-11-20, measured 126,210: webpack's persistent
+        // cache takes csszyx as a build dependency and in its version, and
+        // every Vite environment's output directory stays out of the
+        // prescan. ~290 bytes of headroom, on the user's call.
+        maxGzipBytes: 126_500,
         wrappers: ['./vite', './webpack'],
     },
     {

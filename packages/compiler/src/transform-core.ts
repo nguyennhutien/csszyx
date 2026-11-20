@@ -32,6 +32,7 @@ import { SZ_CAP_CSS_WIDE_BRACKET, SZ_CAPABILITIES } from './sz-capabilities.gene
 import { szNodeWarningsUnmuted, szWarningsQuiet } from './sz-dev-warnings.js';
 import {
     BOOLEAN_SHORTHANDS,
+    FLAG_ONLY_KEYS,
     KNOWN_SPECIAL_PROPERTIES,
     KNOWN_VARIANTS,
     MIGRATION_NOTES,
@@ -4364,6 +4365,33 @@ function warnRemovedKey(
     }
 }
 
+/**
+ * Reports a value other than a boolean on a key that takes only a boolean:
+ * `truncate: 2` lowers to `truncate-2`, which is outside the key's type
+ * (`closed-enum-value`, form `flag`). The class is still written, as for any
+ * other value the project's Tailwind may not serve: a project that defines
+ * `@utility truncate-*` keeps it, and `dead-class` judges the rest. Mirrors
+ * `collect_non_boolean_flags` in `lower.rs`.
+ * @param rawKey - The authored key.
+ * @param value - Its value; only a number or a string is reported.
+ */
+function reportNonBooleanFlag(rawKey: string, value: SzValue): void {
+    if ((typeof value !== 'number' && typeof value !== 'string') || !FLAG_ONLY_KEYS.has(rawKey)) {
+        return;
+    }
+    if (process.env.NODE_ENV !== 'production' && szNodeWarningsUnmuted()) {
+        szReport({
+            diagnostic: CLOSED_ENUM_VALUE,
+            args: {
+                form: 'flag',
+                key: rawKey,
+                value: typeof value === 'string' ? `'${value}'` : `${value}`,
+            },
+            at: szWarnLocation,
+        });
+    }
+}
+
 /** Removed shorthands already warned about, so a re-render cannot spam. */
 const warnedRemovedSugar = new Set<string>();
 
@@ -4490,6 +4518,7 @@ function collectTransformProperty(
     if (typeof value === 'string' && ALIGNMENT_KEYS.has(rawKey)) warnAlignmentValue(rawKey, value);
     if (collectRemovedBooleanSugar(rawKey, value)) return;
     if (collectObjectProperty(rawKey, value, prefix, classes)) return;
+    reportNonBooleanFlag(rawKey, value);
     if (collectUnresolvedStringProperty(rawKey, value, prefix, classes)) return;
     if (collectUnresolvedDirectProperty(rawKey, value, prefix, classes)) return;
 

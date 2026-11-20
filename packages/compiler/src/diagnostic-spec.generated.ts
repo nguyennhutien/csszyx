@@ -217,7 +217,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "dead",
             "css-value",
             "font-style",
-            "font-smoothing"
+            "font-smoothing",
+            "flag"
         ],
         "args": {
             "form": {
@@ -227,7 +228,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                     "dead",
                     "css-value",
                     "font-style",
-                    "font-smoothing"
+                    "font-smoothing",
+                    "flag"
                 ]
             },
             "key": {
@@ -254,18 +256,21 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "dead": "`{key}: '{value}'` is not a `{key}` value.",
             "css-value": "`{key}: '{value}'` is a CSS value, and `{key}-{value}` produces no CSS.",
             "font-style": "`{key}: '{value}'` has no Tailwind class, and nothing is emitted for it.",
-            "font-smoothing": "`{key}: '{value}'` has no Tailwind class, and nothing is emitted for it."
+            "font-smoothing": "`{key}: '{value}'` has no Tailwind class, and nothing is emitted for it.",
+            "flag": "`{key}: {value}` is not a `{key}` value: `{key}` takes only `true` or `false`."
         },
         "help": {
             "sibling-group": "write `{ {groupKey}: {groupLiteral} }`, so it combines with the other groups instead of resetting them.",
             "dead": "use one of: {enumAllowed}.",
             "css-value": "use the short form: `{ {key}: '{suggestion}' }`.",
             "font-style": "use `'italic'` or `'normal'`; for any other style, such as oblique, write `css: { fontStyle: '{value}' }`.",
-            "font-smoothing": "use `'grayscale'` or `'subpixel'`."
+            "font-smoothing": "use `'grayscale'` or `'subpixel'`.",
+            "flag": "write `{key}: true` for the class, or a condition that is a boolean (`{key}: isOn`)."
         },
         "note": {
             "sibling-group": "`{key}` takes one of: {enumAllowed}.",
-            "dead": "the class `{bare}` is still emitted, and only the CSS that Tailwind or your own stylesheet defines for it applies."
+            "dead": "the class `{bare}` is still emitted, and only the CSS that Tailwind or your own stylesheet defines for it applies.",
+            "flag": "the class is still emitted, and only the CSS that Tailwind or your own stylesheet defines for it applies."
         }
     },
     {

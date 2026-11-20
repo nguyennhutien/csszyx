@@ -123,6 +123,11 @@ const CASES: Readonly<Record<string, readonly SzObject[]>> = {
     ],
     'closed-enum-value/font-style': [{ fontStyle: 'oblique' }],
     'closed-enum-value/font-smoothing': [{ fontSmoothing: 'none' }],
+    'closed-enum-value/flag': [
+        { truncate: 2 },
+        { hover: { srOnly: 'yes' } },
+        { not: { supports: { 'display:grid': { numOrdinal: 0.5 } } } },
+    ],
     'slash-opacity-string': [{ bg: 'red-500/50' }],
     'off-scale-value': [
         { p: 1.4 },
@@ -133,6 +138,9 @@ const CASES: Readonly<Record<string, readonly SzObject[]>> = {
         { w: '[100px]' },
         { hover: { top: '-[1px]' } },
         { md: { gridRows: '[[a]_1fr]' } },
+        // Reported once, as `bracketed-value`: a flag-only key adds no
+        // `flag` line for a bracketed value.
+        { truncate: '[2]' },
     ],
     'bracketed-value/escape': [{ p: '[a]_1_[b]' }, { md: { w: '[[a]_1fr]' } }],
     'opacity-value/range': [
