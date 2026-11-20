@@ -606,7 +606,14 @@ export const SIZE_BUDGETS = [
         // as HTML read it, so the mangle census reads `className="p&#45;4"`
         // as `p-4`. This script reads 599,257 with no wasm-opt (container).
         // ~300 bytes of headroom.
-        maxGzipBytes: 599_560,
+        //
+        // Raised from 599,560 on 2026-11-20: a number or a string on a key
+        // typed `boolean` (`truncate: 2`) is reported as `closed-enum-value`,
+        // form `flag`. CI read 600,082 before a second walk over every sz
+        // object was folded into the closed-enum collector (-140 gzip -9
+        // bytes, 596,624 -> 596,484 on one host, no wasm-opt). ~300 bytes
+        // of headroom, on the user's call.
+        maxGzipBytes: 600_250,
     },
     // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
     // bundles from the compiler's source, unminified, and that every editor
