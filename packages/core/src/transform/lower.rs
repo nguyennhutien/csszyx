@@ -469,40 +469,6 @@ pub(crate) fn collect_removed_boolean_sugar(
     }
 }
 
-/// Collects each value other than `true` on a key that takes only a boolean
-/// (`truncate: 2`), with the value as written and where. The lowering still
-/// writes the class (`truncate-2`): a project's own `@utility` may serve it. A trailing `!` is the class's, not the value's, as in the
-/// lowering.
-///
-/// Same descent rules as [`collect_dead_spacing_steps`].
-#[cfg(feature = "native-engine")]
-pub(crate) fn collect_non_boolean_flags(
-    object: &StaticSzObject,
-    out: &mut Vec<(String, String, u32)>,
-) {
-    for property in &object.properties {
-        let written = match &property.value {
-            StaticSzValue::Number(value) => Some(format_number_literal(*value)),
-            // A bracketed value is `collect_bracketed_values`'s to report,
-            // and the lowering skips it before any flag check.
-            StaticSzValue::String(value) if bracketed_inner(&property.key, value).is_some() => None,
-            StaticSzValue::String(value) => Some(format!("'{}'", split_important(value).0)),
-            StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
-                for_each_sz_object_in(&property.key, nested, &mut |object| {
-                    collect_non_boolean_flags(object, out);
-                });
-                None
-            }
-            _ => None,
-        };
-        if let Some(written) =
-            written.filter(|_| super::generated::tables::is_flag_only(&property.key))
-        {
-            out.push((property.key.clone(), written, property.span.start));
-        }
-    }
-}
-
 /// Collects `weight` values written as a numeric STRING.
 ///
 /// Tailwind spells weights through `--font-weight-*`, so `font-700` is not a
@@ -880,6 +846,11 @@ pub(crate) fn unclassed_value(key: &str, value: &str) -> Option<UnclassedValue> 
 /// class. Descends like the lowering does, so a value nested under a variant
 /// is reported too. The important modifier is split off first, as
 /// `format_static_class` does: `flex!` is a legal value with a legal suffix.
+///
+/// A number or a string on a key that takes only a boolean (`truncate: 2`) is
+/// collected here too, as written (`2`, `'yes'`): the same walk, and the same
+/// diagnostic under its `flag` form. The lowering still writes the class
+/// (`truncate-2`): a project's own `@utility` may serve it.
 #[cfg(feature = "native-engine")]
 pub(crate) fn collect_dead_enum_values(
     object: &StaticSzObject,
@@ -908,7 +879,24 @@ pub(crate) fn collect_dead_enum_values(
                         || unclassed_value(&property.key, base).is_some())
                 {
                     out.push((property.key.clone(), base.to_string(), property.span.start));
+                } else if super::generated::tables::is_flag_only(&property.key)
+                    && bracketed_inner(&property.key, value).is_none()
+                {
+                    out.push((
+                        property.key.clone(),
+                        format!("'{base}'"),
+                        property.span.start,
+                    ));
                 }
+            }
+            StaticSzValue::Number(value)
+                if super::generated::tables::is_flag_only(&property.key) =>
+            {
+                out.push((
+                    property.key.clone(),
+                    format_number_literal(*value),
+                    property.span.start,
+                ));
             }
             StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
                 for_each_sz_object_in(&property.key, nested, &mut |object| {
@@ -3715,8 +3703,6 @@ mod tests {
     #[cfg(feature = "native-engine")]
     use super::collect_mask_layer_values;
     #[cfg(feature = "native-engine")]
-    use super::collect_non_boolean_flags;
-    #[cfg(feature = "native-engine")]
     use super::collect_owned_key_variant_objects;
     #[cfg(feature = "native-engine")]
     use super::collect_underscore_values;
@@ -4323,7 +4309,7 @@ mod tests {
             ]
         );
         let mut found = Vec::new();
-        collect_non_boolean_flags(&source, &mut found);
+        collect_dead_enum_values(&source, &mut found);
         assert_eq!(
             found
                 .iter()
