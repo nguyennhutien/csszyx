@@ -4300,7 +4300,15 @@ mod tests {
                     ]),
                 ),
                 property("ring", StaticSzValue::Number(2.0)),
-                property("bg", object(vec![property("color", text("red-500"))])),
+                // A colour object's members are fields, not sz keys: nothing
+                // under it is collected.
+                property(
+                    "bg",
+                    object(vec![
+                        property("color", text("red-500")),
+                        property("truncate", StaticSzValue::Number(3.0)),
+                    ]),
+                ),
             ],
         };
         assert_eq!(
