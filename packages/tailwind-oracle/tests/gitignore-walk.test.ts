@@ -28,6 +28,15 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { loadCandidateScanner } from '../src/candidate-scanner.js';
 import { createGitignoreQuery, type GitignoreMode, walkProject } from '../src/project-walk.js';
 
+// A git hook runs this suite with `GIT_DIR` (and in a worktree, more `GIT_*`)
+// pointing at the checkout being pushed. Every `git` this file starts would
+// inherit it and act on that repository instead of the scratch one: `git init`
+// there sets `core.bare = true` on the real repository. Measured 2026-11-20 on
+// a pre-push from a worktree.
+for (const name of Object.keys(process.env)) {
+    if (name.startsWith('GIT_')) delete process.env[name];
+}
+
 const REPO = resolve(import.meta.dirname, '../../..');
 const roots: string[] = [];
 
