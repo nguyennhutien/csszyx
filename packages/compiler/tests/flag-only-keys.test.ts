@@ -13,6 +13,7 @@
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { escapeUnsafeChars } from '../../core/tests/helpers/sz-fuzz.js';
 import { BOOLEAN_SHORTHANDS, FLAG_ONLY_KEYS } from '../src/sz-key-tables.js';
 import { __resetSzWarnDedupForTests, type SzObject, transform } from '../src/transform-core.js';
 import { ENGINES } from './engine-parity-harness.js';
@@ -60,7 +61,7 @@ describe.each(CASES)('%j', (sz, expected, reported) => {
     });
 
     it.each(ENGINES)('lowers through the %s engine, and reports it', (_name, engine) => {
-        const source = `export const A = () => <div sz={${JSON.stringify(sz)}} />;`;
+        const source = `export const A = () => <div sz={${escapeUnsafeChars(JSON.stringify(sz))}} />;`;
         const { code = '', issues = [] } = engine(source, { filename: '/p/src/Flag.tsx' });
         expect(code).not.toContain('sz=');
         expect(code).toContain(`className="${expected}"`);
