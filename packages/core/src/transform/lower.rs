@@ -3181,7 +3181,12 @@ fn format_number_literal(value: f64) -> String {
         return "NaN".to_owned();
     }
     if value.is_infinite() {
-        return if value > 0.0 { "Infinity" } else { "-Infinity" }.to_owned();
+        return if value.is_sign_negative() {
+            "-Infinity"
+        } else {
+            "Infinity"
+        }
+        .to_owned();
     }
     if value == 0.0 {
         return "0".to_owned();
@@ -3201,7 +3206,7 @@ fn format_number_literal(value: f64) -> String {
     let exponent = point - 1;
     let (first, rest) = digits.split_at(1);
     let dot = if rest.is_empty() { "" } else { "." };
-    let sign = if value < 0.0 { "-" } else { "" };
+    let sign = if value.is_sign_negative() { "-" } else { "" };
     let exponent_sign = if exponent >= 0 { "+" } else { "-" };
     format!(
         "{sign}{first}{dot}{rest}e{exponent_sign}{}",
@@ -4409,9 +4414,50 @@ mod tests {
                 property("scale", text("105")),
                 property("p", text("50")),
                 property("hover", object(vec![property("sepia", text("2"))])),
+                // A colour object's members are fields, not sz keys.
+                property(
+                    "bg",
+                    object(vec![
+                        property("color", text("red-500")),
+                        property("opacity", text("50")),
+                    ]),
+                ),
             ]),
             ["opacity:50", "grayscale:1.5", "sepia:2"]
         );
+    }
+
+    /// The strings both lanes read as a plain decimal: an optional `-`, then
+    /// digits with at most one point, or a point and digits. Mirrors
+    /// `NUMERIC_STRING` in `numeric-string.ts`.
+    #[test]
+    fn spells_a_decimal_as_the_runtime_pattern_does() {
+        for text in ["4", "-2", "2.5", ".5", "-.5", "007"] {
+            assert!(super::spells_decimal(text), "{text}");
+        }
+        for text in ["", "-", ".", "-.", "1.", ".a", ".5a", "1e3", "+1", " 1"] {
+            assert!(!super::spells_decimal(text), "{text}");
+        }
+    }
+
+    /// A numeric string is read as the number on a key that takes one, and
+    /// kept as text on every key that reads a string another way: one row per
+    /// exclusion, so dropping any of them turns a row.
+    #[test]
+    fn reads_a_numeric_string_as_a_number_only_where_the_key_takes_one() {
+        let read = |key: &str, value: &str| {
+            super::numeric_string_value(key, &StaticSzValue::String(value.to_string()))
+        };
+        assert_eq!(read("p", "4"), Some(4.0));
+        assert_eq!(read("mt", "-.5"), Some(-0.5));
+        assert_eq!(read("p", "4px"), None);
+        assert_eq!(
+            super::numeric_string_value("p", &StaticSzValue::Number(4.0)),
+            None
+        );
+        for key in ["content", "opacity", "--gap", "@md", "display"] {
+            assert_eq!(read(key, "4"), None, "{key}");
+        }
     }
 
     /// A key that takes only a boolean still writes a class for a number or a

@@ -1890,6 +1890,32 @@ mod tests {
         assert!(failures.is_empty(), "{}", failures.join("\n"));
     }
 
+    /// The factor helper is imported exactly when a runtime value on a factor
+    /// key calls it: not for a passthrough or spacing value in a transformed
+    /// file, and not when nothing was transformed.
+    #[test]
+    fn flags_the_factor_helper_only_for_a_runtime_value_on_a_factor_key() {
+        let uses = |source: &str| {
+            let result = transform_file(&TransformFile {
+                filename: "/repo/App.tsx".to_string(),
+                source: source.to_string(),
+            });
+            (
+                result.metadata.uses_factor_var,
+                result.metadata.uses_spacing_var,
+            )
+        };
+        assert_eq!(
+            uses("export const A = ({ x }) => <div sz={{ opacity: x }} />;"),
+            (true, false)
+        );
+        assert_eq!(
+            uses("export const A = ({ x }) => <div sz={{ grow: x, p: x }} />;"),
+            (false, true)
+        );
+        assert_eq!(uses("export const A = () => <div />;"), (false, false));
+    }
+
     /// A numeric string lowers like the number it spells, except on a factor
     /// key, where it is the CSS value (ADR 0037). Nothing is reported for any
     /// of them, `scale` included: a factor above 1 is a real scale.

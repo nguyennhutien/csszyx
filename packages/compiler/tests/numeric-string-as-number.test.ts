@@ -19,6 +19,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { escapeUnsafeChars } from '../../core/tests/helpers/sz-fuzz.js';
 import { __szFactorVar, __szSpacingVar, __szUnitVar } from '../src/spacing-var.js';
 import { FACTOR_STRING_KEYS } from '../src/sz-key-tables.js';
 import { __resetSzWarnDedupForTests, type SzObject, transform } from '../src/transform-core.js';
@@ -95,7 +96,7 @@ describe.each(CASES)('%j', (sz, expected) => {
     });
 
     it.each(ENGINES)('lowers through the %s engine', (_name, engine) => {
-        const source = `export const A = () => <div sz={${JSON.stringify(sz)}} />;`;
+        const source = `export const A = () => <div sz={${escapeUnsafeChars(JSON.stringify(sz))}} />;`;
         const { code = '' } = engine(source, { filename: '/p/src/Numeric.tsx' });
         expect(code).toContain(`className="${expected}"`);
     });
@@ -118,7 +119,7 @@ function codesFor(sz: Record<string, unknown>): string[][] {
     } finally {
         spy.mockRestore();
     }
-    const source = `export const A = () => <div sz={${JSON.stringify(sz)}} />;`;
+    const source = `export const A = () => <div sz={${escapeUnsafeChars(JSON.stringify(sz))}} />;`;
     return [
         lines.map(szCodeOf),
         ...ENGINES.map(([, engine]) =>

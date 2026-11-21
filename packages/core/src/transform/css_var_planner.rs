@@ -516,8 +516,9 @@ mod tests {
 
     use super::{
         apply_css_variable_mangling, apply_scoped_css_variable_names,
-        collect_static_style_custom_property_names, extract_quoted_custom_property_keys,
-        has_redundant_outer_parens, normalize_dynamic_expression_key, plan_css_variable_names,
+        collect_static_style_custom_property_names, dynamic_value_key,
+        extract_quoted_custom_property_keys, has_redundant_outer_parens,
+        normalize_dynamic_expression_key, plan_css_variable_names,
         plan_css_variable_names_with_options, push_variable_map, CssVariablePlanInput,
         CssVariablePlanOptions, CssVariableTier,
     };
@@ -616,6 +617,39 @@ mod tests {
             .map(|entry| (entry.id.as_str(), entry.name.as_str()))
             .collect::<Vec<_>>();
         assert_eq!(pairs, [("component", "--cy"), ("scoped", "--sy")]);
+    }
+
+    /// Two dynamic values share a hoisted var only when the helper would
+    /// resolve them alike: a factor value on `leading` is a spacing step and on
+    /// `opacity` a percent, so the key is part of the identity.
+    #[test]
+    fn keys_a_dynamic_value_by_category_and_where_the_helper_reads_it_by_key() {
+        let source = "(x)";
+        let prop = |key: &str, category| DynamicCssVarIr {
+            category,
+            expression_span: TextSpan { start: 0, end: 3 },
+            ..dynamic_prop(key, "--_sz-v")
+        };
+        assert_eq!(
+            [
+                dynamic_value_key(source, &prop("opacity", DynamicCssVarCategory::Factor)),
+                dynamic_value_key(source, &prop("leading", DynamicCssVarCategory::Factor)),
+                dynamic_value_key(source, &prop("w", DynamicCssVarCategory::Spacing)),
+                dynamic_value_key(source, &prop("bg", DynamicCssVarCategory::Color)),
+                dynamic_value_key(source, &prop("rotate", DynamicCssVarCategory::Angle)),
+                dynamic_value_key(source, &prop("delay", DynamicCssVarCategory::Duration)),
+                dynamic_value_key(source, &prop("grow", DynamicCssVarCategory::Passthrough)),
+            ],
+            [
+                "factor:opacity:x",
+                "factor:leading:x",
+                "spacing:w:x",
+                "color:x",
+                "angle:x",
+                "duration:x",
+                "pass:x",
+            ]
+        );
     }
 
     #[test]

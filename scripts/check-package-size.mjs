@@ -629,7 +629,13 @@ export const SIZE_BUDGETS = [
         // reads 601,020 on the host, 600,019 at the branch base in the
         // container, no wasm-opt; the same build on both sides in one container
         // grew 1,138 gzip -9 bytes. ~300 bytes of headroom.
-        maxGzipBytes: 601_300,
+        //
+        // Raised from 601,300 the same day: the engine prints numbers as
+        // JavaScript does (`1e-7`, `1e+21`), so a numeric string writes one
+        // class on every lane. +383 gzip -9 bytes, read from `Display`, which
+        // the wasm already links (`{:e}` cost +2,453). CI read 601,420.
+        // ~300 bytes of headroom.
+        maxGzipBytes: 601_700,
     },
     // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
     // bundles from the compiler's source, unminified, and that every editor
