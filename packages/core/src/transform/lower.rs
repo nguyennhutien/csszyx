@@ -469,34 +469,6 @@ pub(crate) fn collect_removed_boolean_sugar(
     }
 }
 
-/// Collects `weight` values written as a numeric STRING.
-///
-/// Tailwind spells weights through `--font-weight-*`, so `font-700` is not a
-/// utility and generates no CSS; that is why the NUMBER form brackets. A
-/// string takes the generic path and emits the bare class, which styles
-/// nothing. The class is still emitted, as a dead spacing step is: the
-/// diagnostic reports what Tailwind will do with what the author wrote.
-///
-/// Same descent rules as [`collect_dead_spacing_steps`].
-#[cfg(feature = "native-engine")]
-pub(crate) fn collect_dead_weight_values(object: &StaticSzObject, out: &mut Vec<(String, u32)>) {
-    for property in &object.properties {
-        match &property.value {
-            StaticSzValue::String(value) => {
-                if property.key == "weight" && is_unsigned_decimal(value) {
-                    out.push((value.clone(), property.span.start));
-                }
-            }
-            StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
-                for_each_sz_object_in(&property.key, nested, &mut |object| {
-                    collect_dead_weight_values(object, out);
-                });
-            }
-            _ => {}
-        }
-    }
-}
-
 #[cfg(feature = "native-engine")]
 pub(crate) fn collect_dead_spacing_steps(
     object: &StaticSzObject,
@@ -509,16 +481,11 @@ pub(crate) fn collect_dead_spacing_steps(
                     out.push((property.key.clone(), *value, property.span.start));
                 }
             }
-            StaticSzValue::String(value) => {
-                let unsigned = value.strip_prefix('-').unwrap_or(value);
-                match value.parse::<f64>() {
-                    Ok(parsed)
-                        if is_unsigned_decimal(unsigned)
-                            && is_dead_spacing_step(&property.key, parsed) =>
-                    {
-                        out.push((property.key.clone(), parsed, property.span.start));
-                    }
-                    _ => {}
+            StaticSzValue::String(_) => {
+                if let Some(parsed) = numeric_string_value(&property.key, &property.value)
+                    .filter(|parsed| is_dead_spacing_step(&property.key, *parsed))
+                {
+                    out.push((property.key.clone(), parsed, property.span.start));
                 }
             }
             StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
@@ -882,9 +849,11 @@ pub(crate) fn collect_dead_enum_values(
                 } else if super::generated::tables::is_flag_only(&property.key)
                     && bracketed_inner(&property.key, value).is_none()
                 {
+                    // A numeric string is reported as the number it is read as.
                     out.push((
                         property.key.clone(),
-                        format!("'{base}'"),
+                        numeric_string_value(&property.key, &property.value)
+                            .map_or_else(|| format!("'{base}'"), format_number_literal),
                         property.span.start,
                     ));
                 }
@@ -2035,6 +2004,16 @@ fn animation_delay_value(value: &StaticSzValue) -> Option<String> {
 /// below read the value as written.
 #[allow(clippy::too_many_lines)]
 fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> Option<String> {
+    if let Some(number) = factor_string_value(key, value) {
+        let class_key = property_prefix(key)?;
+        return Some(format!(
+            "{prefix}{class_key}-[{}]",
+            format_number_literal(number)
+        ));
+    }
+    if let Some(number) = numeric_string_value(key, value) {
+        return format_static_class_value(key, &StaticSzValue::Number(number), prefix);
+    }
     if key == "animationDelay" {
         return animation_delay_value(value)
             .map(|delay| format!("{prefix}[animation-delay:{delay}]"));
@@ -2068,19 +2047,14 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             if let Some(grad) = gradient_stop_prefix(key) {
                 return Some(format!("{prefix}{grad}-{}%", format_abs_number(*value)));
             }
-            // leading numbers ride the spacing scale like Tailwind's bare
-            // syntax; non-quarter-step values (1.4) have no bare spelling —
-            // Tailwind drops leading-1.4 — so they bracket as the unitless
-            // ratio instead of emitting a dead class. Mirrors the JavaScript lane it replaced.
-            if (key == "leading" || key == "lineHeight") && (value * 4.0).fract() != 0.0 {
-                return Some(format!("{prefix}leading-[{}]", format_abs_number(*value)));
-            }
-            // Tailwind v4 spells font weights through the `--font-weight-*`
-            // theme namespace, so it serves no `font-<number>` at all — not
-            // even the nine standard steps. A numeric weight brackets the
-            // literal instead of emitting a class that styles nothing.
-            // Mirrors `collectNumericProperty` in `transform-core.ts`.
-            if key == "weight" {
+            // The bare class is dead and the bracket sets the number written:
+            // every number on `aspect`/`weight` (Tailwind spells weights by
+            // name through `--font-weight-*`), a decimal where bare and
+            // bracket otherwise agree (`grow-[2.5]`). ADR 0037; mirrors
+            // `collectNumericProperty` in `transform-core.ts`.
+            if super::generated::tables::brackets_every_number(key)
+                || (super::generated::tables::brackets_bare_decimal(key) && value.fract() != 0.0)
+            {
                 return Some(format!(
                     "{prefix}{}-[{}]",
                     class_key.as_ref(),
@@ -2098,12 +2072,6 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
             // Tailwind never generates (field-reported as silent dead styles).
             if let Some(variant) = variant_string_prefix(key) {
                 return Some(format!("{prefix}{variant}:{value}"));
-            }
-            // leading numeric STRINGS are the unitless line-height ratio and
-            // auto-bracket (leading: '1.5' → leading-[1.5]); bare numbers ride
-            // the spacing scale. Mirrors the JavaScript lane it replaced.
-            if (key == "leading" || key == "lineHeight") && is_unsigned_decimal(value) {
-                return Some(format!("{prefix}leading-[{value}]"));
             }
             if key == "bgImg" {
                 return Some(format_bg_img_string(value, prefix));
@@ -3246,6 +3214,88 @@ pub(crate) fn is_decimal_ratio(value: &str) -> bool {
     is_unsigned_decimal(num) && is_unsigned_decimal(den)
 }
 
+/// Whether a string spells a plain decimal: `4`, `-2`, `2.5`, `.5`.
+///
+/// Linear in the string's length. The same shape as `NUMERIC_STRING` in
+/// `transform-core.ts`.
+fn spells_decimal(text: &str) -> bool {
+    let digits = text.strip_prefix('-').unwrap_or(text);
+    is_unsigned_decimal(digits)
+        || digits.strip_prefix('.').is_some_and(|fraction| {
+            !fraction.is_empty() && fraction.bytes().all(|b| b.is_ascii_digit())
+        })
+}
+
+/// The number a numeric string spells on a factor key, where the string is
+/// the CSS value itself and lowers to the bracket (`opacity: '.5'` →
+/// `opacity-[0.5]`) while a number keeps Tailwind's scale (ADR 0037).
+/// Mirrors `collectFactorString` in `transform-core.ts`.
+pub(crate) fn factor_string_value(key: &str, value: &StaticSzValue) -> Option<f64> {
+    let StaticSzValue::String(text) = value else {
+        return None;
+    };
+    if !super::generated::tables::is_factor_string_key(key) || !spells_decimal(text) {
+        return None;
+    }
+    text.parse::<f64>().ok()
+}
+
+/// Factor strings above 1 on a key whose CSS function clamps at 1, for the
+/// `clamped-factor` diagnostic: `(key, value as written, offset)`.
+///
+/// Same descent rules as [`collect_dead_spacing_steps`].
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_clamped_factors(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, String, u32)>,
+) {
+    for property in &object.properties {
+        match &property.value {
+            StaticSzValue::String(text) => {
+                let unbanged = text.strip_suffix('!').unwrap_or(text);
+                let probe = StaticSzValue::String(unbanged.to_string());
+                if super::generated::tables::clamps_factor_at_one(&property.key)
+                    && factor_string_value(&property.key, &probe).is_some_and(|n| n > 1.0)
+                {
+                    out.push((
+                        property.key.clone(),
+                        unbanged.to_string(),
+                        property.span.start,
+                    ));
+                }
+            }
+            StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
+                for_each_sz_object_in(&property.key, nested, &mut |object| {
+                    collect_clamped_factors(object, out);
+                });
+            }
+            _ => {}
+        }
+    }
+}
+
+/// The number a numeric string spells, when the key reads it as one (ADR 0037):
+/// `{ p: '4' }` from JSON writes what `{ p: 4 }` writes. A key whose string is
+/// text or a name (`content`, `bgImg`, `group`, `peer`, `'@md'`), a closed-enum
+/// key and a custom property keep the string. Mirrors `numericStringValue` in
+/// `transform-core.ts`.
+pub(crate) fn numeric_string_value(key: &str, value: &StaticSzValue) -> Option<f64> {
+    let StaticSzValue::String(text) = value else {
+        return None;
+    };
+    if super::generated::tables::keeps_numeric_string(key)
+        || super::generated::tables::is_factor_string_key(key)
+        || key.starts_with("--")
+        || key.starts_with('@')
+        || super::generated::tables::is_closed_enum_key(key)
+    {
+        return None;
+    }
+    spells_decimal(text)
+        .then(|| text.parse::<f64>().ok())
+        .flatten()
+}
+
 /// Matches a non-empty run of digits with at most one decimal point (`12`, `2.5`).
 fn is_unsigned_decimal(value: &str) -> bool {
     let mut parts = value.split('.');
@@ -3693,11 +3743,13 @@ mod tests {
     #[cfg(feature = "native-engine")]
     use super::collect_bracketed_values;
     #[cfg(feature = "native-engine")]
+    use super::collect_clamped_factors;
+    #[cfg(feature = "native-engine")]
     use super::collect_color_slash_opacities;
     #[cfg(feature = "native-engine")]
     use super::collect_dead_enum_values;
     #[cfg(feature = "native-engine")]
-    use super::collect_dead_weight_values;
+    use super::collect_dead_spacing_steps;
     #[cfg(feature = "native-engine")]
     use super::collect_invalid_opacities;
     #[cfg(feature = "native-engine")]
@@ -4215,19 +4267,18 @@ mod tests {
         assert_eq!(settlement.replaced[0].1, "containPaint");
     }
 
-    /// The descent rule for the dead-weight warning, which no Rust test
-    /// reached before: the diagnostic it feeds is asserted from the
-    /// JavaScript side, and `cargo test` never runs that suite. Mutation
-    /// testing reports such a function as untested however well it is covered
-    /// elsewhere, and it is right to — nothing here was checking it.
+    /// The descent rule the value collectors share (`is_colour_object`),
+    /// read through the off-scale spacing collector: the diagnostics it feeds
+    /// are asserted from the JavaScript side too, and `cargo test` never runs
+    /// that suite, so mutation testing needs a Rust test to see this one.
     #[cfg(feature = "native-engine")]
     #[test]
     fn descends_past_a_colour_object_but_not_into_one() {
-        let dead = || StaticSzValue::String("700".to_string());
+        let dead = || StaticSzValue::Number(1.4);
         let colour = || StaticSzValue::String("red".to_string());
         let collect = |key: &str, nested: Vec<StaticSzProperty>| {
             let mut out = Vec::new();
-            collect_dead_weight_values(
+            collect_dead_spacing_steps(
                 &StaticSzObject {
                     properties: vec![property(key, object(nested))],
                 },
@@ -4241,7 +4292,7 @@ mod tests {
         assert!(
             collect(
                 "bg",
-                vec![property("color", colour()), property("weight", dead())]
+                vec![property("color", colour()), property("p", dead())]
             )
             .is_empty(),
             "a colour object is not searched"
@@ -4249,7 +4300,7 @@ mod tests {
         // Take the colour away and the same key is searched, because both
         // halves of that test have to hold for the skip to apply.
         assert_eq!(
-            collect("bg", vec![property("weight", dead())]).len(),
+            collect("bg", vec![property("p", dead())]).len(),
             1,
             "without a colour, the object is searched"
         );
@@ -4258,11 +4309,41 @@ mod tests {
         assert_eq!(
             collect(
                 "hover",
-                vec![property("color", colour()), property("weight", dead())]
+                vec![property("color", colour()), property("p", dead())]
             )
             .len(),
             1,
             "a variant key is searched even with a colour"
+        );
+    }
+
+    /// Which strings `clamped-factor` collects, and how deep it looks. The
+    /// lanes are compared from the JavaScript side too; this one is for
+    /// mutation testing, which reads `cargo test` alone.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn collects_a_factor_string_above_one_only_where_it_clamps() {
+        let text = |value: &str| StaticSzValue::String(value.to_string());
+        let collect = |properties: Vec<StaticSzProperty>| {
+            let mut out = Vec::new();
+            collect_clamped_factors(&StaticSzObject { properties }, &mut out);
+            out.into_iter()
+                .map(|(key, value, _)| format!("{key}:{value}"))
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(
+            collect(vec![
+                property("opacity", text("50")),
+                property("grayscale", text("1.5!")),
+                property("opacity", text("1")),
+                property("opacity", text(".5")),
+                property("opacity", StaticSzValue::Number(50.0)),
+                property("scale", text("105")),
+                property("p", text("50")),
+                property("hover", object(vec![property("sepia", text("2"))])),
+            ]),
+            ["opacity:50", "grayscale:1.5", "sepia:2"]
         );
     }
 

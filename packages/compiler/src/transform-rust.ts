@@ -535,6 +535,7 @@ function fromNativeResult(
         usesColorVar: result.metadata.usesColorVar,
         usesSpacingVar: result.metadata.usesSpacingVar ?? false,
         usesUnitVar: result.metadata.usesUnitVar ?? false,
+        usesFactorVar: result.metadata.usesFactorVar ?? false,
         usesBoolClass: result.metadata.usesBoolClass ?? false,
         usesClassMark: result.metadata.usesClassMark ?? false,
         classes: new Set(result.classes),

@@ -42,7 +42,7 @@ describe('a value in its own brackets', () => {
         [{ w: '100px' }, 'w-[100px]'],
         [{ size: '3rem' }, 'size-[3rem]'],
         [{ bg: '#316ff6' }, 'bg-[#316ff6]'],
-        [{ w: '.25' }, 'w-[.25]'],
+        [{ w: '.25' }, 'w-0.25'],
         [{ w: '-.25ch' }, 'w-[-.25ch]'],
         [{ w: '1cqw' }, 'w-[1cqw]'],
         [{ w: 48 }, 'w-48'],

@@ -421,6 +421,7 @@ export type ScalarFields = Pick<
     | 'usesColorVar'
     | 'usesSpacingVar'
     | 'usesUnitVar'
+    | 'usesFactorVar'
     | 'usesBoolClass'
     | 'usesClassMark'
     | 'helperAliases'
@@ -448,6 +449,7 @@ export function scalarFieldsOf(result: ScalarFields): ScalarFields {
         usesColorVar: result.usesColorVar,
         usesSpacingVar: result.usesSpacingVar,
         usesUnitVar: result.usesUnitVar,
+        usesFactorVar: result.usesFactorVar,
         usesBoolClass: result.usesBoolClass,
         usesClassMark: result.usesClassMark,
         helperAliases: result.helperAliases,

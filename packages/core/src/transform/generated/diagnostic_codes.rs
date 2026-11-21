@@ -25,8 +25,8 @@ pub enum DiagnosticCode {
     SlashOpacityString,
     /// A spacing value off Tailwind's quarter-step scale.
     OffScaleValue,
-    /// A font weight written as a numeric string.
-    NumericFontWeight,
+    /// A numeric string above 1 on a key whose CSS function stops at 1.
+    ClampedFactor,
     /// A border style on one side, which Tailwind cannot express.
     PerSideBorderStyle,
     /// An object on a key that names a property, not a variant.
@@ -95,7 +95,7 @@ impl DiagnosticCode {
             Self::ClosedEnumValue => "closed-enum-value",
             Self::SlashOpacityString => "slash-opacity-string",
             Self::OffScaleValue => "off-scale-value",
-            Self::NumericFontWeight => "numeric-font-weight",
+            Self::ClampedFactor => "clamped-factor",
             Self::PerSideBorderStyle => "per-side-border-style",
             Self::PropertyObject => "property-object",
             Self::NonVariantObject => "non-variant-object",
@@ -136,7 +136,7 @@ pub const DIAGNOSTIC_CODES: [DiagnosticCode; 35] = [
     DiagnosticCode::ClosedEnumValue,
     DiagnosticCode::SlashOpacityString,
     DiagnosticCode::OffScaleValue,
-    DiagnosticCode::NumericFontWeight,
+    DiagnosticCode::ClampedFactor,
     DiagnosticCode::PerSideBorderStyle,
     DiagnosticCode::PropertyObject,
     DiagnosticCode::NonVariantObject,
@@ -459,13 +459,13 @@ pub mod issue {
         )
     }
 
-    /// `numeric-font-weight`: A font weight written as a numeric string.
+    /// `clamped-factor`: A numeric string above 1 on a key whose CSS function stops at 1.
     #[must_use]
     #[inline]
-    pub fn numeric_font_weight(value: &str) -> (DiagnosticCode, Args) {
+    pub fn clamped_factor(key: &str, value: &str) -> (DiagnosticCode, Args) {
         (
-            DiagnosticCode::NumericFontWeight,
-            Args::default().text("value", value),
+            DiagnosticCode::ClampedFactor,
+            Args::default().text("key", key).text("value", value),
         )
     }
 
@@ -1293,12 +1293,12 @@ mod tests {
         let (code, args) = issue::off_scale_value("key", "value");
         assert_eq!(code, DiagnosticCode::OffScaleValue);
         assert_eq!(args.to_json(), r#"{"key":"key","value":"value"}"#);
-        let (code, args) = issue::numeric_font_weight("value");
-        assert_eq!(code, DiagnosticCode::NumericFontWeight);
-        assert_eq!(args.to_json(), r#"{"value":"value"}"#);
-        let (code, args) = issue::numeric_font_weight("value");
-        assert_eq!(code, DiagnosticCode::NumericFontWeight);
-        assert_eq!(args.to_json(), r#"{"value":"value"}"#);
+        let (code, args) = issue::clamped_factor("key", "value");
+        assert_eq!(code, DiagnosticCode::ClampedFactor);
+        assert_eq!(args.to_json(), r#"{"key":"key","value":"value"}"#);
+        let (code, args) = issue::clamped_factor("key", "value");
+        assert_eq!(code, DiagnosticCode::ClampedFactor);
+        assert_eq!(args.to_json(), r#"{"key":"key","value":"value"}"#);
         let (code, args) = issue::per_side_border_style("key", "value");
         assert_eq!(code, DiagnosticCode::PerSideBorderStyle);
         assert_eq!(args.to_json(), r#"{"key":"key","value":"value"}"#);

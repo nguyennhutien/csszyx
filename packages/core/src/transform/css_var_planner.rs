@@ -452,6 +452,9 @@ fn dynamic_value_key(source: &str, prop: &super::DynamicCssVarIr) -> String {
         DynamicCssVarCategory::Color => format!("color:{expression}"),
         DynamicCssVarCategory::Angle => format!("angle:{expression}"),
         DynamicCssVarCategory::Duration => format!("duration:{expression}"),
+        // `leading` resolves a number on the spacing scale and every other
+        // factor key as a percent, so the key is part of the identity.
+        DynamicCssVarCategory::Factor => format!("factor:{}:{expression}", prop.key),
         DynamicCssVarCategory::Passthrough => format!("pass:{expression}"),
     }
 }
@@ -678,7 +681,7 @@ mod tests {
 
     #[test]
     fn mangles_every_dynamic_value_category_and_respects_style_reservations() {
-        let source = "const A=({value})=><div style={{'--sz':1, \"--sy\":2}} sz={{w:value,bg:value,rotate:value,duration:value,opacity:value}}/>;";
+        let source = "const A=({value})=><div style={{'--sz':1, \"--sy\":2}} sz={{w:value,bg:value,rotate:value,duration:value,opacity:value,grow:value}}/>;";
         let ir = parse_source_shell(&TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
             source: source.to_string(),
@@ -688,7 +691,7 @@ mod tests {
         let result = apply_css_variable_mangling(&ir, source, None);
         let vars = &result.ir.sz_attributes[0].dynamic_css_vars;
 
-        assert_eq!(vars.len(), 5);
+        assert_eq!(vars.len(), 6);
         assert_eq!(
             vars.iter().map(|prop| prop.category).collect::<Vec<_>>(),
             [
@@ -696,13 +699,14 @@ mod tests {
                 DynamicCssVarCategory::Color,
                 DynamicCssVarCategory::Angle,
                 DynamicCssVarCategory::Duration,
+                DynamicCssVarCategory::Factor,
                 DynamicCssVarCategory::Passthrough,
             ]
         );
         assert!(vars
             .iter()
             .all(|prop| prop.var_name != "--sz" && prop.var_name != "--sy"));
-        assert_eq!(result.variable_map.len(), 5);
+        assert_eq!(result.variable_map.len(), 6);
         assert!(result.diagnostics.is_empty());
     }
 

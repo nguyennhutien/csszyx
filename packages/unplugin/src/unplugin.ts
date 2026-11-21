@@ -6685,6 +6685,7 @@ function createCsszyxPlugins(options: PartialCsszyxConfig = {}): {
             usesColorVar: false,
             usesSpacingVar: false,
             usesUnitVar: false,
+            usesFactorVar: false,
             usesBoolClass: false,
             usesClassMark: false,
         };

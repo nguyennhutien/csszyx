@@ -29,8 +29,8 @@ export const SLASH_OPACITY_STRING: SzBrowserDiagnostic<SzDiagnosticArgs['slash-o
 /** `off-scale-value`: A spacing value off Tailwind's quarter-step scale. */
 export const OFF_SCALE_VALUE: SzBrowserDiagnostic<SzDiagnosticArgs['off-scale-value']> = {"id":"off-scale-value","args":"key value","text":"`{key}: {value}` is not on Tailwind's spacing scale, so the class produces no CSS.","help":"use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'{value}rem'`."};
 
-/** `numeric-font-weight`: A font weight written as a numeric string. */
-export const NUMERIC_FONT_WEIGHT: SzBrowserDiagnostic<SzDiagnosticArgs['numeric-font-weight']> = {"id":"numeric-font-weight","args":"value","text":"`weight: '{value}'` is a numeric string, so `font-{value}` produces no CSS.","help":"write `weight: {value}` as a number; it emits `font-[{value}]`."};
+/** `clamped-factor`: A numeric string above 1 on a key whose CSS function stops at 1. */
+export const CLAMPED_FACTOR: SzBrowserDiagnostic<SzDiagnosticArgs['clamped-factor']> = {"id":"clamped-factor","args":"key value","text":"`{key}: '{value}'` is the CSS value {value}, which the browser clamps to 1, the same as `'1'`.","help":"for {value}%, write the number `{key}: {value}`; for a fraction of 1, write a string below 1 such as `'0.5'`."};
 
 /** `per-side-border-style`: A border style on one side, which Tailwind cannot express. */
 export const PER_SIDE_BORDER_STYLE: SzBrowserDiagnostic<SzDiagnosticArgs['per-side-border-style']> = {"id":"per-side-border-style","args":"key value","text":"`{key}: '{value}'` emits nothing: Tailwind has no per-side border style.","help":"use `borderStyle: '{value}'` for every side, or a number on `{key}` for the width."};

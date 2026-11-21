@@ -94,8 +94,8 @@ describe('effects — opacity', () => {
         expect(t({ opacity: 50 })).toBe('opacity-50');
     });
 
-    it('{ opacity: ".33" } → opacity-[.33] (arbitrary)', () => {
-        expect(t({ opacity: '.33' })).toBe('opacity-[.33]');
+    it('{ opacity: ".33" } → opacity-[0.33] (a numeric string is the CSS value)', () => {
+        expect(t({ opacity: '.33' })).toBe('opacity-[0.33]');
     });
 
     it('{ opacity: "--o" } → opacity-(--o) (css variable)', () => {

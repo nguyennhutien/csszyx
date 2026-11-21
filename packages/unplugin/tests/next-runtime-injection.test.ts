@@ -26,6 +26,7 @@ describe('the helpers the engine calls', () => {
             usesColorVar: true,
             usesSpacingVar: true,
             usesUnitVar: true,
+            usesFactorVar: true,
             usesBoolClass: true,
             usesClassMark: true,
         }).all;

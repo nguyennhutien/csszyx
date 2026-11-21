@@ -321,8 +321,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "help": "use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'{value}rem'`."
     },
     {
-        "id": "numeric-font-weight",
-        "summary": "A font weight written as a numeric string.",
+        "id": "clamped-factor",
+        "summary": "A numeric string above 1 on a key whose CSS function stops at 1.",
         "surfaces": {
             "engine": {},
             "runtime": {
@@ -332,12 +332,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         },
         "position": "site",
         "args": {
+            "key": {
+                "type": "string"
+            },
             "value": {
                 "type": "string"
             }
         },
-        "text": "`weight: '{value}'` is a numeric string, so `font-{value}` produces no CSS.",
-        "help": "write `weight: {value}` as a number; it emits `font-[{value}]`."
+        "text": "`{key}: '{value}'` is the CSS value {value}, which the browser clamps to 1, the same as `'1'`.",
+        "help": "for {value}%, write the number `{key}: {value}`; for a fraction of 1, write a string below 1 such as `'0.5'`."
     },
     {
         "id": "per-side-border-style",

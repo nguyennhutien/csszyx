@@ -53,11 +53,11 @@ describe('migrate normalizes legacy sz prop keys', () => {
         expect(transform({ fontStretch: '--s' }).className).toBe('font-stretch-(--s)');
     });
 
-    it('leaves a weight value alone, because its spelling decides its class', () => {
-        // `weight: '700'` is `font-700` and `weight: 700` is `font-[700]`, so
-        // rewriting the value here would change what the file compiles to.
+    it('leaves a weight value as written', () => {
+        // A numeric string lowers like its number (ADR 0037), so both spellings
+        // write `font-[700]`; the key is renamed and the value kept.
         expect(run("<div sz={{ font: '700' }} />").code).toBe("<div sz={{ weight: '700' }} />");
-        expect(transform({ weight: '700' }).className).toBe('font-700');
+        expect(transform({ weight: '700' }).className).toBe('font-[700]');
         expect(run('<div sz={{ font: 700 }} />').code).toBe('<div sz={{ weight: 700 }} />');
         expect(run("<div sz={{ font: 'bold' }} />").code).toBe("<div sz={{ weight: 'bold' }} />");
         expect(run("<div sz={{ font: 'sans' }} />").code).toBe(

@@ -21,6 +21,7 @@ export type NextRuntimeHelper =
     | '__szColorVar'
     | '__szSpacingVar'
     | '__szUnitVar'
+    | '__szFactorVar'
     | '__szBoolClass'
     | '__szCss';
 
@@ -36,6 +37,7 @@ export interface NextRuntimeImportUsage {
     usesColorVar?: boolean;
     usesSpacingVar?: boolean;
     usesUnitVar?: boolean;
+    usesFactorVar?: boolean;
     usesBoolClass?: boolean;
     usesClassMark?: boolean;
     /** The names the code calls a renamed helper by (`_szMerge$1`). */
@@ -82,6 +84,7 @@ export function runtimeHelperGroupsFromUsage(usage: NextRuntimeImportUsage): Run
     if (usage.usesColorVar) append('__szColorVar');
     if (usage.usesSpacingVar) append('__szSpacingVar');
     if (usage.usesUnitVar) append('__szUnitVar');
+    if (usage.usesFactorVar) append('__szFactorVar');
     if (usage.usesBoolClass) append('__szBoolClass');
     if (usage.usesClassMark) append('__szCss');
     return groups;

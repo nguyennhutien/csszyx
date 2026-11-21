@@ -2830,7 +2830,7 @@
         }
       ]
     },
-    "runtime": "leading-[1.4]"
+    "runtime": "leading-1.4"
   },
   {
     "sz": "{\"leading\":\"1.5\"}",
@@ -6682,7 +6682,7 @@
         }
       ]
     },
-    "runtime": "aspect-1.6"
+    "runtime": "aspect-[1.6]"
   },
   {
     "sz": "{\"scale\":1.05}",
@@ -15045,6 +15045,25 @@
     "runtime": "flex-[2_2_0%]"
   },
   {
+    "sz": "{\"flex\":3.5}",
+    "ir": {
+      "properties": [
+        {
+          "key": "flex",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 3.5
+          }
+        }
+      ]
+    },
+    "runtime": "flex-[3.5]"
+  },
+  {
     "sz": "{\"flex\":4}",
     "ir": {
       "properties": [
@@ -16278,6 +16297,25 @@
       ]
     },
     "runtime": "grow-(--grow)"
+  },
+  {
+    "sz": "{\"grow\":2.5}",
+    "ir": {
+      "properties": [
+        {
+          "key": "grow",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 2.5
+          }
+        }
+      ]
+    },
+    "runtime": "grow-[2.5]"
   },
   {
     "sz": "{\"grow\":4}",
@@ -21802,7 +21840,7 @@
         }
       ]
     },
-    "runtime": "opacity-[.33]"
+    "runtime": "opacity-[0.33]"
   },
   {
     "sz": "{\"order\":-4}",
@@ -27517,6 +27555,25 @@
     "runtime": "shrink-(--shrink)"
   },
   {
+    "sz": "{\"shrink\":2.5}",
+    "ir": {
+      "properties": [
+        {
+          "key": "shrink",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 2.5
+          }
+        }
+      ]
+    },
+    "runtime": "shrink-[2.5]"
+  },
+  {
     "sz": "{\"shrink\":4}",
     "ir": {
       "properties": [
@@ -28503,6 +28560,25 @@
       ]
     },
     "runtime": "stroke-(length:--w)"
+  },
+  {
+    "sz": "{\"strokeWidth\":0.5}",
+    "ir": {
+      "properties": [
+        {
+          "key": "strokeWidth",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "number",
+            "value": 0.5
+          }
+        }
+      ]
+    },
+    "runtime": "stroke-[0.5]"
   },
   {
     "sz": "{\"strokeWidth\":\"0.5rem\"}",

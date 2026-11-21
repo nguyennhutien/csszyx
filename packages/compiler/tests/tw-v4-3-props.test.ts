@@ -111,7 +111,7 @@ describe('zoom (v4.3)', () => {
     });
 
     it('handles decimal string value', () => {
-        expect(transform({ zoom: '1.1' }).className).toBe('zoom-1.1');
+        expect(transform({ zoom: '1.1' }).className).toBe('zoom-[1.1]');
     });
 
     it('handles CSS variable', () => {

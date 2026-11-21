@@ -620,7 +620,8 @@ pub(crate) fn is_boolean_shorthand(key: &str) -> bool {
 }
 
 /// Returns true when a key takes only `true` or `false`: any other value
-/// emits nothing and is reported (`closed-enum-value`, form `flag`).
+/// is reported (`closed-enum-value`, form `flag`) and its class is still
+/// written.
 pub(crate) fn is_flag_only(key: &str) -> bool {
     matches!(
         key,
@@ -640,6 +641,79 @@ pub(crate) fn is_flag_only(key: &str) -> bool {
             | "spaceXReverse"
             | "spaceYReverse"
     )
+}
+
+/// Where a key sits among the numeric-key tables of `sz-key-tables.ts`
+/// (ADR 0037), one bit per table: one string match for all five, where five
+/// `matches!` cost the wasm artifact five chains of comparisons.
+fn numeric_key_bits(key: &str) -> u8 {
+    match key {
+        "grow" => 1,
+        "shrink" => 1,
+        "flex" => 1,
+        "stroke" => 1,
+        "strokeWidth" => 1,
+        "tabSize" => 1,
+        "aspect" => 2,
+        "weight" => 2,
+        "opacity" => 12,
+        "scale" => 4,
+        "scaleX" => 4,
+        "scaleY" => 4,
+        "scaleZ" => 4,
+        "zoom" => 4,
+        "brightness" => 4,
+        "contrast" => 4,
+        "saturate" => 4,
+        "grayscale" => 12,
+        "invert" => 12,
+        "sepia" => 12,
+        "backdropBrightness" => 4,
+        "backdropContrast" => 4,
+        "backdropSaturate" => 4,
+        "backdropGrayscale" => 12,
+        "backdropInvert" => 12,
+        "backdropSepia" => 12,
+        "backdropOpacity" => 12,
+        "leading" => 4,
+        "content" => 16,
+        "bgImg" => 16,
+        "group" => 16,
+        "peer" => 16,
+        _ => 0,
+    }
+}
+
+/// Returns true when csszyx brackets a bare decimal on this key itself
+/// (`grow: 2.5` → `grow-[2.5]`): the bare class has no rule, and the
+/// bracket sets the property to the number written (ADR 0037).
+pub(crate) fn brackets_bare_decimal(key: &str) -> bool {
+    numeric_key_bits(key) & 1 != 0
+}
+
+/// Returns true when every number on this key brackets (`aspect: 2` →
+/// `aspect-[2]`): the bare class is dead for any number (ADR 0037).
+pub(crate) fn brackets_every_number(key: &str) -> bool {
+    numeric_key_bits(key) & 2 != 0
+}
+
+/// Returns true when a numeric string on this key is the CSS value itself
+/// (`opacity: '.5'` → `opacity-[0.5]`) while a number keeps Tailwind's
+/// scale (ADR 0037).
+pub(crate) fn is_factor_string_key(key: &str) -> bool {
+    numeric_key_bits(key) & 4 != 0
+}
+
+/// Returns true when this factor key's CSS function clamps at 1, so a string
+/// above 1 is reported as `clamped-factor`.
+pub(crate) fn clamps_factor_at_one(key: &str) -> bool {
+    numeric_key_bits(key) & 8 != 0
+}
+
+/// Returns true when a key's string value is text, not a number, so a numeric
+/// string keeps its string meaning (`content: '4'`).
+pub(crate) fn keeps_numeric_string(key: &str) -> bool {
+    numeric_key_bits(key) & 16 != 0
 }
 
 /// Returns true when a key's DYNAMIC value must lower to a conditional bare

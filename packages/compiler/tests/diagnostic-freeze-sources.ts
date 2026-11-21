@@ -120,7 +120,7 @@ export const FREEZE_SOURCES: ReadonlyArray<FreezeSource> = [
     shared('runtime-family-conflict', 'runtime-beside-family'),
     shared('spread-split-class', 'split'),
     shared('duplicate-sz', 'merged'),
-    shared('numeric-font-weight', 'numeric-string'),
+    shared('clamped-factor', 'percent-string'),
     {
         code: 'removed-key',
         variant: 'sugar-replaced',

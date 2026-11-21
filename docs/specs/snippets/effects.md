@@ -46,11 +46,11 @@ Controlling the shadow of a text element.
 
 Controlling the opacity of an element.
 
-| Concept       | CSS Rule            | Tailwind v4 Class                | `sz` Prop (Object Syntax)                                | Note                                |
-| :------------ | :------------------ | :------------------------------- | :------------------------------------------------------- | :---------------------------------- |
-| **Dynamic**   | `opacity: 0 to 1`   | `opacity-<number>` (any integer) | `{ opacity: 50 }`, `{ opacity: 88 }`, `{ opacity: 999 }` | v4: fully dynamic, no static scale. |
-| **Arbitrary** | `opacity: .33`      | `opacity-[.33]`                  | `{ opacity: '.33' }`                                     |                                     |
-| **Var**       | `opacity: var(--o)` | `opacity-(--o)`                  | `{ opacity: '--o' }`                                     |                                     |
+| Concept       | CSS Rule            | Tailwind v4 Class                | `sz` Prop (Object Syntax)                                | Note                                                                             |
+| :------------ | :------------------ | :------------------------------- | :------------------------------------------------------- | :------------------------------------------------------------------------------- |
+| **Dynamic**   | `opacity: 0 to 1`   | `opacity-<number>` (any integer) | `{ opacity: 50 }`, `{ opacity: 88 }`, `{ opacity: 999 }` | v4: fully dynamic, no static scale.                                              |
+| **Arbitrary** | `opacity: .33`      | `opacity-[0.33]`                 | `{ opacity: '.33' }`                                     | Numeric string = the CSS value. A string above 1 is reported (`clamped-factor`). |
+| **Var**       | `opacity: var(--o)` | `opacity-(--o)`                  | `{ opacity: '--o' }`                                     |                                                                                  |
 
 ## Mix Blend Mode
 

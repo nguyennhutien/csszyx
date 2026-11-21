@@ -20,7 +20,7 @@ import { CLASS_LIST_SPACE } from '@csszyx/compiler/sz-limits';
 // Inlined at build time — NOT a runtime dep. See tsup.config.ts.
 export { __szBoolClass } from '@csszyx/compiler/bool-class';
 export { __szColorVar } from '@csszyx/compiler/color-var';
-export { __szSpacingVar, __szUnitVar } from '@csszyx/compiler/spacing-var';
+export { __szFactorVar, __szSpacingVar, __szUnitVar } from '@csszyx/compiler/spacing-var';
 
 /**
  * Input to the lite runtime helpers: a pre-compiled class string or a falsy

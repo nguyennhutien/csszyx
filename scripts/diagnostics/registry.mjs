@@ -437,13 +437,13 @@ export const DIAGNOSTICS = [
         sources: [ENGINE, CORE_TS],
     },
     {
-        id: 'numeric-font-weight',
-        summary: 'A font weight written as a numeric string.',
+        id: 'clamped-factor',
+        summary: 'A numeric string above 1 on a key whose CSS function stops at 1.',
         surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
         position: 'site',
-        args: { value: STRING },
-        text: "`weight: '{value}'` is a numeric string, so `font-{value}` produces no CSS.",
-        help: 'write `weight: {value}` as a number; it emits `font-[{value}]`.',
+        args: { key: STRING, value: STRING },
+        text: "`{key}: '{value}'` is the CSS value {value}, which the browser clamps to 1, the same as `'1'`.",
+        help: "for {value}%, write the number `{key}: {value}`; for a fraction of 1, write a string below 1 such as `'0.5'`.",
         sources: [ENGINE, CORE_TS],
     },
     {
@@ -3299,6 +3299,14 @@ export const DIAGNOSTICS = [
 
 /** Ids that existed in a released tag and are no longer produced. */
 export const REMOVED = [
+    {
+        id: 'numeric-font-weight',
+        since: '0.18.1',
+        was: 'rule-id',
+        reason:
+            "`weight: '700'` emitted the dead `font-700`. A numeric string now lowers like its " +
+            'number on every key, so it writes `font-[700]` and there is nothing left to report.',
+    },
     {
         id: 'other',
         since: '0.18.0',

@@ -292,6 +292,7 @@ fn transform_fast_static_ir_with_options(
             uses_color_var: false,
             uses_spacing_var: false,
             uses_unit_var: false,
+            uses_factor_var: false,
             uses_bool_class: false,
             uses_class_mark: false,
             helper_aliases: Vec::new(),
@@ -465,6 +466,12 @@ fn transform_static_classes_with_options(
                 )
             })
         });
+    let uses_factor_var = transformed
+        && parsed.ir.sz_attributes.iter().any(|attr| {
+            attr.dynamic_css_vars
+                .iter()
+                .any(|prop| prop.category == DynamicCssVarCategory::Factor)
+        });
     // Array elements carry their conditional on the part, so both homes count.
     let uses_bool_class = transformed
         && parsed.ir.sz_attributes.iter().any(|attr| {
@@ -515,6 +522,7 @@ fn transform_static_classes_with_options(
             uses_color_var,
             uses_spacing_var,
             uses_unit_var,
+            uses_factor_var,
             uses_bool_class,
             uses_class_mark: false,
             helper_aliases: Vec::new(),
@@ -858,7 +866,7 @@ fn push_mask_member_diagnostics(
 struct KeyValueFindings {
     unknown: Vec<(String, u32)>,
     dead_steps: Vec<(String, f64, u32)>,
-    dead_weights: Vec<(String, u32)>,
+    clamped_factors: Vec<(String, String, u32)>,
     removed_sugar: Vec<(String, &'static str, &'static str, u32)>,
     border_side_styles: Vec<(String, String, u32)>,
     property_objects: Vec<(String, Vec<String>, u32)>,
@@ -881,7 +889,7 @@ impl KeyValueFindings {
     fn clear(&mut self) {
         self.unknown.clear();
         self.dead_steps.clear();
-        self.dead_weights.clear();
+        self.clamped_factors.clear();
         self.removed_sugar.clear();
         self.border_side_styles.clear();
         self.property_objects.clear();
@@ -903,7 +911,7 @@ impl KeyValueFindings {
     fn collect(&mut self, object: &super::StaticSzObject) {
         collect_unknown_sz_keys(object, &mut self.unknown);
         super::lower::collect_dead_spacing_steps(object, &mut self.dead_steps);
-        super::lower::collect_dead_weight_values(object, &mut self.dead_weights);
+        super::lower::collect_clamped_factors(object, &mut self.clamped_factors);
         super::lower::collect_removed_boolean_sugar(object, &mut self.removed_sugar);
         super::lower::collect_border_side_styles(object, &mut self.border_side_styles);
         super::lower::collect_property_object_values(object, &mut self.property_objects);
@@ -949,7 +957,7 @@ fn push_group_key_value_diagnostics<'a>(
         let seen = &mut std::collections::HashSet::new();
         retain_first_occurrence(&mut found.unknown, 0, seen, |(_, at)| *at);
         retain_first_occurrence(&mut found.dead_steps, 1, seen, |(_, _, at)| *at);
-        retain_first_occurrence(&mut found.dead_weights, 2, seen, |(_, at)| *at);
+        retain_first_occurrence(&mut found.clamped_factors, 2, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.removed_sugar, 3, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.border_side_styles, 4, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.property_objects, 5, seen, |(.., at)| *at);
@@ -988,7 +996,9 @@ fn push_group_key_value_diagnostics<'a>(
     );
     push_unknown_key_diagnostics(&found.unknown, out);
     push_dead_spacing_step_diagnostics(&found.dead_steps, out);
-    push_dead_weight_diagnostics(&found.dead_weights, out);
+    for (key, value, offset) in &found.clamped_factors {
+        out.push_issue(issue::clamped_factor(key, value), *offset);
+    }
     push_removed_sugar_diagnostics(&found.removed_sugar, out);
     push_border_side_style_diagnostics(&found.border_side_styles, out);
     push_property_object_diagnostics(&found.property_objects, out);
@@ -1207,18 +1217,6 @@ fn duplicate_sz_diagnostics(ir: &super::SourceIr) -> Diagnostics {
             )
         })
         .collect()
-}
-
-/// Reports each `weight` value written as a numeric string.
-///
-/// Tailwind spells weights through `--font-weight-*`, so `font-700` is not a
-/// utility and generates no CSS. The class is still emitted — the diagnostic
-/// reports what Tailwind will do with what the author wrote rather than
-/// rewriting it.
-fn push_dead_weight_diagnostics(found: &[(String, u32)], out: &mut Diagnostics) {
-    for (value, offset) in found {
-        out.push_issue(issue::numeric_font_weight(value), *offset);
-    }
 }
 
 /// Report each removed boolean-sugar alias found in one sz object.
@@ -1481,6 +1479,7 @@ fn noop_result(file: &TransformFile) -> TransformResult {
             uses_color_var: false,
             uses_spacing_var: false,
             uses_unit_var: false,
+            uses_factor_var: false,
             uses_bool_class: false,
             uses_class_mark: false,
             helper_aliases: Vec::new(),
@@ -1891,26 +1890,25 @@ mod tests {
         assert!(failures.is_empty(), "{}", failures.join("\n"));
     }
 
+    /// A numeric string lowers like the number it spells, except on a factor
+    /// key, where it is the CSS value (ADR 0037). Nothing is reported for any
+    /// of them, `scale` included: a factor above 1 is a real scale.
     #[test]
-    fn a_numeric_string_weight_is_reported_with_the_wording_the_typescript_uses() {
+    fn a_numeric_string_lowers_like_its_number() {
         let file = TransformFile {
             filename: "/repo/App.tsx".to_string(),
-            source: "export const A = () => <div sz={{ weight: \"700\", hover: { weight: \"550\" } }} />;"
+            source: "export const A = () => <div sz={{ weight: \"700\", hover: { p: \".5\" }, scale: \"105\", opacity: \".5!\" }} />;"
                 .to_string(),
         };
         let result = transform_file(&file);
-        assert_eq!(
-            lines(&result),
-            [
-                r#"numeric-font-weight {"value":"700"}"#,
-                r#"numeric-font-weight {"value":"550"}"#,
-            ],
-            "code was: {}",
-            result.code
-        );
-        // The class is still emitted: the diagnostic reports what Tailwind
-        // will do with what the author wrote, it does not rewrite it.
-        assert!(result.classes.iter().any(|class| class == "font-700"));
+        assert!(lines(&result).is_empty(), "{:?}", lines(&result));
+        for class in ["font-[700]", "hover:p-0.5", "scale-[105]", "opacity-[0.5]!"] {
+            assert!(
+                result.classes.iter().any(|written| written == class),
+                "{class}: {:?}",
+                result.classes
+            );
+        }
     }
 
     /// A number or a string on a key typed `boolean` is reported once per
@@ -1938,25 +1936,6 @@ mod tests {
             .classes
             .iter()
             .any(|class| class == "hover:sr-only-yes"));
-    }
-
-    /// The spellings Tailwind does serve stay quiet, or the diagnostic would
-    /// be noise on every correct file.
-    #[test]
-    fn a_weight_tailwind_serves_is_not_reported() {
-        let file = TransformFile {
-            filename: "/repo/App.tsx".to_string(),
-            source: "export const A = () => <div sz={{ weight: \"bold\", z: \"700\", text: \"700\" }} />;"
-                .to_string(),
-        };
-        let result = transform_file(&file);
-        assert!(
-            !lines(&result)
-                .iter()
-                .any(|line| line.starts_with("numeric-font-weight ")),
-            "{:?}",
-            lines(&result)
-        );
     }
 
     #[test]
@@ -5010,13 +4989,10 @@ mod tests {
             ("{ has: { img: { fontVariant: 'x' } } }", "removed-key"),
             ("{ has: { img: { p: 1.3 } } }", "off-scale-value"),
             ("{ group: { has: { img: { p: 1.1 } } } }", "off-scale-value"),
+            ("{ peer: { focus: { p: '1.3' } } }", "off-scale-value"),
             (
-                "{ peer: { focus: { weight: '600' } } }",
-                "numeric-font-weight",
-            ),
-            (
-                "{ not: { supports: { 'display:grid': { weight: '500' } } } }",
-                "numeric-font-weight",
+                "{ not: { supports: { 'display:grid': { p: '1.1' } } } }",
+                "off-scale-value",
             ),
             (
                 "{ aria: { checked: { display: 'flx' } } }",
@@ -5533,8 +5509,8 @@ mod tests {
                 TransformOptions::default(),
             ),
             (
-                DiagnosticCode::NumericFontWeight,
-                "<div sz={{ weight: '700' }} />".into(),
+                DiagnosticCode::ClampedFactor,
+                "<div sz={{ opacity: '50' }} />".into(),
                 TransformOptions::default(),
             ),
             (

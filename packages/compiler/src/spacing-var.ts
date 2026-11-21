@@ -128,6 +128,29 @@ export function __szSpacingVar(v: unknown, key: string): string | undefined {
 }
 
 /**
+ * Resolve a dynamic value on a factor key (`opacity`, `scale*`, `zoom`, the
+ * filters, `leading`) the way the static path lowers the same literal
+ * (ADR 0037): a number is Tailwind's scale — a percent, or the spacing scale
+ * on `leading` — and a string is the CSS value itself. Passing the value
+ * through untouched made `opacity: x` with `x = 50` the CSS value 50 (fully
+ * opaque) where `opacity: 50` written in the source is 50%.
+ *
+ * @param v - The runtime value from the sz object.
+ * @param key - The sz key the value arrived on.
+ * @returns CSS-compatible value string, or undefined when there is none.
+ * @internal Called by generated code, not written by hand.
+ */
+export function __szFactorVar(v: unknown, key: string): string | undefined {
+    if (typeof v === 'number') {
+        if (!Number.isFinite(v)) return undefined;
+        return key === 'leading' ? `calc(${v} * var(--spacing))` : `${v}%`;
+    }
+    if (typeof v === 'string' && v !== '') return v;
+    if (v !== null && v !== undefined && v !== false && v !== '') warnUnresolvable(key, v);
+    return undefined;
+}
+
+/**
  * Resolve a dynamic value on an ANGLE/DURATION-category key: bare numbers get
  * the unit appended (rotate: 45 → '45deg'), strings that already carry a unit
  * (or any other CSS expression) pass through verbatim instead of having the

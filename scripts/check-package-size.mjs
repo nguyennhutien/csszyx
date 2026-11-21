@@ -279,7 +279,12 @@ export const SIZE_BUDGETS = [
         // spelled with `_`, which takes a bracket-balance scan, a track test
         // and the grid key set in the runtime lowering, and a signed or
         // unbalanced grid value stays reported. Budget the usual ~300 above.
-        maxGzipBytes: 17_800,
+        //
+        // Raised from 17,800 on 2026-11-21, measured 17,929 (17,716 at the
+        // branch base, +213): numbers and numeric strings lowered by what the bracket means
+        // (the four numeric key cells, and `__szFactorVar` for a runtime
+        // value on a factor key). ~300 above.
+        maxGzipBytes: 18_200,
         // Measured 2026-10-08: 15,104 / 346 / 675 / 366 / 257 / 691.
         // `./browser` raised from 15,250 the same day: the special-key box
         // roles took it to 15,104, 146 under, so it went back to the usual
@@ -295,8 +300,9 @@ export const SIZE_BUDGETS = [
             // in the chunk order that put them first, see the union), and
             // 16,332 with the category map ahead of them, the same day.
             // 16,793 with grid line names lowering, 2026-11-07 (16,581
-            // before, see the union), so raised from 16,600.
-            './browser': 17_100,
+            // before, see the union), so raised from 16,600. 17,137 on
+            // 2026-11-21 (16,980 before, see the union), so raised from 17,100.
+            './browser': 17_400,
             // `./sz-limits` measured 501 on 2026-10-20 (346 before):
             // `SzDepthError` extends the error class of `./errors`, measured
             // 357 alone, which ships to the browser because the runtime
@@ -325,12 +331,15 @@ export const SIZE_BUDGETS = [
         // ahead of the tables brought both lanes under.
         vite: {
             // 17,362 on 2026-11-07 with grid line names lowering (see the
-            // esbuild union), 138 under, so raised from 17,500.
-            maxGzipBytes: 17_650,
+            // esbuild union), 138 under, so raised from 17,500. 17,860 on
+            // 2026-11-21 (17,627 before, see the esbuild union), so raised
+            // from 17,650.
+            maxGzipBytes: 18_150,
             entryBudgets: {
                 // 16,589 on 2026-11-07 with grid line names lowering (see the
-                // esbuild union), so raised from 16,650.
-                './browser': 16_900,
+                // esbuild union), so raised from 16,650. 17,021 on 2026-11-21
+                // (16,823 before, see the esbuild union), so raised from 16,900.
+                './browser': 17_300,
                 // Measured 2026-10-20: 527 and 393.
                 './sz-limits': 700,
                 './errors': 700,
@@ -613,7 +622,14 @@ export const SIZE_BUDGETS = [
         // object was folded into the closed-enum collector (-140 gzip -9
         // bytes, 596,624 -> 596,484 on one host, no wasm-opt). ~300 bytes
         // of headroom, on the user's call.
-        maxGzipBytes: 600_250,
+        //
+        // Raised from 600,250 on 2026-11-21: numbers and numeric strings lowered by what the bracket means
+        // (the four numeric key cells, and `__szFactorVar` for a runtime
+        // value on a factor key). This script
+        // reads 601,020 on the host, 600,019 at the branch base in the
+        // container, no wasm-opt; the same build on both sides in one container
+        // grew 1,138 gzip -9 bytes. ~300 bytes of headroom.
+        maxGzipBytes: 601_300,
     },
     // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
     // bundles from the compiler's source, unminified, and that every editor
@@ -655,8 +671,10 @@ export const SIZE_BUDGETS = [
         // `main`, same build). Raised from 51,400 on 2026-11-16, measured
         // 51,407: the scanner reads `sz` through the shared attribute reader,
         // so `sz = {{…}}` is an expression the editor reads (+163 gzip -9).
-        // ~300 bytes of headroom.
-        maxGzipBytes: 51_700,
+        // Raised from 51,700 on 2026-11-21, measured 51,790 (51,521 at the
+        // branch base): the numeric lowering it carries with the compiler's
+        // (see that budget). ~300 bytes of headroom.
+        maxGzipBytes: 52_050,
         // Built as production, so the leak gate reads it, except for the ids
         // whose words the extension shows as its own editor diagnostics
         // (`diagnostic-provider.ts`, from `SZ_EDITOR_DIAGNOSTIC_TEMPLATES`).
@@ -684,8 +702,10 @@ export const SIZE_BUDGETS = [
         kind: 'file',
         target: 'packages/csszyx/dist/browser.iife.js',
         // Raised from 16,200 on 2026-11-07, measured 16,347: the grid line
-        // names lowering (see the compiler's budget).
-        maxGzipBytes: 16_650,
+        // names lowering (see the compiler's budget). Raised from 16,650 on
+        // 2026-11-21, measured 16,662 (16,497 at the branch base): the numeric
+        // lowering (see the compiler's budget).
+        maxGzipBytes: 16_950,
         // A `<script>` tag loads it as built, so the leak gate reads its bytes.
         templateFree: {},
         build: cdnBuildOptions('production'),
@@ -855,7 +875,11 @@ export const SIZE_BUDGETS = [
         // 31,650 on 2026-11-18, measured 31,341: `classAttributeReadings` on
         // both artifacts, which the mangle census decodes attribute strings
         // through.
-        maxGzipBytes: 31_650,
+        // 31,950 on 2026-11-21, measured 31,695 (31,424 at the branch base):
+        // numbers and numeric strings lowered by what the bracket means
+        // (the four numeric key cells, and `__szFactorVar` for a runtime
+        // value on a factor key).
+        maxGzipBytes: 31_950,
         excludedModules: [
             'src/state-variants.generated.ts',
             'src/template-sz.ts',
@@ -880,7 +904,9 @@ export const SIZE_BUDGETS = [
         // `issues`, so no lane renders a verdict the engine did not make.
         // 32,050 on 2026-11-18, measured 31,748: `classAttributeReadings`
         // (see `./engine`).
-        maxGzipBytes: 32_050,
+        // 32,400 on 2026-11-21, measured 32,105 (31,829 at the branch base):
+        // the numeric lowering (see `./engine`).
+        maxGzipBytes: 32_400,
         excludedModules: [
             'src/state-variants.generated.ts',
             'src/template-sz.ts',
@@ -898,7 +924,9 @@ export const SIZE_BUDGETS = [
         // `issues`, so no lane renders a verdict the engine did not make.
         // 33,700 on 2026-11-18, measured 33,416: `classAttributeReadings`
         // (see `./engine`).
-        maxGzipBytes: 33_700,
+        // 34,050 on 2026-11-21, measured 33,769 (33,497 at the branch base):
+        // the numeric lowering (see `./engine`).
+        maxGzipBytes: 34_050,
         excludedModules: ['src/state-variants.generated.ts'],
     },
     // The plugin and the CLI run in Node at the start of every build, dev
@@ -1094,8 +1122,10 @@ export const SIZE_BUDGETS = [
         // whitespace as the engine does (White_Space trim and strip, and the
         // two class-list separators). 60,350 on 2026-11-16, measured 60,306:
         // the grid track keywords are exported, so the parity test walks the
-        // set the engine's table is generated from. ~300 bytes of headroom.
-        maxGzipBytes: 60_600,
+        // set the engine's table is generated from. 61,150 on 2026-11-21,
+        // measured 60,889 (60,478 at the branch base): the numeric lowering
+        // (see `./engine`). ~300 bytes of headroom.
+        maxGzipBytes: 61_150,
     },
     {
         name: '@csszyx/compiler `./migrate`, loaded by Node',
@@ -1107,7 +1137,9 @@ export const SIZE_BUDGETS = [
         // 28,325: the `mangle-mark-missed` registry entry.
         // 28,900 on 2026-11-18, measured 28,601: `classAttributeReadings`
         // (see `./engine`).
-        maxGzipBytes: 28_900,
+        // 29,200 on 2026-11-21, measured 28,941 (28,686 at the branch base):
+        // the numeric lowering (see `./engine`).
+        maxGzipBytes: 29_200,
     },
     {
         name: '@csszyx/compiler `./report`, loaded by Node',

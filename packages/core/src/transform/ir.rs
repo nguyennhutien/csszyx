@@ -778,6 +778,9 @@ pub enum DynamicCssVarCategory {
     Angle,
     /// `__szUnitVar(value, "ms", key)`.
     Duration,
+    /// `__szFactorVar(value, key)` — a number is Tailwind's percent (the
+    /// spacing scale on `leading`), a string the CSS value itself (ADR 0037).
+    Factor,
     /// Direct value passthrough so nullish/falsy values omit the custom property.
     Passthrough,
 }
