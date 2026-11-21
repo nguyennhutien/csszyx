@@ -5689,6 +5689,7 @@ pub fn dynamic_css_var_category(key: &str) -> DynamicCssVarCategory {
         }
         "rotate" | "skewX" | "skewY" => DynamicCssVarCategory::Angle,
         "duration" | "delay" | "animationDelay" => DynamicCssVarCategory::Duration,
+        _ if super::generated::tables::is_factor_string_key(key) => DynamicCssVarCategory::Factor,
         _ => DynamicCssVarCategory::Passthrough,
     }
 }

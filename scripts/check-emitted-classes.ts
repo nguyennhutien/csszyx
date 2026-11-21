@@ -89,12 +89,20 @@ const BASELINE: ReadonlyMap<string, Baseline> = new Map([
                 },
             ] as const,
     ) as ReadonlyArray<readonly [string, Baseline]>),
+    // ── accepted: a number off the spacing scale, reported where it is written ─
+    [
+        'leading-1.4',
+        {
+            kind: 'accepted',
+            reason: "a number on `leading` is the spacing scale like on `p` (ADR 0037), and 1.4 is off its quarter step; the build reports `off-scale-value` at the site and points to `leading: '1.4'` for the ratio",
+        },
+    ],
     // ── known-dead: a fraction that no bare utility spells ───────────────────
-    // `lineHeight` already brackets a number Tailwind has no bare spelling for,
-    // and every other key still emits the bare form. The two entries here are
-    // simply the keys a corpus record happens to cover; `p`, `w`, `gap`,
-    // `rotate` and `z` fail the same way on the same input and have no record
-    // yet, so fixing these two alone would be fixing where the light is.
+    // `aspect` and `weight` bracket every number and `grow`/`shrink`/`flex`/
+    // `stroke`/`tabSize` bracket a decimal (ADR 0037), because there the
+    // bracket sets the number written. The entry here is the key a corpus
+    // record happens to cover; `p`, `w`, `gap`, `rotate` and `z` fail the same
+    // way on the same input and have no record yet.
     //
     // Bracketing everything is NOT the fix and must not be treated as one:
     // Tailwind serves `p-[1.4]` and emits `padding: 1.4`, which a browser drops
@@ -109,13 +117,6 @@ const BASELINE: ReadonlyMap<string, Baseline> = new Map([
         {
             kind: 'known-dead',
             reason: 'Tailwind serves scale-105 for this value, or scale-[1.05] as an arbitrary one; the bare fraction spells neither',
-        },
-    ],
-    [
-        'aspect-1.6',
-        {
-            kind: 'known-dead',
-            reason: 'Tailwind serves aspect-[1.6], or a ratio such as aspect-16/10; the bare fraction spells neither',
         },
     ],
 ]);

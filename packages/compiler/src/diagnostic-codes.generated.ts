@@ -10,7 +10,7 @@ export type SzDiagnosticCode =
     | 'closed-enum-value'
     | 'slash-opacity-string'
     | 'off-scale-value'
-    | 'numeric-font-weight'
+    | 'clamped-factor'
     | 'per-side-border-style'
     | 'property-object'
     | 'non-variant-object'
@@ -52,7 +52,7 @@ export interface SzDiagnosticArgs {
     'closed-enum-value': { readonly form: 'sibling-group' | 'dead' | 'css-value' | 'font-style' | 'font-smoothing' | 'flag'; readonly key: string; readonly value: string; readonly suggestion?: string; readonly groupKey?: string; readonly groupValue?: string };
     'slash-opacity-string': { readonly key: string; readonly color: string; readonly opacity: string };
     'off-scale-value': { readonly key: string; readonly value: string };
-    'numeric-font-weight': { readonly value: string };
+    'clamped-factor': { readonly key: string; readonly value: string };
     'per-side-border-style': { readonly key: string; readonly value: string };
     'property-object': { readonly key: string; readonly nestedKeys: readonly string[] };
     'non-variant-object': { readonly key: string };
@@ -221,7 +221,7 @@ export const SZ_DIAGNOSTIC_CODES: readonly SzDiagnosticCode[] = [
     'closed-enum-value',
     'slash-opacity-string',
     'off-scale-value',
-    'numeric-font-weight',
+    'clamped-factor',
     'per-side-border-style',
     'property-object',
     'non-variant-object',
@@ -288,7 +288,7 @@ export type SzSettableDiagnosticId =
     | 'closed-enum-value'
     | 'slash-opacity-string'
     | 'off-scale-value'
-    | 'numeric-font-weight'
+    | 'clamped-factor'
     | 'per-side-border-style'
     | 'property-object'
     | 'non-variant-object'
@@ -337,7 +337,7 @@ export const SZ_SETTABLE_DIAGNOSTIC_IDS: readonly SzSettableDiagnosticId[] = [
     'closed-enum-value',
     'slash-opacity-string',
     'off-scale-value',
-    'numeric-font-weight',
+    'clamped-factor',
     'per-side-border-style',
     'property-object',
     'non-variant-object',
@@ -380,7 +380,7 @@ export type SzDiagnosticId =
     | 'closed-enum-value'
     | 'slash-opacity-string'
     | 'off-scale-value'
-    | 'numeric-font-weight'
+    | 'clamped-factor'
     | 'per-side-border-style'
     | 'property-object'
     | 'non-variant-object'
@@ -613,7 +613,8 @@ export const SZ_DIAGNOSTIC_DEFAULT_LEVELS: Readonly<
  * Ids that shipped in a release and are no longer reported, with the id that
  * replaced each, if any. A config naming one still loads.
  */
-export const SZ_REMOVED_DIAGNOSTIC_IDS: Readonly<Record<'other', string | undefined>> = {
+export const SZ_REMOVED_DIAGNOSTIC_IDS: Readonly<Record<'numeric-font-weight' | 'other', string | undefined>> = {
+    'numeric-font-weight': undefined,
     'other': 'sz-diagnostic',
 };
 

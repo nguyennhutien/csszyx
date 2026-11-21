@@ -55,6 +55,15 @@
 // a fall should lower the ceiling with it. The three workloads take about
 // 1.7 s together.
 //
+// Raised from 97 to 100 on 2026-11-21: clean measured 97 at the branch base
+// and 100 with `usesFactorVar`, on one macOS arm64 host (eager and lane kept
+// their differences, +133 and +32). The flag is the 17th field of the native
+// result's `metadata`, which napi builds by adding fields to an empty object,
+// and V8 grows that object's property store between the 16th and the 17th:
+// plain objects built that way measured 69 scavenges per 200,000 up to 16
+// fields and 95 from 17 to 19. The lowering itself allocates nothing here.
+// Folding the helper flags into one field would win it back.
+//
 // Reads `packages/compiler/dist` and needs the host native addon:
 // `pnpm --filter @csszyx/core native:build` and
 // `pnpm exec turbo run build --filter=@csszyx/compiler`.
@@ -68,7 +77,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 /** The most scavenges the clean control may reach: what every transform allocates. */
-export const CLEAN_SCAVENGE_CEILING = 97;
+export const CLEAN_SCAVENGE_CEILING = 100;
 
 /** The most scavenges each workload may run beyond the clean control. */
 export const SCAVENGE_DELTA_BUDGETS = { eager: 150, lane: 34 };

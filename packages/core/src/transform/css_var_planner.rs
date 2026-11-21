@@ -452,6 +452,9 @@ fn dynamic_value_key(source: &str, prop: &super::DynamicCssVarIr) -> String {
         DynamicCssVarCategory::Color => format!("color:{expression}"),
         DynamicCssVarCategory::Angle => format!("angle:{expression}"),
         DynamicCssVarCategory::Duration => format!("duration:{expression}"),
+        // `leading` resolves a number on the spacing scale and every other
+        // factor key as a percent, so the key is part of the identity.
+        DynamicCssVarCategory::Factor => format!("factor:{}:{expression}", prop.key),
         DynamicCssVarCategory::Passthrough => format!("pass:{expression}"),
     }
 }
@@ -513,8 +516,9 @@ mod tests {
 
     use super::{
         apply_css_variable_mangling, apply_scoped_css_variable_names,
-        collect_static_style_custom_property_names, extract_quoted_custom_property_keys,
-        has_redundant_outer_parens, normalize_dynamic_expression_key, plan_css_variable_names,
+        collect_static_style_custom_property_names, dynamic_value_key,
+        extract_quoted_custom_property_keys, has_redundant_outer_parens,
+        normalize_dynamic_expression_key, plan_css_variable_names,
         plan_css_variable_names_with_options, push_variable_map, CssVariablePlanInput,
         CssVariablePlanOptions, CssVariableTier,
     };
@@ -615,6 +619,39 @@ mod tests {
         assert_eq!(pairs, [("component", "--cy"), ("scoped", "--sy")]);
     }
 
+    /// Two dynamic values share a hoisted var only when the helper would
+    /// resolve them alike: a factor value on `leading` is a spacing step and on
+    /// `opacity` a percent, so the key is part of the identity.
+    #[test]
+    fn keys_a_dynamic_value_by_category_and_where_the_helper_reads_it_by_key() {
+        let source = "(x)";
+        let prop = |key: &str, category| DynamicCssVarIr {
+            category,
+            expression_span: TextSpan { start: 0, end: 3 },
+            ..dynamic_prop(key, "--_sz-v")
+        };
+        assert_eq!(
+            [
+                dynamic_value_key(source, &prop("opacity", DynamicCssVarCategory::Factor)),
+                dynamic_value_key(source, &prop("leading", DynamicCssVarCategory::Factor)),
+                dynamic_value_key(source, &prop("w", DynamicCssVarCategory::Spacing)),
+                dynamic_value_key(source, &prop("bg", DynamicCssVarCategory::Color)),
+                dynamic_value_key(source, &prop("rotate", DynamicCssVarCategory::Angle)),
+                dynamic_value_key(source, &prop("delay", DynamicCssVarCategory::Duration)),
+                dynamic_value_key(source, &prop("grow", DynamicCssVarCategory::Passthrough)),
+            ],
+            [
+                "factor:opacity:x",
+                "factor:leading:x",
+                "spacing:w:x",
+                "color:x",
+                "angle:x",
+                "duration:x",
+                "pass:x",
+            ]
+        );
+    }
+
     #[test]
     fn normalizes_dynamic_value_key_outer_parentheses() {
         assert_eq!(normalize_dynamic_expression_key(" pad "), "pad");
@@ -678,7 +715,7 @@ mod tests {
 
     #[test]
     fn mangles_every_dynamic_value_category_and_respects_style_reservations() {
-        let source = "const A=({value})=><div style={{'--sz':1, \"--sy\":2}} sz={{w:value,bg:value,rotate:value,duration:value,opacity:value}}/>;";
+        let source = "const A=({value})=><div style={{'--sz':1, \"--sy\":2}} sz={{w:value,bg:value,rotate:value,duration:value,opacity:value,grow:value}}/>;";
         let ir = parse_source_shell(&TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
             source: source.to_string(),
@@ -688,7 +725,7 @@ mod tests {
         let result = apply_css_variable_mangling(&ir, source, None);
         let vars = &result.ir.sz_attributes[0].dynamic_css_vars;
 
-        assert_eq!(vars.len(), 5);
+        assert_eq!(vars.len(), 6);
         assert_eq!(
             vars.iter().map(|prop| prop.category).collect::<Vec<_>>(),
             [
@@ -696,13 +733,14 @@ mod tests {
                 DynamicCssVarCategory::Color,
                 DynamicCssVarCategory::Angle,
                 DynamicCssVarCategory::Duration,
+                DynamicCssVarCategory::Factor,
                 DynamicCssVarCategory::Passthrough,
             ]
         );
         assert!(vars
             .iter()
             .all(|prop| prop.var_name != "--sz" && prop.var_name != "--sy"));
-        assert_eq!(result.variable_map.len(), 5);
+        assert_eq!(result.variable_map.len(), 6);
         assert!(result.diagnostics.is_empty());
     }
 

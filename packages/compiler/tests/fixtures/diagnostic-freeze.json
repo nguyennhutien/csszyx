@@ -455,17 +455,18 @@
         ]
     },
     {
-        "code": "numeric-font-weight",
-        "variant": "numeric-string",
+        "code": "clamped-factor",
+        "variant": "percent-string",
         "issues": [
             {
-                "code": "numeric-font-weight",
+                "code": "clamped-factor",
                 "line": 1,
                 "column": 35,
                 "args": {
-                    "value": "700"
+                    "key": "opacity",
+                    "value": "50"
                 },
-                "text": "[csszyx] numeric-font-weight: src/freeze.tsx:1:35\n  `weight: '700'` is a numeric string, so `font-700` produces no CSS.\n  help: write `weight: 700` as a number; it emits `font-[700]`.\n  docs: https://csszyx.com/e/numeric-font-weight"
+                "text": "[csszyx] clamped-factor: src/freeze.tsx:1:35\n  `opacity: '50'` is the CSS value 50, which the browser clamps to 1, the same as `'1'`.\n  help: for 50%, write the number `opacity: 50`; for a fraction of 1, write a string below 1 such as `'0.5'`.\n  docs: https://csszyx.com/e/clamped-factor"
             }
         ]
     },

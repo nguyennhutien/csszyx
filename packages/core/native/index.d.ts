@@ -200,6 +200,8 @@ export interface NativeTransformResult {
         usesSpacingVar?: boolean;
         /** Whether the emitted code calls the __szUnitVar runtime helper. */
         usesUnitVar?: boolean;
+        /** Whether the emitted code calls the __szFactorVar runtime helper. */
+        usesFactorVar?: boolean;
         /** Whether the emitted code calls the __szBoolClass runtime helper. */
         usesBoolClass?: boolean;
         /** Whether the emitted code calls the __szCss class-mark helper. */

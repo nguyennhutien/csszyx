@@ -374,7 +374,7 @@ describe('transform cache', () => {
         expect(readdirSync(cacheRoot).sort()).toEqual(['.gitignore', `${key}.json`]);
         const content = readFileSync(entryFile(cacheRoot, key), 'utf8');
 
-        expect(content).toContain('"version":25');
+        expect(content).toContain('"version":26');
         expect(readTransformCache(cacheRoot, input())).not.toBeNull();
     });
 
@@ -455,6 +455,23 @@ describe('transform cache', () => {
         writeFileSync(file, JSON.stringify(entry), 'utf8');
 
         expect(readTransformCache(cacheRoot, input())).toBeNull();
+    });
+
+    it('rejects a schema-25 entry, which predates `usesFactorVar` and the numeric cells', () => {
+        const cacheRoot = resolveTransformCacheDir(tempRoot());
+        writeTransformCache(cacheRoot, input(), result());
+        const file = entryFile(cacheRoot, createTransformCacheKey(input()).key);
+        const entry = JSON.parse(readFileSync(file, 'utf8')) as { version: number };
+        entry.version = 25;
+        writeFileSync(file, JSON.stringify(entry), 'utf8');
+
+        expect(readTransformCache(cacheRoot, input())).toBeNull();
+    });
+
+    it('round-trips the factor helper flag', () => {
+        const cacheRoot = resolveTransformCacheDir(tempRoot());
+        writeTransformCache(cacheRoot, input(), { ...result(), usesFactorVar: true });
+        expect(readTransformCache(cacheRoot, input())?.usesFactorVar).toBe(true);
     });
 
     it('keys and validates entries on the native engine identity', () => {

@@ -129,6 +129,9 @@ pub struct TransformMetadata {
     /// Whether the result imports the runtime unit-var helper (angle/duration).
     #[serde(default)]
     pub uses_unit_var: bool,
+    /// Whether the result imports the runtime factor-var helper (percent keys, `leading`).
+    #[serde(default)]
+    pub uses_factor_var: bool,
     /// Whether the result imports the runtime bool-class helper (boolean-only keys).
     #[serde(default)]
     pub uses_bool_class: bool,

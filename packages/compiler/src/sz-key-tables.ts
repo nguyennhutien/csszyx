@@ -756,9 +756,9 @@ export const BOOLEAN_SHORTHANDS: ReadonlySet<string> = new Set([
 ]);
 
 // The shorthands whose type is `boolean` alone: `true` is the class, `false`
-// is none, and any other value is outside the key's type, so it emits nothing
-// and is reported (`closed-enum-value`, form `flag`) instead of lowering to a
-// class such as `truncate-2`. `container`, `prose` and `proseInvert` are left
+// is none, and any other value is outside the key's type, so it is reported
+// (`closed-enum-value`, form `flag`) and its class (`truncate-2`) is still
+// written, for a project that defines one. `container`, `prose` and `proseInvert` are left
 // out: a plugin owns their names. Generated into the engine's tables
 // (`is_flag_only`); `flag-only-keys.test.ts` holds it to `sz-props.ts`.
 /** @internal Used by csszyx's own packages; not a stable API. */
@@ -778,4 +778,85 @@ export const FLAG_ONLY_KEYS: ReadonlySet<string> = new Set([
     'divideYReverse',
     'spaceXReverse',
     'spaceYReverse',
+]);
+
+// The four tables below place a key by comparing Tailwind's bare class with
+// its bracket class for the same number (ADR 0037). Every Tailwind in the
+// version matrix answers the same, which `numeric-key-cells.test.ts` in the
+// oracle package checks; each is generated into the engine's tables.
+
+// Bare and bracket are the same CSS on an integer (`grow-2`, `grow-[2]`), and
+// the bare class is dead on a decimal: a number writes the bare class Tailwind
+// users write by hand, and csszyx brackets a decimal itself (`grow-[2.5]`).
+// Generated as `brackets_bare_decimal`.
+/** @internal Used by csszyx's own packages; not a stable API. */
+export const DECIMAL_BRACKET_KEYS: ReadonlySet<string> = new Set([
+    'grow',
+    'shrink',
+    'flex',
+    'stroke',
+    'strokeWidth',
+    'tabSize',
+]);
+
+// The bare class is dead for every number (`aspect-2`, `font-700`), and the
+// bracket sets the number written. Generated as `brackets_every_number`.
+/** @internal Used by csszyx's own packages; not a stable API. */
+export const NUMBER_BRACKET_KEYS: ReadonlySet<string> = new Set(['aspect', 'weight']);
+
+// The bracket is valid CSS that means something other than the bare class: a
+// number is Tailwind's scale (`opacity-50` = 50%, `leading-6` = spacing), and a
+// numeric string is the CSS value itself (`opacity: '.5'` → `opacity-[0.5]`).
+// A runtime value on these keys goes through `__szFactorVar`, which reads a
+// number and a string the same two ways. Generated as `is_factor_string_key`.
+/** @internal Used by csszyx's own packages; not a stable API. */
+export const FACTOR_STRING_KEYS: ReadonlySet<string> = new Set([
+    'opacity',
+    'scale',
+    'scaleX',
+    'scaleY',
+    'scaleZ',
+    'zoom',
+    'brightness',
+    'contrast',
+    'saturate',
+    'grayscale',
+    'invert',
+    'sepia',
+    'backdropBrightness',
+    'backdropContrast',
+    'backdropSaturate',
+    'backdropGrayscale',
+    'backdropInvert',
+    'backdropSepia',
+    'backdropOpacity',
+    'leading',
+]);
+
+// Factor keys whose CSS function clamps at 1, so a string above 1 is the same
+// as 1 and almost always a percent written as a string (`opacity: '50'`).
+// Reported as `clamped-factor`. Generated as `clamps_factor_at_one`.
+/** @internal Used by csszyx's own packages; not a stable API. */
+export const CLAMPED_FACTOR_KEYS: ReadonlySet<string> = new Set([
+    'opacity',
+    'grayscale',
+    'invert',
+    'sepia',
+    'backdropOpacity',
+    'backdropGrayscale',
+    'backdropInvert',
+    'backdropSepia',
+]);
+
+// Keys whose string value is text, not a number, so a numeric string keeps its
+// string meaning: `content: '4'` is the text 4, `bgImg: '4'` a URL. Every other
+// key reads a numeric string as the number it spells (ADR 0037); so does every
+// key but a container query (`'@md': '1'`) and the `group`/`peer` names, whose
+// string is a name. Generated into the engine's tables (`keeps_numeric_string`).
+/** @internal Used by csszyx's own packages; not a stable API. */
+export const NUMERIC_TEXT_KEYS: ReadonlySet<string> = new Set([
+    'content',
+    'bgImg',
+    'group',
+    'peer',
 ]);

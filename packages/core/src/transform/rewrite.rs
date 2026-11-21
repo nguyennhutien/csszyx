@@ -1014,6 +1014,13 @@ fn dynamic_style_value_source(source: &str, prop: &DynamicCssVarIr) -> String {
                 js_string_literal(&prop.key)
             )
         }
+        DynamicCssVarCategory::Factor => {
+            format!(
+                "{}({expression}, {})",
+                local("__szFactorVar"),
+                js_string_literal(&prop.key)
+            )
+        }
         DynamicCssVarCategory::Passthrough => expression.to_string(),
     }
 }
@@ -2251,14 +2258,15 @@ mod tests {
 
     #[test]
     fn rewrites_each_dynamic_css_var_category() {
-        let source = "const App = ({ color, angle, milliseconds, value }) => <div sz={{ bg: color, rotate: angle, duration: milliseconds, opacity: value }} />;";
+        let source = "const App = ({ color, angle, milliseconds, value, factor }) => <div sz={{ bg: color, rotate: angle, duration: milliseconds, opacity: factor, grow: value }} />;";
         let rewritten = rewrite(source).expect("rewritten");
 
         assert!(rewritten.contains("\"--_sz-bg\": __szColorVar(color)"));
         assert!(rewritten.contains("\"--_sz-rotate\": __szUnitVar(angle, \"deg\", \"rotate\")"));
         assert!(rewritten
             .contains("\"--_sz-duration\": __szUnitVar(milliseconds, \"ms\", \"duration\")"));
-        assert!(rewritten.contains("\"--_sz-opacity\": value"));
+        assert!(rewritten.contains("\"--_sz-opacity\": __szFactorVar(factor, \"opacity\")"));
+        assert!(rewritten.contains("\"--_sz-grow\": value"));
     }
 
     #[test]

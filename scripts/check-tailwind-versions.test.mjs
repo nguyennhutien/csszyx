@@ -130,6 +130,7 @@ test('writes the baseline so a regenerated file is already the formatted one', (
             table: [],
             variant: [],
             underscore: [],
+            cells: [],
         },
     };
     const text = renderBaseline('4.3.3', found);

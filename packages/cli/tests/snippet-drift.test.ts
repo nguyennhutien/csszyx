@@ -44,10 +44,6 @@ const fixture = JSON.parse(
 const COMPILER_EMITS_DEAD_CLASS: readonly string[] = [
     '{"basis":"2.5/4"} basis-[2.5/4] -> basis-2.5/4',
     '{"flex":"3.5/4"} flex-[3.5/4] -> flex-3.5/4',
-    '{"flex":3.5} flex-[3.5] -> flex-3.5',
-    '{"grow":2.5} grow-[2.5] -> grow-2.5',
-    '{"shrink":2.5} shrink-[2.5] -> shrink-2.5',
-    '{"strokeWidth":0.5} stroke-[0.5] -> stroke-0.5',
 ];
 
 /**

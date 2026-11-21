@@ -20,6 +20,15 @@ const check = process.argv.includes('--check');
  */
 const SZ_CAPABILITY_READ_FORMAT = 1;
 
+/** The bit each numeric-key table owns in \`numeric_key_bits\`. */
+const NUMERIC_KEY_BITS = {
+    decimalBracketKeys: 1,
+    numberBracketKeys: 2,
+    factorStringKeys: 4,
+    clampedFactorKeys: 8,
+    numericTextKeys: 16,
+};
+
 /**
  * The column constants of the capability table, in bit order. A row letter no
  * constant names fails the run, so a new column is rendered on purpose.
@@ -84,6 +93,11 @@ function readTables() {
             booleanToClass: core.stringObject('BOOLEAN_TO_CLASS'),
             booleanShorthands: keyTables.stringSet('BOOLEAN_SHORTHANDS'),
             flagOnlyKeys: keyTables.stringSet('FLAG_ONLY_KEYS'),
+            decimalBracketKeys: keyTables.stringSet('DECIMAL_BRACKET_KEYS'),
+            numericTextKeys: keyTables.stringSet('NUMERIC_TEXT_KEYS'),
+            numberBracketKeys: keyTables.stringSet('NUMBER_BRACKET_KEYS'),
+            factorStringKeys: keyTables.stringSet('FACTOR_STRING_KEYS'),
+            clampedFactorKeys: keyTables.stringSet('CLAMPED_FACTOR_KEYS'),
             booleanOnlyDynamicKeys: core.objectKeys('BOOLEAN_ONLY_DYNAMIC_VOCABULARY'),
             knownSpecialProperties: keyTables.stringSet('KNOWN_SPECIAL_PROPERTIES'),
             cssWideKeywords: core.stringSet('CSS_WIDE_KEYWORDS'),
@@ -162,6 +176,11 @@ function renderRust({
     booleanToClass,
     booleanShorthands,
     flagOnlyKeys,
+    decimalBracketKeys,
+    numericTextKeys,
+    numberBracketKeys,
+    factorStringKeys,
+    clampedFactorKeys,
     booleanOnlyDynamicKeys,
     knownSpecialProperties,
     cssWideKeywords,
@@ -284,12 +303,55 @@ ${renderMatchPatterns(booleanShorthands)}
 }
 
 /// Returns true when a key takes only \`true\` or \`false\`: any other value
-/// emits nothing and is reported (\`closed-enum-value\`, form \`flag\`).
+/// is reported (\`closed-enum-value\`, form \`flag\`) and its class is still
+/// written.
 pub(crate) fn is_flag_only(key: &str) -> bool {
     matches!(
         key,
 ${renderMatchPatterns(flagOnlyKeys)}
     )
+}
+
+/// Where a key sits among the numeric-key tables of \`sz-key-tables.ts\`
+/// (ADR 0037), one bit per table: one string match for all five, where five
+/// \`matches!\` cost the wasm artifact five chains of comparisons.
+fn numeric_key_bits(key: &str) -> u8 {
+    match key {
+${renderNumericKeyBits({ decimalBracketKeys, numberBracketKeys, factorStringKeys, clampedFactorKeys, numericTextKeys })}
+        _ => 0,
+    }
+}
+
+/// Returns true when csszyx brackets a bare decimal on this key itself
+/// (\`grow: 2.5\` → \`grow-[2.5]\`): the bare class has no rule, and the
+/// bracket sets the property to the number written (ADR 0037).
+pub(crate) fn brackets_bare_decimal(key: &str) -> bool {
+    numeric_key_bits(key) & ${NUMERIC_KEY_BITS.decimalBracketKeys} != 0
+}
+
+/// Returns true when every number on this key brackets (\`aspect: 2\` →
+/// \`aspect-[2]\`): the bare class is dead for any number (ADR 0037).
+pub(crate) fn brackets_every_number(key: &str) -> bool {
+    numeric_key_bits(key) & ${NUMERIC_KEY_BITS.numberBracketKeys} != 0
+}
+
+/// Returns true when a numeric string on this key is the CSS value itself
+/// (\`opacity: '.5'\` → \`opacity-[0.5]\`) while a number keeps Tailwind's
+/// scale (ADR 0037).
+pub(crate) fn is_factor_string_key(key: &str) -> bool {
+    numeric_key_bits(key) & ${NUMERIC_KEY_BITS.factorStringKeys} != 0
+}
+
+/// Returns true when this factor key's CSS function clamps at 1, so a string
+/// above 1 is reported as \`clamped-factor\`.
+pub(crate) fn clamps_factor_at_one(key: &str) -> bool {
+    numeric_key_bits(key) & ${NUMERIC_KEY_BITS.clampedFactorKeys} != 0
+}
+
+/// Returns true when a key's string value is text, not a number, so a numeric
+/// string keeps its string meaning (\`content: '4'\`).
+pub(crate) fn keeps_numeric_string(key: &str) -> bool {
+    numeric_key_bits(key) & ${NUMERIC_KEY_BITS.numericTextKeys} != 0
 }
 
 /// Returns true when a key's DYNAMIC value must lower to a conditional bare
@@ -600,6 +662,20 @@ function renderPairArms(entries) {
             return `        ${rustString(key)} => Some((${rustString(shape.key)}, ${rustString(shape.value)})),`;
         })
         .join('\n');
+}
+
+/**
+ * One match arm per key of the numeric-key tables, its bits OR-ed.
+ *
+ * @param {Record<keyof typeof NUMERIC_KEY_BITS, readonly string[]>} tables - The tables.
+ * @returns {string} The arms, in first-seen key order.
+ */
+function renderNumericKeyBits(tables) {
+    const bits = new Map();
+    for (const [name, bit] of Object.entries(NUMERIC_KEY_BITS)) {
+        for (const key of tables[name]) bits.set(key, (bits.get(key) ?? 0) | bit);
+    }
+    return [...bits].map(([key, value]) => `        ${rustString(key)} => ${value},`).join('\n');
 }
 
 function renderMatchPatterns(entries) {

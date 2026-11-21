@@ -30,7 +30,11 @@
  * - `underscore`: an `_` in one of {@link UNDERSCORE_CASES} this version
  *   reads as a space and the pin keeps, or the other way round — the docs say
  *   where Tailwind keeps an `_`, and the build's `underscore-space` asks the
- *   project's own Tailwind either way.
+ *   project's own Tailwind either way;
+ * - `cells`: a key of the numeric-key tables in `sz-key-tables.ts` this version
+ *   puts in another cell (`numeric-key-cells.mjs`) — the lanes would write a
+ *   bare class this version does not serve, or a bracket that means something
+ *   else (ADR 0037).
  *
  * Each list, per version, is a ratchet baseline in
  * `packages/tailwind-oracle/tests/fixtures/tailwind-versions-baseline.json`:
@@ -64,6 +68,7 @@ import {
     stateVariantDifferences,
 } from './gen-state-variants.mjs';
 import { COLUMN_PROBES, COLUMNS, measureCapabilities } from './gen-sz-capabilities.mjs';
+import { numericKeyCellFindings } from './numeric-key-cells.mjs';
 
 /**
  * The Tailwind versions the gate asks, each with the sha512 of its npm
@@ -111,7 +116,7 @@ export const TAILWIND_VERSIONS = [
 export const BASELINE_FORMAT = 1;
 
 /** The finding lists, in the order they are reported. */
-const KINDS = ['regressed', 'dead', 'spelling', 'table', 'variant', 'underscore'];
+const KINDS = ['regressed', 'dead', 'spelling', 'table', 'variant', 'underscore', 'cells'];
 
 /**
  * An `_` in each place the docs and the AI docs name, as the engine reports
@@ -455,6 +460,13 @@ async function main() {
     const { SZ_CAPABILITIES } = await import(
         '../packages/compiler/src/sz-capabilities.generated.js'
     );
+    const keyTables = await import('../packages/compiler/src/sz-key-tables.js');
+    const numericTables = {
+        decimalBracket: keyTables.DECIMAL_BRACKET_KEYS,
+        numberBracket: keyTables.NUMBER_BRACKET_KEYS,
+        factorString: keyTables.FACTOR_STRING_KEYS,
+        clampedFactor: keyTables.CLAMPED_FACTOR_KEYS,
+    };
     const { SERVED_STATE_VARIANTS, STATE_VARIANT_FORMS } = await import(
         '../packages/compiler/src/state-variants.generated.js'
     );
@@ -540,6 +552,9 @@ async function main() {
                     classes => [oracle.cssFor(classes)],
                 ).map(finding => finding.className),
             ),
+            cells: numericKeyCellFindings(numericTables, PROPERTY_MAP, classes =>
+                oracle.cssFor(classes),
+            ),
             timing: { install: t1 - t0, ask: performance.now() - t1, cached },
         });
     }
@@ -559,6 +574,7 @@ async function main() {
                     perVersion.get(version).underscore,
                     perVersion.get(pin).underscore,
                 ),
+                cells: perVersion.get(version).cells,
             },
         ]),
     );

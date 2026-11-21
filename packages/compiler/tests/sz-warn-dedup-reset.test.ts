@@ -25,7 +25,7 @@ const ONE_PER_SET: ReadonlyArray<readonly [string, SzObject]> = [
     ['a csszyx-owned key holding an object', { '--gap': { p: 1 } }],
     ['removed boolean sugar', { inlineGrid: true }],
     ['an unknown key', { colour: 'red' }],
-    ['a numeric font weight string', { weight: '600' }],
+    ['a factor string above 1', { opacity: '50' }],
     ['a moved value', { touch: 'pan-left' }],
     ['a stand-alone key before its group', { contain: 'strict', containLayout: true }],
 ];

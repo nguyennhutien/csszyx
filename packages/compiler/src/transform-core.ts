@@ -25,6 +25,7 @@ import {
     settleGlobalKeywords,
 } from './keyword-families.js';
 import type { TokenData } from './manifest.js';
+import { NUMERIC_STRING } from './numeric-string.js';
 import { own } from './own.js';
 import type { ParserMode } from './parser-mode.js';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
@@ -32,10 +33,15 @@ import { SZ_CAP_CSS_WIDE_BRACKET, SZ_CAPABILITIES } from './sz-capabilities.gene
 import { szNodeWarningsUnmuted, szWarningsQuiet } from './sz-dev-warnings.js';
 import {
     BOOLEAN_SHORTHANDS,
+    CLAMPED_FACTOR_KEYS,
+    DECIMAL_BRACKET_KEYS,
+    FACTOR_STRING_KEYS,
     FLAG_ONLY_KEYS,
     KNOWN_SPECIAL_PROPERTIES,
     KNOWN_VARIANTS,
     MIGRATION_NOTES,
+    NUMBER_BRACKET_KEYS,
+    NUMERIC_TEXT_KEYS,
     PROPERTY_MAP,
     SPLIT_SHORTHAND_KEYS,
     SUGGESTION_MAP,
@@ -109,6 +115,7 @@ import {
     BRACKETED_VALUE,
     BROKEN_OPACITY,
     CANONICAL_KEY,
+    CLAMPED_FACTOR,
     CLOSED_ENUM_VALUE,
     COLOR_SLASH_OPACITY,
     DEV_WARNINGS_PARTIAL,
@@ -116,7 +123,6 @@ import {
     GLOBAL_BEFORE_GROUP,
     MOVED_VALUE,
     NON_VARIANT_OBJECT,
-    NUMERIC_FONT_WEIGHT,
     NUMERIC_KEY,
     OFF_SCALE_VALUE,
     OPACITY_VALUE,
@@ -931,36 +937,33 @@ function warnBorderSideStyle(key: string, value: string): void {
     }
 }
 
-/** Weight values already nudged about the bare numeric class (once each). */
-const _warnedWeightValues = new Set<string>();
+/** `key:value` pairs already reported as `clamped-factor` (once each). */
+const _warnedClampedFactors = new Set<string>();
 
 /**
- * Warns when a font weight is written as a numeric STRING.
+ * Reports a numeric string above 1 on a key whose CSS function clamps at 1.
  *
- * Tailwind v4 spells weights through `--font-weight-*`, so `font-700` is not
- * a utility and generates no CSS; that is why the NUMBER form is bracketed
- * (`{ weight: 700 }` emits `font-[700]`). A string took the generic path and
- * emitted the bare class instead, which styled nothing and said nothing.
+ * `opacity: '50'` is the CSS value 50, which the browser applies as 1: the
+ * string is almost always a percent that arrived as text. The class is still
+ * written, since it is what the author asked for.
  *
- * The class is still emitted, the way a dead spacing step is: the warning
- * reports what Tailwind will do with what the author wrote, rather than
- * rewriting it into something they did not.
- *
- * @param rawKey - The sz property key.
- * @param value - The string value about to be emitted bare.
+ * @param rawKey - The factor key.
+ * @param value - The numeric string, as written.
  */
-function warnDeadWeightValue(rawKey: string, value: string): void {
-    // The key test first: every string value reaches this line, and the
-    // environment reads are the expensive half.
-    if (rawKey !== 'weight') return;
+function warnClampedFactor(rawKey: string, value: string): void {
+    if (!CLAMPED_FACTOR_KEYS.has(rawKey) || Number(value) <= 1) return;
+    const seen = `${rawKey}:${value}`;
     if (
         process.env.NODE_ENV !== 'production' &&
         szNodeWarningsUnmuted() &&
-        /^\d+(?:\.\d+)?$/.test(value) &&
-        !_warnedWeightValues.has(value)
+        !_warnedClampedFactors.has(seen)
     ) {
-        _warnedWeightValues.add(value);
-        szReport({ diagnostic: NUMERIC_FONT_WEIGHT, args: { value }, at: szWarnLocation });
+        _warnedClampedFactors.add(seen);
+        szReport({
+            diagnostic: CLAMPED_FACTOR,
+            args: { key: rawKey, value },
+            at: szWarnLocation,
+        });
     }
 }
 
@@ -3949,19 +3952,6 @@ function formatNumericUtility(key: string, value: number): string {
     return value < 0 ? `-${key}-${Math.abs(value)}` : `${key}-${value}`;
 }
 
-/**
- * Whether a leading/lineHeight value must bracket as an unitless ratio.
- * Numbers ride Tailwind's spacing scale (leading-1.5 = 0.375rem) like every
- * other spacing utility; numeric STRINGS are the unitless line-height ratio
- * and auto-bracket (leading: '1.5' → leading-[1.5]). Non-quarter-step numbers
- * (1.4) have no bare spelling — Tailwind drops leading-1.4 — so they bracket
- * too instead of emitting a dead class.
- */
-function isUnitlessLeadingRatio(value: unknown): value is number | string {
-    if (typeof value === 'number') return (value * 4) % 1 !== 0;
-    return typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value);
-}
-
 /** Collects the scalar property forms that remain after specialized dispatch. */
 function collectFallbackProperty(
     rawKey: string,
@@ -3981,10 +3971,6 @@ function collectFallbackProperty(
     if (rawKey === 'animationDelay') {
         // An object took the object arm before reaching here.
         classes.push(`${prefix}[animation-delay:${animationDelayValue(value as SzLiteral)}]`);
-        return;
-    }
-    if ((rawKey === 'leading' || rawKey === 'lineHeight') && isUnitlessLeadingRatio(value)) {
-        classes.push(`${prefix}leading-[${value}]`);
         return;
     }
     if (typeof value === 'number') collectNumericProperty(rawKey, key, value, prefix, classes);
@@ -4022,13 +4008,14 @@ function collectNumericProperty(
     prefix: string,
     classes: string[],
 ): void {
-    // Tailwind v4 spells font weights through the `--font-weight-*` theme
-    // namespace, so the utility is always a NAME: it serves no `font-<number>`
-    // at all, not even the nine standard steps. Every numeric weight used to
-    // emit a bare class that styled nothing. The bracket carries the literal
-    // the author wrote, which is exactly what `{ weight: N }` asks for, and
-    // needs no theme declaration. Same reasoning as the leading ratio above.
-    if (rawKey === 'weight') {
+    // The bare class is dead and the bracket sets the number written: every
+    // number on `aspect`/`weight` (Tailwind spells weights by name through
+    // `--font-weight-*`), a decimal where bare and bracket otherwise agree
+    // (`grow-[2.5]`). ADR 0037; mirrors `format_static_class_value`.
+    if (
+        NUMBER_BRACKET_KEYS.has(rawKey) ||
+        (DECIMAL_BRACKET_KEYS.has(rawKey) && !Number.isInteger(value))
+    ) {
         classes.push(`${prefix}${key}-[${value}]`);
         return;
     }
@@ -4056,11 +4043,6 @@ function collectStringProperty(
         warnBorderSideStyle(rawKey, value);
         return;
     }
-    if (/^-?\d+(?:\.\d+)?$/.test(value)) {
-        const step = Number(value);
-        if (isDeadSpacingStep(rawKey, step)) warnDeadSpacingStep(rawKey, step);
-    }
-    warnDeadWeightValue(rawKey, value);
     classes.push(buildGenericStringClass(rawKey, key, value, prefix));
 }
 
@@ -4195,7 +4177,7 @@ export function __resetSzWarnDedupForTests(): void {
     warnedRemovedSugar.clear();
     _warnedUnknownSzProperties.clear();
     _announcedUnknownSzPropertyCap = false;
-    _warnedWeightValues.clear();
+    _warnedClampedFactors.clear();
     _warnedMovedValues.clear();
     _warnedGlobalsBeforeGroups.clear();
 }
@@ -4499,6 +4481,60 @@ function collectAliasOrRemovedKey(rawKey: string, value: SzValue, szProp: SzObje
 }
 
 /**
+ * The value a key lowers: a numeric string as the number it spells (ADR 0037),
+ * so `{ p: '4' }` from JSON writes what `{ p: 4 }` writes. A key whose string
+ * is text or a name (`content`, `bgImg`, `group`, `peer`, `'@md'`), a factor
+ * key (whose string is the CSS value, see `collectFactorString`), a
+ * closed-enum key and a custom property keep the string. Mirrors
+ * `numeric_string_value` in `lower.rs`.
+ *
+ * @param rawKey - The sz key as written.
+ * @param value - Its value, after the important modifier was split off.
+ * @returns The number, or the value unchanged.
+ */
+function numericStringValue(rawKey: string, value: SzValue): SzValue {
+    if (typeof value !== 'string' || !NUMERIC_STRING.test(value)) return value;
+    if (
+        NUMERIC_TEXT_KEYS.has(rawKey) ||
+        FACTOR_STRING_KEYS.has(rawKey) ||
+        rawKey.startsWith('--') ||
+        rawKey.startsWith('@')
+    ) {
+        return value;
+    }
+    if (own(CLOSED_ENUM_CLASSES, rawKey) !== undefined) return value;
+    return Number(value);
+}
+
+/**
+ * A numeric string on a factor key is the CSS value itself (ADR 0037):
+ * `opacity: '.5'` → `opacity-[0.5]`, where the number `opacity: 50` keeps
+ * Tailwind's percent. The number is written the way JavaScript prints it, so
+ * `'.5'`, `'0.5'` and `'0.50'` share one class. Mirrors `factor_string_class`
+ * in `lower.rs`.
+ *
+ * Cost: one regex test on the value, linear in its length; every lane.
+ *
+ * @param rawKey - The sz key as written.
+ * @param value - Its value, after the important modifier was split off.
+ * @param prefix - The variant prefix in effect.
+ * @param classes - Where the class goes.
+ * @returns True when the value was a numeric string on a factor key.
+ */
+function collectFactorString(
+    rawKey: string,
+    value: SzValue,
+    prefix: string,
+    classes: string[],
+): boolean {
+    if (typeof value !== 'string' || !FACTOR_STRING_KEYS.has(rawKey)) return false;
+    if (!NUMERIC_STRING.test(value)) return false;
+    warnClampedFactor(rawKey, value);
+    classes.push(`${prefix}${own(PROPERTY_MAP, rawKey) as string}-[${String(Number(value))}]`);
+    return true;
+}
+
+/**
  * Collects one property after filtering inactive values and shortcut forms.
  * `splitImportant` is false for the value left after one `!` was split off,
  * so `x!!` keeps its second `!` in the value, as on the engine.
@@ -4514,7 +4550,22 @@ function collectTransformProperty(
     if (value === false || value === null || value === undefined) return;
     if (dropBracketedValue(rawKey, value)) return;
     if (splitImportant && collectImportantProperty(rawKey, value, prefix, szProp, classes)) return;
+    collectValueProperty(rawKey, numericStringValue(rawKey, value), prefix, szProp, classes);
+}
+
+/**
+ * Collects one property once its value is read: the important modifier split
+ * off and a numeric string turned into its number.
+ */
+function collectValueProperty(
+    rawKey: string,
+    value: SzValue,
+    prefix: string,
+    szProp: SzObject,
+    classes: string[],
+): void {
     if (collectAliasOrRemovedKey(rawKey, value, szProp)) return;
+    if (collectFactorString(rawKey, value, prefix, classes)) return;
     if (typeof value === 'string' && ALIGNMENT_KEYS.has(rawKey)) warnAlignmentValue(rawKey, value);
     if (collectRemovedBooleanSugar(rawKey, value)) return;
     if (collectObjectProperty(rawKey, value, prefix, classes)) return;
@@ -4781,6 +4832,7 @@ export interface SourceTransformResult {
     usesColorVar: boolean;
     usesSpacingVar: boolean;
     usesUnitVar: boolean;
+    usesFactorVar: boolean;
     /** Whether the source needs the bool-class runtime helper. */
     usesBoolClass: boolean;
     /** Whether the code calls the `__szCss` class-mark helper. */

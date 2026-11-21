@@ -226,8 +226,8 @@ describe('typography — line height (leading)', () => {
         expect(t({ leading: '1.5' })).toBe('leading-[1.5]');
     });
 
-    it('{ leading: 1.4 } → leading-[1.4] (non-quarter-step number falls back to ratio)', () => {
-        expect(t({ leading: 1.4 })).toBe('leading-[1.4]');
+    it('{ leading: 1.4 } → leading-1.4 (a number is the spacing scale, off-step included)', () => {
+        expect(t({ leading: 1.4 })).toBe('leading-1.4');
     });
 
     it('{ leading: "6" } → leading-[6] (integer string is still a ratio)', () => {
@@ -259,8 +259,12 @@ describe('typography — text/leading shorthand', () => {
         expect(t({ text: 'sm', leading: 1.5 })).toBe('text-sm/1.5');
     });
 
-    it('{ text: "sm", leading: 1.4 } → text-sm/[1.4] (no bare class for 1.4)', () => {
-        expect(t({ text: 'sm', leading: 1.4 })).toBe('text-sm/[1.4]');
+    it('{ text: "sm", leading: 1.4 } → text-sm/1.4 (a number is the spacing scale)', () => {
+        expect(t({ text: 'sm', leading: 1.4 })).toBe('text-sm/1.4');
+    });
+
+    it('{ text: "sm", leading: ".5" } → text-sm/[0.5] (a numeric string is the ratio)', () => {
+        expect(t({ text: 'sm', leading: '.5' })).toBe('text-sm/[0.5]');
     });
 });
 

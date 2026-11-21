@@ -366,6 +366,8 @@ pub struct NativeTransformMetadata {
     pub uses_spacing_var: bool,
     /// Whether the result imports the runtime unit-var helper (angle/duration).
     pub uses_unit_var: bool,
+    /// Whether the result imports the runtime factor-var helper (percent keys, `leading`).
+    pub uses_factor_var: bool,
     /// Whether the result imports the runtime bool-class helper.
     pub uses_bool_class: bool,
     /// Whether the result calls the runtime class-mark helper `__szCss`.
@@ -540,6 +542,7 @@ impl From<TransformResult> for NativeTransformResult {
                 uses_color_var: result.metadata.uses_color_var,
                 uses_spacing_var: result.metadata.uses_spacing_var,
                 uses_unit_var: result.metadata.uses_unit_var,
+                uses_factor_var: result.metadata.uses_factor_var,
                 uses_bool_class: result.metadata.uses_bool_class,
                 uses_class_mark: result.metadata.uses_class_mark,
                 helper_aliases: Some(result.metadata.helper_aliases)

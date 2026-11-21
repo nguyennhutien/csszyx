@@ -79,6 +79,7 @@ interface WasmResultJson {
         uses_color_var: boolean;
         uses_spacing_var: boolean;
         uses_unit_var: boolean;
+        uses_factor_var: boolean;
         uses_bool_class: boolean;
         uses_class_mark: boolean;
         helper_aliases?: string[];
@@ -439,6 +440,7 @@ function fromWasmResult(
         usesColorVar: result.metadata.uses_color_var,
         usesSpacingVar: result.metadata.uses_spacing_var,
         usesUnitVar: result.metadata.uses_unit_var,
+        usesFactorVar: result.metadata.uses_factor_var,
         usesBoolClass: result.metadata.uses_bool_class,
         usesClassMark: result.metadata.uses_class_mark,
         classes: new Set(result.classes),

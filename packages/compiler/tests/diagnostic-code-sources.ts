@@ -42,7 +42,7 @@ export const CODE_SOURCES: ReadonlyArray<
     ['off-scale-value', 'export const A = () => <div sz={{ p: 1.3 }} />;'],
     ['bracketed-value', "export const A = () => <div sz={{ w: '[100px]' }} />;"],
     ['opacity-value', "export const A = () => <div sz={{ bg: { color: 'red-500', op: 150 } }} />;"],
-    ['numeric-font-weight', "export const A = () => <div sz={{ weight: '700' }} />;"],
+    ['clamped-factor', "export const A = () => <div sz={{ opacity: '50' }} />;"],
     [
         'per-side-border-style',
         "export const A = () => <div sz={{ hover: { borderT: 'dashed' } }} />;",

@@ -39,6 +39,7 @@ pub const HELPERS: &[&str] = &[
     "__szColorVar",
     "__szSpacingVar",
     "__szUnitVar",
+    "__szFactorVar",
     "__szBoolClass",
     "__szCss",
 ];
