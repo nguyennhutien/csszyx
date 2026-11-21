@@ -115,6 +115,10 @@ describe.each(LANES)('the opacity of a colour object — %s', (_name, lower) => 
             className: 'bg-red-500/[0.0000001%]',
             kinds: ['opacity-value'],
         });
+        expect(lower('1e-9')).toEqual({
+            className: 'bg-red-500/[0.000000001%]',
+            kinds: ['opacity-value'],
+        });
     });
 
     it('keeps a percent string from 0 to 100 as written', () => {

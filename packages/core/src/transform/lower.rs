@@ -2944,7 +2944,9 @@ fn format_opacity_value(value: &StaticSzValue) -> Option<String> {
             Some(if (op * 4.0).fract() == 0.0 {
                 format_number_literal(*op)
             } else {
-                format!("[{}%]", format_number_literal(*op))
+                // Never an exponent inside the percent: `Display` writes
+                // `0.0000001`, as `plainDecimal` in `transform-core.ts` does.
+                format!("[{op}%]")
             })
         }
         StaticSzValue::String(op) if op.starts_with("--") => Some(format!("({op})")),
@@ -3016,7 +3018,8 @@ fn push_invalid_opacity(key: &str, op: &StaticSzProperty, out: &mut Vec<InvalidO
     let percent = match (&op.value, format_opacity_value(&op.value)) {
         (_, None) => None,
         (StaticSzValue::Number(number), Some(_)) if *number > 0.0 && *number < 1.0 => {
-            Some(format_number_literal((number * 100.0 * 1e9).round() / 1e9))
+            // `Display`, never an exponent, as `plainDecimal` writes it.
+            Some(((number * 100.0 * 1e9).round() / 1e9).to_string())
         }
         (_, Some(_)) => return,
     };

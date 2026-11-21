@@ -150,6 +150,8 @@ const CASES: Readonly<Record<string, readonly SzObject[]>> = {
     'opacity-value/fraction': [
         { bg: { color: 'red-500', op: 0.05 } },
         { maskLinear: { from: { color: 'red-500', op: 0.3 } } },
+        // The op as JavaScript prints it, the percent with no exponent.
+        { bg: { color: 'red-500', op: 1e-9 } },
     ],
     'clamped-factor': [
         { opacity: '50' },
