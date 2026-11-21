@@ -51,7 +51,10 @@ import { sha256Of } from './content-digest.js';
 // 25: the names the code calls a renamed helper by (`helperAliases`); a
 // schema-24 entry would import the helper under its own name, which the calls
 // no longer use.
-const CACHE_SCHEMA_VERSION = 25;
+// 26: a runtime value on a percent key or `leading` calls `__szFactorVar`
+// (`usesFactorVar`), and numbers and numeric strings lower by key cell; a
+// schema-25 entry replays the old classes and leaves the helper unimported.
+const CACHE_SCHEMA_VERSION = 26;
 
 /** Parser implementation that produced a cache entry. */
 export type TransformCacheProducer = 'rust' | 'wasm';

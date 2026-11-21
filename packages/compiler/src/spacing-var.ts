@@ -14,6 +14,7 @@
  * have lowered the same literal.
  */
 
+import { NUMERIC_STRING } from './numeric-string.js';
 import { own } from './own.js';
 import { DYNAMIC_UNRESOLVABLE, szReport } from './report.js';
 
@@ -99,7 +100,7 @@ export function __szSpacingVar(v: unknown, key: string): string | undefined {
         }
         return undefined;
     }
-    if (/^-?\d+(?:\.\d+)?$/.test(v)) {
+    if (NUMERIC_STRING.test(v)) {
         return `calc(${v} * var(--spacing))`;
     }
     const fraction = /^(\d+)\/(\d+)$/.exec(v);
@@ -171,7 +172,7 @@ export function __szUnitVar(v: unknown, unit: string, key: string): string | und
         }
         return undefined;
     }
-    if (/^-?\d+(?:\.\d+)?$/.test(v)) {
+    if (NUMERIC_STRING.test(v)) {
         return `${v}${unit}`;
     }
     return v;

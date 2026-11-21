@@ -19,7 +19,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { __szFactorVar } from '../src/spacing-var.js';
+import { __szFactorVar, __szSpacingVar, __szUnitVar } from '../src/spacing-var.js';
+import { FACTOR_STRING_KEYS } from '../src/sz-key-tables.js';
 import { __resetSzWarnDedupForTests, type SzObject, transform } from '../src/transform-core.js';
 import { ENGINES } from './engine-parity-harness.js';
 import { szCodeOf } from './helpers/sz-console-line.js';
@@ -69,6 +70,14 @@ const CASES: ReadonlyArray<readonly [Record<string, unknown>, string]> = [
     [{ weight: '700' }, 'font-[700]'],
     // Text keys keep their string.
     [{ content: '"4"' }, "content-['4']"],
+    // Every lane prints a number as JavaScript does: the exponent below 1e-6
+    // and from 1e21, the shortest digits that read back, and no integer cap.
+    [{ opacity: '0.0000001' }, 'opacity-[1e-7]'],
+    [{ grow: '0.0000005' }, 'grow-[5e-7]'],
+    [{ opacity: '12345678901234567890' }, 'opacity-[12345678901234567000]'],
+    [{ p: '1000000000000000000000' }, 'p-1e+21'],
+    [{ p: 1e-7 }, 'p-1e-7'],
+    [{ opacity: `1${'0'.repeat(400)}` }, 'opacity-[Infinity]'],
 ];
 
 describe.each(CASES)('%j', (sz, expected) => {
@@ -151,6 +160,30 @@ describe('a runtime value on a factor key', () => {
         expect(code).toContain('"--_sz-grow": x');
     });
 
+    it.each(ENGINES)(
+        'flags the factor helper only when it is called, on the %s engine',
+        (_name, engine) => {
+            const factor = engine('export const A = ({ x }) => <div sz={{ opacity: x }} />;', {
+                filename: '/p/src/F.tsx',
+            });
+            expect(factor.usesFactorVar).toBe(true);
+            expect(factor.usesSpacingVar).toBe(false);
+            const other = engine('export const A = ({ x }) => <div sz={{ grow: x, p: x }} />;', {
+                filename: '/p/src/G.tsx',
+            });
+            expect(other.usesFactorVar).toBe(false);
+            expect(other.usesSpacingVar).toBe(true);
+        },
+    );
+
+    it('reads a number on every factor key as its static class does', () => {
+        for (const key of FACTOR_STRING_KEYS) {
+            const expected = key === 'leading' ? 'calc(50 * var(--spacing))' : '50%';
+            expect(__szFactorVar(50, key), key).toBe(expected);
+            expect(__szFactorVar('.5', key), key).toBe('.5');
+        }
+    });
+
     it('resolves a number as the static number and a string as the CSS value', () => {
         expect(__szFactorVar(50, 'opacity')).toBe('50%');
         expect(__szFactorVar('0.5', 'opacity')).toBe('0.5');
@@ -173,5 +206,15 @@ describe('a runtime value on a factor key', () => {
         expect(warn).toHaveBeenCalledTimes(1);
         expect(String(warn.mock.calls[0]?.[0])).toContain('dynamic-unresolvable');
         warn.mockRestore();
+    });
+});
+
+describe('a runtime numeric string on a spacing or unit key', () => {
+    it('is the number, as the static `{ p: ".5" }` → `p-0.5` reads it', () => {
+        expect(transform({ p: '.5' }).className).toBe('p-0.5');
+        expect(__szSpacingVar('.5', 'p')).toBe('calc(.5 * var(--spacing))');
+        expect(__szSpacingVar('-.5', 'mt')).toBe('calc(-.5 * var(--spacing))');
+        expect(__szUnitVar('.5', 'deg', 'rotate')).toBe('.5deg');
+        expect(__szUnitVar('-.5', 'ms', 'delay')).toBe('-.5ms');
     });
 });

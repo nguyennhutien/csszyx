@@ -25,6 +25,7 @@ import {
     settleGlobalKeywords,
 } from './keyword-families.js';
 import type { TokenData } from './manifest.js';
+import { NUMERIC_STRING } from './numeric-string.js';
 import { own } from './own.js';
 import type { ParserMode } from './parser-mode.js';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
@@ -4478,9 +4479,6 @@ function collectAliasOrRemovedKey(rawKey: string, value: SzValue, szProp: SzObje
     else warnAliasOrRemovedKey(rawKey, value, szProp);
     return true;
 }
-
-/** A string that spells a plain decimal number: `'4'`, `'-2'`, `'2.5'`, `'.5'`. */
-const NUMERIC_STRING = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/;
 
 /**
  * The value a key lowers: a numeric string as the number it spells (ADR 0037),

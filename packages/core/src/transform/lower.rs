@@ -3159,13 +3159,51 @@ fn format_number_class(key: &str, value: f64, prefix: &str) -> String {
 /// The runtime lowering (`transform-core.ts`) interpolates the value straight
 /// into the class string, so the engine only agrees with it by dropping the
 /// `.0` that Rust's default float formatting keeps.
+///
+/// It prints what JavaScript's `Number.prototype.toString` prints, so a value
+/// off the usual range writes one class on every lane: the shortest digits
+/// that read back, an exponent below 1e-6 and from 1e21 (`1e-7`, `1e+21`),
+/// `Infinity`, and `0` for `-0`.
+///
+/// Rust's `Display` already prints the shortest digits that read back and
+/// never an exponent, which is JavaScript's form from 1e-6 up to 1e21; outside
+/// that range the exponent is built from the same digits (ECMA-262
+/// Number::toString). `{:e}` would do it in one call and costs 2,453 gzip
+/// bytes of parser wasm for its formatting code; this reuses what `Display`
+/// already links.
+///
+/// Cost: linear in the printed length, at most 330 bytes for an f64.
 fn format_number_literal(value: f64) -> String {
-    if value.fract() == 0.0 {
-        #[allow(clippy::cast_possible_truncation)]
-        (value as i64).to_string()
-    } else {
-        value.to_string()
+    if value.is_nan() {
+        return "NaN".to_owned();
     }
+    if value.is_infinite() {
+        return if value > 0.0 { "Infinity" } else { "-Infinity" }.to_owned();
+    }
+    if value == 0.0 {
+        return "0".to_owned();
+    }
+    let plain = value.to_string();
+    let unsigned = plain.strip_prefix('-').unwrap_or(&plain);
+    let (whole, fraction) = unsigned.split_once('.').unwrap_or((unsigned, ""));
+    let all = format!("{whole}{fraction}");
+    let leading_zeros = all.bytes().take_while(|b| *b == b'0').count();
+    let digits = all[leading_zeros..].trim_end_matches('0');
+    // Where the point sits relative to the first significant digit: 1 for
+    // `1.5`, -6 for `0.0000001`, 22 for `1e21`.
+    let point = whole.len().cast_signed() - leading_zeros.cast_signed();
+    if -6 < point && point <= 21 {
+        return plain;
+    }
+    let exponent = point - 1;
+    let (first, rest) = digits.split_at(1);
+    let dot = if rest.is_empty() { "" } else { "." };
+    let sign = if value < 0.0 { "-" } else { "" };
+    let exponent_sign = if exponent >= 0 { "+" } else { "-" };
+    format!(
+        "{sign}{first}{dot}{rest}e{exponent_sign}{}",
+        exponent.unsigned_abs()
+    )
 }
 
 fn format_abs_number(value: f64) -> String {
@@ -3740,6 +3778,32 @@ pub(crate) fn collect_bracketed_values(object: &StaticSzObject, out: &mut Vec<Br
 
 #[cfg(test)]
 mod tests {
+    use super::format_number_literal;
+
+    /// Each row is what JavaScript's `String(n)` prints for the same number,
+    /// the form the runtime lowering interpolates into a class.
+    #[test]
+    fn a_number_prints_as_javascript_prints_it() {
+        for (value, javascript) in [
+            (0.0, "0"),
+            (-0.0, "0"),
+            (4.0, "4"),
+            (100.0, "100"),
+            (-2.5, "-2.5"),
+            (0.000_001, "0.000001"),
+            (0.000_000_1, "1e-7"),
+            (-0.000_000_15, "-1.5e-7"),
+            (123_456_789_012_345_680_000.0, "123456789012345680000"),
+            (1e21, "1e+21"),
+            (1.5e300, "1.5e+300"),
+            (f64::INFINITY, "Infinity"),
+            (f64::NEG_INFINITY, "-Infinity"),
+            (f64::NAN, "NaN"),
+        ] {
+            assert_eq!(format_number_literal(value), javascript, "{value:?}");
+        }
+    }
+
     #[cfg(feature = "native-engine")]
     use super::collect_bracketed_values;
     #[cfg(feature = "native-engine")]
