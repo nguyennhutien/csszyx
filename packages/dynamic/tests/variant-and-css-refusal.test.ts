@@ -72,6 +72,14 @@ describe('a runtime value cannot add a declaration through dynamic()', () => {
         '--a;position:fixed',
         "'a';position:fixed",
         '1px\nposition:fixed',
+        // An escape or a quote reads as a bracket to a scanner that skips them,
+        // so a `;` looked nested while CSS reads it at the top level.
+        'x\\(;position:fixed;--z:\\)',
+        '(--a\\();position:fixed;--z:\\))',
+        'calc(1px\\();position:fixed;--z:\\))',
+        '(--a"(");position:fixed;--z:(")")',
+        "calc(1px'(');position:fixed;--z:(')')",
+        'x\\[;position:fixed;--z:\\]',
     ];
     const keys = [
         'w',

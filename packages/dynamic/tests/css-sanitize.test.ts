@@ -10,6 +10,7 @@ import {
     isSafeCssPropertyName,
     isSafeCssValue,
     isUtilityArbitrarySafe,
+    isUtilityStructureSafe,
 } from '../src/css-sanitize.js';
 
 describe('isSafeCssValue', () => {
@@ -26,6 +27,7 @@ describe('isSafeCssValue', () => {
             'url(data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=)', // ; inside url() is fine
             '"some;text"', // ; inside a quoted string is fine
             '"launch 🚀"',
+            'a\\🚀b', // an escaped astral character is one character
             '1fr 2fr',
         ]) {
             expect(isSafeCssValue(v), v).toBe(true);
@@ -44,6 +46,9 @@ describe('isSafeCssValue', () => {
             'red\t;x', // control char
             'calc(1px', // unbalanced paren
             '"unterminated', // unterminated quote
+            'x\\(;position:fixed;--z:\\)', // an escaped paren opens nothing
+            'red\\', // an escape with nothing to escape
+            'red\\\n;x', // an escaped newline is still a control character
         ]) {
             expect(isSafeCssValue(v), v).toBe(false);
         }
@@ -133,6 +138,39 @@ describe('isUtilityArbitrarySafe', () => {
         // to validate, and the generator's own bracket checks won't match this
         // shape either, so it's passed through rather than rejected outright.
         expect(isUtilityArbitrarySafe('a]b[c')).toBe(true);
+    });
+});
+
+describe('isUtilityStructureSafe', () => {
+    it.each([
+        'p-4',
+        'bg-red-500/50',
+        'text-[14px]',
+        'bg-[#fff]/50',
+        'bg-red-500/[0.5]',
+        'bg-[#fff]!',
+        'bg-(--brand)',
+        'text-(length:--fs)',
+        'bg-(--c)/50',
+        // The modifier can be a custom property too.
+        'bg-blue-500/(--alpha)',
+        'bg-[#fff]/(--a)',
+        'bg-(--c)/(--a)',
+    ])('accepts %s', utility => {
+        expect(isUtilityStructureSafe(utility)).toBe(true);
+    });
+
+    it.each([
+        // The text after a bracket's `]` is copied into the rule as well.
+        'bg-[#fff]/(--a;position:fixed)',
+        'bg-[#fff]/x;position:fixed',
+        'w-[1px]x',
+        'bg-blue-500/(--a;position:fixed)',
+        'bg-blue-500/(red)',
+        'bg-(red)',
+        'w-a;position:fixed',
+    ])('refuses %s', utility => {
+        expect(isUtilityStructureSafe(utility)).toBe(false);
     });
 });
 

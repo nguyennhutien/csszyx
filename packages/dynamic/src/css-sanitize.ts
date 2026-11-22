@@ -79,6 +79,17 @@ export function isSafeCssValue(value: string): boolean {
             i = scanQuotedCssCharacter(value, i, state);
             continue;
         }
+        // An escape is one character of the value (`\\(` is no parenthesis,
+        // `\\;` no separator), so it moves no depth. Reading it as structure
+        // let `x\\(;position:fixed;--z:\\)` look nested while CSS reads three
+        // declarations. An escaped control character is still a control
+        // character.
+        if (char === '\\') {
+            const next = value.codePointAt(i + 1);
+            if (next === undefined || next < 0x20) return false;
+            i += next > 0xffff ? 3 : 2;
+            continue;
+        }
         if (!scanUnquotedCssCharacter(char, state)) {
             return false;
         }
@@ -113,9 +124,10 @@ function innerBracketsBalance(inner: string): boolean {
     let quote: string | null = null;
     for (let i = 0; i < inner.length; i++) {
         const char = inner[i];
-        if (quote !== null) {
-            if (char === '\\') i++;
-            else if (char === quote) quote = null;
+        if (char === '\\') {
+            i++;
+        } else if (quote !== null) {
+            if (char === quote) quote = null;
         } else if (char === '"' || char === "'") {
             quote = char;
         } else if (char === '[') {
@@ -125,6 +137,55 @@ function innerBracketsBalance(inner: string): boolean {
         }
     }
     return depth === 0;
+}
+
+/** A utility with no bracket or parenthesis: letters, digits and `-_.%/!#`. */
+const BARE_UTILITY = /^[\w.%/!#-]+$/;
+
+/** A modifier: a plain one or a custom property, `/50`, `/(--alpha)`. */
+const MODIFIER = /^\/(?:[\w.%]+|\(--[\w-]+\))$/;
+
+/**
+ * The parenthesis form, modifier removed: a custom property with an optional
+ * type hint, `bg-(--brand)`, `text-(length:--fs)`.
+ */
+const PAREN_UTILITY = /^[\w-]+-\((?:[a-z-]+:)?--[\w-]+\)$/;
+
+/**
+ * Removes a trailing `!` and a well-formed modifier.
+ *
+ * @param text - A utility, or the part of one after its bracket segment.
+ * @returns The text before them; a malformed modifier stays in it.
+ */
+function withoutModifier(text: string): string {
+    const body = text.endsWith('!') ? text.slice(0, -1) : text;
+    const slash = body.lastIndexOf('/');
+    return slash !== -1 && MODIFIER.test(body.slice(slash)) ? body.slice(0, slash) : body;
+}
+
+/**
+ * True when every part of a utility can only state its own value: the bare
+ * part is plain token characters, a parenthesis holds only a custom property
+ * name, a bracket segment passes {@link isUtilityArbitrarySafe}, and after its
+ * `]` comes only a modifier. A runtime
+ * value lands in the utility text, so text the resolvers copy into a
+ * declaration (a bare value, `var(…)` around a parenthesis) is checked here,
+ * not only the `[…]` segment. Anchored, linear expressions.
+ *
+ * @param utility - The utility class, variant prefix already stripped.
+ * @returns Whether it is safe to generate a rule for.
+ */
+export function isUtilityStructureSafe(utility: string): boolean {
+    const open = utility.indexOf('[');
+    if (open !== -1) {
+        return (
+            BARE_UTILITY.test(utility.slice(0, open) || '-') &&
+            withoutModifier(utility.slice(utility.lastIndexOf(']') + 1)) === '' &&
+            isUtilityArbitrarySafe(utility)
+        );
+    }
+    const head = withoutModifier(utility);
+    return head.includes('(') ? PAREN_UTILITY.test(head) : BARE_UTILITY.test(head);
 }
 
 /**

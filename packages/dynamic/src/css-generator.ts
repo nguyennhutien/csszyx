@@ -15,7 +15,7 @@
 
 import { DYNAMIC_UNSAFE_ARBITRARY, DYNAMIC_UNSUPPORTED, szReport } from '@csszyx/compiler/report';
 import { classify } from '@csszyx/runtime/split';
-import { isUtilityArbitrarySafe } from './css-sanitize.js';
+import { isUtilityArbitrarySafe, isUtilityStructureSafe } from './css-sanitize.js';
 
 /**
  * A table's own entry for text a class carries. An index or `in` reads
@@ -778,9 +778,16 @@ function splitVariants(cls: string): string[] {
     const parts: string[] = [];
     let depth = 0;
     let start = 0;
+    let quote: string | null = null;
     for (let i = 0; i < cls.length; i++) {
         const char = cls[i];
-        if (char === '[' || char === '(') depth++;
+        // An escaped character and a quoted string are text, never a bracket or
+        // a separator, as CSS reads them.
+        if (char === '\\') i++;
+        else if (quote !== null) {
+            if (char === quote) quote = null;
+        } else if (char === '"' || char === "'") quote = char;
+        else if (char === '[' || char === '(') depth++;
         else if ((char === ']' || char === ')') && depth > 0) depth--;
         else if (char === ':' && depth === 0) {
             parts.push(cls.slice(start, i));
@@ -1313,6 +1320,12 @@ export function generateCSSRule(className: string): string {
     }
     if (utility.startsWith('[') && utility.endsWith(']') && utility.includes(':')) {
         warnUnsupported(className, undefined);
+        return '';
+    }
+    // Text a runtime value put into the utility reaches the declaration only
+    // through a structure that states one value.
+    if (!isUtilityStructureSafe(utility)) {
+        warnUnsafeArbitrary(utility);
         return '';
     }
     const declarations = generateDeclarations(utility);
