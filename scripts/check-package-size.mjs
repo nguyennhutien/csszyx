@@ -635,7 +635,14 @@ export const SIZE_BUDGETS = [
         // class on every lane. +383 gzip -9 bytes, read from `Display`, which
         // the wasm already links (`{:e}` cost +2,453). CI read 601,420.
         // ~300 bytes of headroom.
-        maxGzipBytes: 601_700,
+        //
+        // Raised from 601,700 on 2026-11-22: CI read 602,249 (601,420 on
+        // `main`, +829). A spacing fraction (`p: '1/2'`) lowers bare and is
+        // reported, which adds a collector, a findings family and the percent
+        // formatting; the spacing key list moves into the lowering so every
+        // build reads it; and `leading` checks that `text` is a font size
+        // before it folds. ~300 bytes of headroom.
+        maxGzipBytes: 602_550,
     },
     // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
     // bundles from the compiler's source, unminified, and that every editor
