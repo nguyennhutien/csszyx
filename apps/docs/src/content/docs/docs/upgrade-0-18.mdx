@@ -94,13 +94,12 @@ changes rename `sz` keys or change an API shape, and the type checker,
 | [A variant Tailwind does not serve](#a-variant-your-tailwind-does-not-serve-is-reported) | `[csszyx] unserved-variant:` on `{ hidden: { p: 4 } }` | the build, `csszyx check`, dev runtime | you |
 | [A CSS-wide keyword no property takes](#a-css-wide-keyword-no-property-takes-is-reported) | `[csszyx] inert-keyword:` on `{ ring: 'inherit' }` | the build, `csszyx check` | you |
 | [A runtime value under a variant key](#a-runtime-value-under-a-variant-key-is-reported) | `` key `hover` holds a value only known at runtime `` | the build | you |
-| [A slash opacity in a colour string](#a-colour-string-with-a-slash-opacity-is-reported) | `[csszyx] slash-opacity-string:` | the build, `csszyx check` | you |
-| [A slash opacity in a colour object](#a-colour-string-with-a-slash-opacity-is-reported) | `[csszyx] color-slash-opacity:` | the build, `csszyx check` | you |
+| [A slash opacity in a colour](#a-colour-opacity-goes-in-the-object-form) | `[csszyx] slash-opacity-string:` on `{ bg: 'red-500/50' }`, `[csszyx] color-slash-opacity:` on `{ color: 'red-500/50' }` | the build, dev runtime, `csszyx check` | you |
 | [Breakpoint and container names](#breakpoints-and-container-queries-are-spelled-as-tailwind-serves-them) | `min-tablet` where 0.17 wrote `min-[tablet]`, `tablet-large:` for `tabletLarge`, and `@md:sidebar:` for `{ '@md': { sidebar: … } }` | the build (`unserved-variant`), your snapshots | you |
 | [Spellings every v4 serves](#some-classes-take-the-spelling-every-tailwind-v4-serves) | `start-4` where 0.17 wrote `inset-s-4` | your snapshots | nothing |
 | [A variable on a width key](#a-css-variable-goes-to-the-property-its-key-names) | `border-(length:--w)` where 0.17 wrote `border-(--w)`, a colour | your snapshots, how the page looks | you, if the variable holds a colour |
 | [`op` is a percent](#a-colour-objects-op-is-a-percent) | `op: 0.05` is 0.05%, where 0.17 wrote 5%; `[csszyx] opacity-value:` | the build, dev runtime | you |
-| [A value in brackets](#a-value-in-the-brackets-csszyx-writes-is-reported) | `[csszyx] bracketed-value:` on `{ w: '[100px]' }` or `{ animate: '(--spin)' }` | the build, dev runtime, `csszyx check` | you |
+| [A value in brackets](#a-value-in-the-brackets-csszyx-writes-is-reported) | `[csszyx] bracketed-value:` on `{ animate: '(--spin)' }`, `[csszyx] redundant-bracket:` on `{ w: '[100px]' }` | the build, dev runtime, `csszyx check` | you |
 | [A value with a space](#a-value-with-a-space-in-it-is-one-class) | `brightness-[calc(1px_+_2px)]` where 0.17 wrote two classes | your snapshots | nothing |
 | [One spelling on both lanes](#the-build-and-the-runtime-write-one-spelling) | `text-fade` where the runtime wrote `text-[fade]` | your snapshots | nothing |
 | [`classNameToSzObject` options](#classnametoszobject-takes-an-options-object) | `options-object-required` thrown | `tsc`, runtime throw | you |
@@ -1538,62 +1537,56 @@ Fix the spelling of a key that was meant as a property. The full matrix is in
 **Tooling.** `csszyx check` lists each key under `fallback-missing-css` and
 exits 1.
 
-## A colour string with a slash opacity is reported
+## A colour opacity goes in the object form
 
-A colour key takes its opacity in the object form, so `{ bg: 'red-500/50' }` has
-always emitted nothing. 0.17 said so only in the browser, in development. The
-build now names it under the kind `slash-opacity-string`, an `error` under
-`recommended`:
+The object form is the one spelling of an opacity:
+`{ bg: { color: 'red-500', op: 50 } }` writes `bg-red-500/50`, and a hex, a
+colour function or a variable works the same way (`{ color: '#f00', op: 50 }`
+writes `bg-[#f00]/50`).
+
+0.17 wrote nothing for `{ bg: 'red-500/50' }` and said so only in the browser,
+in development; 0.18.0 wrote nothing and reported it at build. From 0.18.1 the
+class is written as given and the slash is still reported, an `error` under
+both presets, as `slash-opacity-string`. A theme colour serves that class; a
+hex, a colour function or a variable does not: `{ bg: '#f00/50' }` writes
+`bg-[#f00/50]`, a declaration no browser takes, which the dead-class check does
+not see because Tailwind still writes the rule.
 
 ```text
 [csszyx] slash-opacity-string: src/Card.tsx:3:16
-  `bg: 'red-500/50'` emits nothing: a string value cannot carry a slash opacity.
-  help: use the object form: `{ color: 'red-500', op: 50 }`.
-  docs: https://csszyx.com/e/slash-opacity-string
+  `bg: '#f00/50'` puts the opacity in a string; a colour takes its opacity in the object form.
+  help: write `{ color: '#f00', op: 50 }`.
 ```
 
-The runtime prints the same words once per value, and its code and args in
-production:
+The help names the `op` that writes the same opacity: `'red-500/[50%]'` is
+`op: '50%'`, `'red-500/[0.5]'` is `op: 50`, `'red-500/(--o)'` is `op: '--o'`,
+and a trailing `!` stays on `color`.
 
-```text
-[csszyx] slash-opacity-string: `bg: 'red-500/50'` emits nothing: a string value cannot carry a slash opacity.
-  help: use the object form: `{ color: 'red-500', op: 50 }`.
-  docs: https://csszyx.com/e/slash-opacity-string
-[csszyx] slash-opacity-string: {"key":"bg","color":"red-500","opacity":"50"} https://csszyx.com/e/slash-opacity-string
-```
+A slash in the `color` of the object form is reported the same way, as
+`color-slash-opacity`, on every key that takes a colour object (`ring`,
+`border`, `shadow`, `outline` and `textShadow` too), and `color` is written as
+given: 0.18.0 wrote
+`{ color: 'red-500/50', op: 20 }` as `bg-red-500/20`, 0.18.1 writes the
+`bg-red-500/50/20` it spells, which no Tailwind serves. The important modifier
+ends the class: `{ color: 'red-500!', op: 20 }` writes `bg-red-500/20!`, where
+0.17 wrote the dead `bg-red-500!/20`.
 
-The border-side colour keys (`borderTColor` through `borderYColor`),
-`insetRingColor` and `insetShadowColor` are colour keys too: 0.17 wrote
-`{ borderTColor: 'red-500/50' }` as a class, and 0.18 reports it like
-`borderColor`.
+A slash inside a colour function is its own (`rgb(255_0_0/50%)`), a fraction
+is a size (`1/2`), and a gradient's slash names its interpolation
+(`bg: 'linear-to-r/oklch'`); none is reported.
 
-**The edit.** Write the object form the line names:
+**The edit.** Write the opacity in `op`:
 
 ```tsx
 // before
-<div sz={{ bg: "red-500/50" }} />
+<div sz={{ bg: "#f00/50" }} />
+<div sz={{ bg: { color: "red-500/50", op: 20 } }} />
 // after
-<div sz={{ bg: { color: "red-500", op: 50 } }} />
+<div sz={{ bg: { color: "#f00", op: 50 } }} />
+<div sz={{ bg: { color: "red-500", op: 20 } }} />
 ```
 
-**Tooling.** `csszyx check` lists it under the kind `slash-opacity-string` and
-exits 1.
-
-The object form is the one spelling for an opacity, so a slash inside it is
-reported too, under the kind `color-slash-opacity`, an `error` under
-`recommended`: `csszyx check` exits 1 on a `{ color: "red-500/50" }` that 0.17
-passed. Its class is still written. When both are given, `op` is the opacity:
-`{ color: "red-500/50", op: 20 }` wrote `bg-red-500/50/50`, which no Tailwind
-serves, and now writes `bg-red-500/20`. The important modifier now ends the
-class, so `{ color: "red-500!", op: 20 }` writes `bg-red-500/20!` instead of
-the dead `bg-red-500!/20`.
-
-```tsx
-// before
-<div sz={{ bg: { color: "red-500/50" } }} />
-// after
-<div sz={{ bg: { color: "red-500", op: 50 } }} />
-```
+**Tooling.** `csszyx check` lists every site under the two kinds and exits 1.
 
 ## Breakpoints and container queries are spelled as Tailwind serves them
 
@@ -1729,33 +1722,69 @@ decimal that is not a quarter step.
 
 ## A value in the brackets csszyx writes is reported
 
-csszyx brackets an arbitrary value itself, so a value written with the
-brackets is one spelling too many. 0.17 took the brackets off; 0.18 emits
-nothing for it and says so. A custom property in Tailwind's parentheses,
-`(--spin)`, is the same: csszyx writes the parentheses for `--spin`, and on 19
-keys 0.17 wrote `animate-[(--spin)]`, a class Tailwind does not serve.
+csszyx brackets an arbitrary value itself, so the value without brackets is
+the spelling to write. 0.17 took the brackets off; 0.18.0 emitted nothing for
+a bracketed value and said so. From 0.18.1 `'[…]'` is a second spelling of the
+arbitrary class, and it writes the class the key writes for the value without
+brackets: `w: '[100px]'` writes `w-[100px]`, and `bgSize: '[10px]'` writes
+`bg-[length:10px]`, the size, where `bg-[10px]` would be a position.
+`redundant-bracket` names that spelling. It is `info` under the `recommended`
+preset and `warn` under `atomic`, since the class is written either way.
 
 ```text
-[csszyx] bracketed-value: src/Card.tsx:3:22
-  `w: '[100px]'` wraps its value in brackets or parentheses, which csszyx writes itself, so nothing is emitted for it.
+[csszyx] redundant-bracket: src/Card.tsx:3:22
+  `w: '[100px]'` writes the class that `w: '100px'` writes; csszyx adds the brackets itself.
   help: write `w: '100px'`.
 ```
 
+A lone variable in the brackets is spelled as a variable:
+`border: '[var(--x)]'` writes the class of `border: '--x'`, and the help names
+`'--x'`. When the value without brackets is reported itself, that finding is
+the one you see: `opacity: '[50]'` is reported as `clamped-factor`, as
+`opacity: '50'` is.
+
+When the value without brackets writes another class, the brackets are the
+only way to write this one and nothing is reported: `p: '[4]'` writes `p-[4]`,
+while `p: 4` writes `p-4`. A bracket class with a modifier after it is written
+as given, and on a colour key the modifier is a slash opacity:
+`bg: '[#f00]/50'` writes `bg-[#f00]/50` and is reported as
+`slash-opacity-string`, with `{ color: '#f00', op: 50 }` to write instead.
+
+Some shapes still write nothing. They are reported as `bracketed-value`, and
+the help says what to write instead:
+
+- a sign or `!` before the brackets: `top: '-[1px]'` → `top: '-1px'`;
+- a variable, in brackets or in Tailwind's parentheses: `w: '[--x]'` and
+  `animate: '(--spin)'` → `w: '--x'`, `animate: '--spin'`. On 19 keys 0.17
+  wrote `animate-[(--spin)]`, a class Tailwind does not serve;
+- a fraction: `w: '[1/2]'` → `w: '1/2'`;
+- a type hint: `text: '[length:13px]'` → `text: '13px'`, which writes the same
+  size. Where the value without its hint is another type for the key, the
+  help points to `css: { … }` or `className`: `text: '--x'` is a size, so
+  `text: '[color:--x]'` is not offered it;
+- a key with no arbitrary utility, such as `display` or `truncate`;
+- brackets that do not pair: `w: '[10px'`, `w: '10px]'`.
+
 A custom property (`{ '--x': '[a]' }`) is a declaration value and is not read.
 
-**The edit.** Drop the brackets or parentheses: `w: '[100px]'` → `w: '100px'`,
-`animate: '(--spin)'` → `animate: '--spin'`. `csszyx migrate` writes
-`font-(--v)` as `weight: '--v'`.
+**The edit.** Write what the help names: `w: '[1/2]'` → `w: '1/2'`,
+`animate: '(--spin)'` → `animate: '--spin'`. For `redundant-bracket` the edit
+is optional, since the class is the same. Where nothing is reported, as on
+`p: '[4]'`, keep the brackets. `csszyx migrate` writes `font-(--v)` as
+`weight: '--v'`.
 
 Grid line names are CSS's own brackets, and `gridCols` and `gridRows` lower
 them: `gridCols: '[full-start] minmax(1rem, 1fr) [full-end]'` writes
-`grid-cols-[[full-start]_minmax(1rem,_1fr)_[full-end]]`. Only one pair around
-the whole value is reported, `gridCols: '[[a]_1fr_[b]]'` → `gridCols:
+`grid-cols-[[full-start]_minmax(1rem,_1fr)_[full-end]]`. One pair around the
+whole value is the second spelling, `gridCols: '[[a]_1fr_[b]]'` → `gridCols:
 '[a]_1fr_[b]'`. On any other key a value with brackets of its own has no `sz`
 spelling, and the help points to `css: { … }` or `className` instead.
 
-**Tooling.** `csszyx check` lists every site and exits 1. The build prints the
-diagnostic but does not fail. `csszyx migrate` does not rewrite these values.
+**Tooling.** `csszyx check` lists every site and exits 1 for `bracketed-value`;
+`redundant-bracket` fails the run only where `rules['redundant-bracket']` sets
+it to `error`. A development build lists both; a production build counts
+`redundant-bracket` under `recommended` instead of listing it. Neither fails
+the build. `csszyx migrate` does not rewrite these values.
 
 ## A value with a space in it is one class
 

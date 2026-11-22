@@ -278,6 +278,10 @@ export const GROUPS = [
     },
 ];
 
+/** Why a slash opacity is an error while its class is still written. */
+const SLASH_KEPT_NOTE =
+    'the class is still emitted as written; a theme colour serves it, and a hex, a colour function or a variable before the slash writes a value no browser takes.';
+
 /** Every live id. */
 export const DIAGNOSTICS = [
     // --- engine: the Rust engine reports these (current DIAGNOSTIC_CODES order) ---
@@ -417,14 +421,59 @@ export const DIAGNOSTICS = [
     {
         id: 'slash-opacity-string',
         summary:
-            'A colour key given its opacity in a string, which emits nothing; the object form takes it.',
-        surfaces: { engine: {}, runtime: { production: true, host: 'browser' } },
+            'A colour key given its opacity in a string; the object form is the one spelling of it.',
+        surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
         position: 'site',
-        // The value as written is `{color}/{opacity}`, split on its first `/`.
-        args: { key: STRING, color: STRING, opacity: STRING },
-        text: "`{key}: '{color}/{opacity}'` emits nothing: a string value cannot carry a slash opacity.",
-        help: "use the object form: `{ color: '{color}', op: {opacity} }`.",
-        sources: [ENGINE, 'packages/compiler/src/color-validation.ts'],
+        // The class is written as given (ADR 0036) and the slash reported: a
+        // theme colour serves it, a hex, a colour function or a variable
+        // writes a value no browser takes (ADR 0037 §8, amended 2026-11-24).
+        // The value as written is `{color}/{opacity}{important}`, split on
+        // its first `/` outside brackets and parentheses; `op` is the `op`
+        // the opacity names (`modifierOp`), a number bare and a string quoted,
+        // so following the help writes the same opacity.
+        args: {
+            key: STRING,
+            color: STRING,
+            opacity: STRING,
+            op: STRING,
+            important: { type: ['enum', '!'], optional: true },
+        },
+        text: "`{key}: '{color}/{opacity}{important}'` puts the opacity in a string; a colour takes its opacity in the object form.",
+        help: "write `{ color: '{color}{important}', op: {op} }`.",
+        note: SLASH_KEPT_NOTE,
+        sources: [ENGINE, CORE_TS],
+    },
+    {
+        id: 'color-slash-opacity',
+        summary: 'A colour object with a slash opacity in `color`; the object takes it in `op`.',
+        surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
+        position: 'site',
+        // `color` is written as given, as a colour string is; with `op` as
+        // well, the class carries both opacities, which no Tailwind serves.
+        // The colour as written is `{base}/{opacity}{important}`. `op` is the
+        // JS literal the author wrote, quotes included for a string, or, with
+        // no `op` written, the `op` the opacity names, as for a string.
+        forms: ['op-given', 'op-absent'],
+        args: {
+            form: formArg(['op-given', 'op-absent']),
+            key: STRING,
+            base: STRING,
+            opacity: STRING,
+            important: { type: ['enum', '!'], optional: true },
+            op: STRING,
+        },
+        text: {
+            'op-given':
+                "`{key}: { color: '{base}/{opacity}{important}', op: {op} }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
+            'op-absent':
+                "`{key}: { color: '{base}/{opacity}{important}' }` puts the opacity in `color`; a colour object takes it in `op`.",
+        },
+        help: {
+            'op-given': "write `{ color: '{base}{important}', op: {op} }`.",
+            'op-absent': "write `{ color: '{base}{important}', op: {op} }`.",
+        },
+        note: SLASH_KEPT_NOTE,
+        sources: [ENGINE, CORE_TS],
     },
     {
         id: 'off-scale-value',
@@ -890,66 +939,67 @@ export const DIAGNOSTICS = [
         sources: ['packages/core/src/transform/css_var_planner.rs'],
     },
     {
-        id: 'color-slash-opacity',
-        summary: 'A colour object with a slash opacity in `color`; the object takes it in `op`.',
-        surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
-        // The class still applies an opacity either way: a note on the
-        // spelling, raised to warn under atomic (user decision 2026-10-18).
-        defaults: { recommended: 'info', atomic: 'warn' },
-        position: 'site',
-        // The colour as written is `{base}/{opacity}{important}`. `op` is the
-        // JS literal the author wrote, quotes included for a string.
-        forms: ['op-given', 'op-absent'],
-        args: {
-            form: formArg(['op-given', 'op-absent']),
-            key: STRING,
-            base: STRING,
-            opacity: STRING,
-            important: { type: ['enum', '!'], optional: true },
-            op: OPTIONAL_STRING,
-        },
-        text: {
-            'op-given':
-                "`{key}: { color: '{base}/{opacity}{important}', op: {op} }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
-            'op-absent':
-                "`{key}: { color: '{base}/{opacity}{important}' }` puts the opacity in `color`; a colour object takes it in `op`.",
-        },
-        help: {
-            'op-given': "write `{ color: '{base}{important}', op: {op} }`.",
-            'op-absent': "write `{ color: '{base}{important}', op: {opacity} }`.",
-        },
-        note: {
-            'op-given': 'the class uses `op: {op}`; the `/{opacity}` in `color` is ignored.',
-            'op-absent': 'the class still applies opacity {opacity}.',
-        },
-        sources: [ENGINE, CORE_TS],
-    },
-    {
         id: 'bracketed-value',
         summary: 'A value wrapped in the brackets or parentheses csszyx writes itself.',
         surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
         position: 'site',
-        // `unwrap`: one pair of brackets (or the parentheses of a variable)
-        // around a value, so `inner` is what to write. On `gridCols` and
-        // `gridRows` the inner value may hold grid line names; a value whose
-        // first bracket closes before its end (`[a] 1fr [b]`) is not wrapped
-        // there and lowers. `escape`: brackets inside a value of any other
-        // key, or brackets that do not balance, which no `sz` value carries.
-        // `inner` is the value without the outer pair on both forms, so the
-        // args type stays the one 0.18.0 shipped; it is what to write only
-        // on `unwrap` (a union keyed on `form` is planned for 0.19.0).
-        forms: ['unwrap', 'escape'],
+        // Nothing is written for either form. `unwrap`: a shape the brackets
+        // cannot carry — a sign or `!` before them, a variable (`(--x)`,
+        // `[--x]`), a fraction, a type hint the key keeps (`[length:13px]`, dropped from
+        // `inner`), or a key with no arbitrary utility — and `inner` is what
+        // to write. On `gridCols` and `gridRows` the inner value may hold grid
+        // line names; a value whose first bracket closes before its end
+        // (`[a] 1fr [b]`) is not wrapped there and lowers. `escape`: brackets
+        // inside a value of any other key, or brackets that do not pair
+        // (`[10px`, `10px]`), which no `sz` value carries. `inner` stays a
+        // string on both forms, so the args type keeps the shape 0.18.0
+        // shipped; it is what to write only on `unwrap` (a union keyed on
+        // `form` is planned for 0.19.0). `type-hint`: a hint (`[color:--x]`)
+        // the key's own lowering of `inner` does not keep, so writing `inner`
+        // would set another property. A value the brackets do carry is
+        // `redundant-bracket`.
+        forms: ['unwrap', 'escape', 'type-hint'],
         args: {
-            form: formArg(['unwrap', 'escape']),
+            form: formArg(['unwrap', 'escape', 'type-hint']),
             key: STRING,
             value: STRING,
             inner: STRING,
         },
-        text: "`{key}: '{value}'` wraps its value in brackets or parentheses, which csszyx writes itself, so nothing is emitted for it.",
+        text: {
+            unwrap: "`{key}: '{value}'` wraps its value in brackets or parentheses, which csszyx writes itself, so nothing is emitted for it.",
+            escape: "`{key}: '{value}'` has brackets that do not wrap its value as one pair, so nothing is emitted for it.",
+            'type-hint':
+                "`{key}: '{value}'` names a type in its brackets that `{key}: '{inner}'` does not write, so nothing is emitted for it.",
+        },
         help: {
             unwrap: "write `{key}: '{inner}'`.",
             escape: 'write the declaration in `css: { … }`, or the class in `className`, with every bracket in a pair; the brackets inside are part of the value.',
+            'type-hint':
+                "write the declaration in `css: { … }`, or the class in `className`; `{key}: '{inner}'` writes another type.",
         },
+        sources: [ENGINE, CORE_TS],
+    },
+    {
+        id: 'redundant-bracket',
+        summary: 'A value in brackets that writes the class its value without them writes.',
+        surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
+        // `'[…]'` is a second spelling of the arbitrary class (ADR 0037 §2),
+        // and the class `key-[…]` is written: a note on the spelling, raised
+        // to warn under atomic (user decision 2026-11-23), as the retired
+        // `color-slash-opacity` was.
+        defaults: { recommended: 'info', atomic: 'warn' },
+        position: 'site',
+        // `inner` is the value without its brackets, `!` kept at the end, a
+        // lone `var(--x)` spelled `--x`; the class is the one the key writes
+        // for it. When that lowering reports something, its finding is
+        // reported instead of this one.
+        args: {
+            key: STRING,
+            value: STRING,
+            inner: STRING,
+        },
+        text: "`{key}: '{value}'` writes the class that `{key}: '{inner}'` writes; csszyx adds the brackets itself.",
+        help: "write `{key}: '{inner}'`.",
         sources: [ENGINE, CORE_TS],
     },
     {

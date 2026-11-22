@@ -667,30 +667,29 @@ side })` receives a real value and has always been correct.
 
 ### Colors
 
-A colour key takes its opacity in the object form, so a string with a slash
-opacity (`bg: 'red-500/50'`) emits nothing on every lane. The build reports it
-with the kind `slash-opacity-string` (an `error` under `recommended`), and the
-runtime prints the same text once per value, in the browser and in production
-too, because the class is missing. A trailing `!` is left out of the value it
-names.
+The object form is the one spelling of an opacity:
+`bg: { color: 'red-500', op: 50 }` writes `bg-red-500/50`, and a hex, a colour
+function or a variable works the same way (`{ color: '#f00', op: 50 }` writes
+`bg-[#f00]/50`). A trailing `!` ends the class (`bg-red-500/50!`).
 
-The object form is the one spelling for an opacity. A plain slash opacity
-inside it (`bg: { color: 'red-500/50' }`) is still written as the class, and the
-build reports it with the kind `color-slash-opacity` (an `error` under
-`recommended`) so the opacity moves to `op`. When both are given, `op` is the
-opacity: `{ color: 'red-500/50', op: 20 }` writes `bg-red-500/20`. A trailing
-`!` ends the class (`bg-red-500/20!`). Anything else after the slash
-(`red-500/50/30`) is written as given and judged at build.
-
-Any other colour string is written as given, on every lane: `bg: 'white/50'`
-is `bg-white/50`, `bg: '50%'` is `bg-[50%]`. Whether the project's Tailwind
-serves the class is its answer at build, where the dead-class check reports a
-class that produces no CSS; the runtime does not judge it.
+A slash opacity on a colour key, in a string or in the `color` of the object
+form, keeps its class as written and is reported, an `error` under both
+presets. A theme colour serves the class (`bg-red-500/50`); a hex, a colour
+function or a variable writes a value no browser takes (`bg-[#f00/50]` is
+`background-color: #f00/50`), which the dead-class check cannot see, because
+Tailwind still writes the rule. A slash inside a colour function is its own
+(`rgb(255_0_0/50%)`), a fraction is a size (`1/2`), and a gradient's slash
+names its interpolation (`bg: 'linear-to-r/oklch'`); none is reported.
 
 | Message | Notes |
 | --- | --- |
-| ``[csszyx] slash-opacity-string: `{key}: '{color}/{opacity}'` emits nothing: a string value cannot carry a slash opacity.`` — help: ``use the object form: `{ color: '{color}', op: {opacity} }`.`` | build, **browser too**, production too. |
-| ``[csszyx] color-slash-opacity: `{key}: { color: '{base}/{opacity}', op: {op} }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.`` — help: ``write `{ color: '{base}', op: {op} }`.`` — note: ``the class uses `op: {op}`; the `/{opacity}` in `color` is ignored.`` Without `op`: ``[csszyx] color-slash-opacity: `{key}: { color: '{base}/{opacity}' }` puts the opacity in `color`; a colour object takes it in `op`.`` — help: ``write `{ color: '{base}', op: {opacity} }`.`` — note: ``the class still applies opacity {opacity}.`` | build (`color-slash-opacity`), runtime in development. The class is still written; with both, `op` is the opacity. An `op` that is not a number or a string is named as if absent. |
+| ``[csszyx] slash-opacity-string: `{key}: '{color}/{opacity}'` puts the opacity in a string; a colour takes its opacity in the object form.`` — help: ``write `{ color: '{color}', op: {op} }`.`` | build, runtime in development. The class is written as given. `op` is the opacity the modifier names: `/50` is `op: 50`, `/[50%]` is `op: '50%'`, `/[0.5]` is `op: 50`, `/(--o)` is `op: '--o'`. A trailing `!` stays on `color`. |
+| ``[csszyx] color-slash-opacity: `{key}: { color: '{base}/{opacity}', op: {op} }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.`` — help: ``write `{ color: '{base}', op: {op} }`.`` Without `op`: ``[csszyx] color-slash-opacity: `{key}: { color: '{base}/{opacity}' }` puts the opacity in `color`; a colour object takes it in `op`.`` — help: ``write `{ color: '{base}', op: {op} }`.`` | build, runtime in development, on every key a colour object serves (`ring`, `border`, `shadow`, `outline` and `textShadow` too). `color` is written as given; with `op` as well, the class carries both opacities, which no Tailwind serves. |
+
+Any other colour string is written as given, on every lane: `bg: '50%'` is
+`bg-[50%]`. Whether the project's Tailwind serves the class is its answer at
+build, where the dead-class check reports a class that produces no CSS; the
+runtime does not judge it.
 
 ### Mask layers
 
@@ -1945,7 +1944,8 @@ csszyx check --rule merge-covered-key --rule merge-covered-class
 ```
 
 `kind` says what an `sz-diagnostic` found: `unknown-key`, `canonical-key`,
-`removed-key`, `numeric-key`, `closed-enum-value`, `slash-opacity-string`, `color-slash-opacity`, `off-scale-value`,
+`removed-key`, `numeric-key`, `closed-enum-value`, `slash-opacity-string`,
+`color-slash-opacity`, `off-scale-value`, `bracketed-value`, `redundant-bracket`,
 `clamped-factor`, `per-side-border-style`, `property-object`,
 `non-variant-object`, `unknown-field`, `runtime-value`, `unresolvable-spread`,
 `style-override`, `szs-slot-map`, `sz-recover`, `class-precedence`,

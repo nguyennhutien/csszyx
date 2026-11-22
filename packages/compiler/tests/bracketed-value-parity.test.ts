@@ -1,17 +1,17 @@
 /**
  * A value wrapped in the brackets csszyx writes itself, on every lane.
  *
- * Both lanes took the brackets off and put them back, so `w: '[100px]'` wrote
- * `w-[100px]`, while `w: '[1/2]'` wrote `w-[1/2]`, `width: 1/2`, and
- * `m: '-[var(--v)]'` nested them. One spelling is supported, the value
- * without its brackets: a wrapped one writes nothing and `bracketed-value`
+ * `'[…]'` is a second spelling of the arbitrary class (ADR 0037 §2): it writes
+ * `key-[…]`, and when the value without its brackets writes the same class,
+ * `redundant-bracket` names that spelling. A shape the brackets cannot carry
+ * (`[1/2]`, `-[1px]`, `[length:13px]`) writes nothing, and `bracketed-value`
  * names the key and what to write. Grid line names are CSS's own brackets:
  * on `gridCols` and `gridRows` a value whose first bracket closes before its
  * end (`[a] 1fr [b]`) is lowered, and only one pair around the whole value
  * is the wrapping. On any other key brackets inside are no value csszyx can
  * write, and the help points to `css: {…}`.
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { escapeUnsafeChars } from '../../core/tests/helpers/sz-fuzz.js';
 import { PROPERTY_MAP } from '../src/sz-key-tables.js';
 import {
@@ -74,16 +74,133 @@ beforeEach(() => {
 });
 
 describe.each(LANES)('a value wrapped in brackets — %s', (_name, lower) => {
+    // `'[…]'` is a second spelling of the arbitrary class (ADR 0037 §2): it
+    // writes `key-[…]`, and when the value without its brackets writes the
+    // same class, `redundant-bracket` names the spelling without them.
     it.each([
-        [{ w: '[100px]' }],
+        [{ w: '[100px]' }, 'w-[100px]'],
+        [{ w: '[calc(100% - 2px)]' }, 'w-[calc(100%_-_2px)]'],
+        [{ hover: { w: '[10px]' } }, 'hover:w-[10px]'],
+        [{ w: '[10px]!' }, 'w-[10px]!'],
+        [{ top: '[-1px]' }, 'top-[-1px]'],
+        [{ bg: '[#f00]' }, 'bg-[#f00]'],
+        [{ leading: '[1.5]' }, 'leading-[1.5]'],
+        [{ grow: '[2.5]' }, 'grow-[2.5]'],
+        [{ content: '[x]' }, 'content-[x]'],
+        // One pair around a whole grid template, line names inside or not.
+        [{ gridCols: '[1fr_2fr]' }, 'grid-cols-[1fr_2fr]'],
+        [{ gridCols: '[[a]_1fr_[b]]' }, 'grid-cols-[[a]_1fr_[b]]'],
+        [{ gridCols: '[[a]]' }, 'grid-cols-[a]'],
+    ])('%j writes %s and names the spelling without brackets', (sz, className) => {
+        expect(lower(sz)).toEqual({ className, kinds: ['redundant-bracket'] });
+    });
+
+    // The class is the one the key's own lowering writes for the value
+    // without brackets, type hint and all: `bg-[10px]` is a position, and
+    // `border-[var(--x)]` a colour. A lone `var(--x)` is spelled `--x`.
+    it.each([
+        [{ bgSize: '[10px]' }, 'bg-[length:10px]'],
+        [{ bgImg: '[var(--x)]' }, 'bg-(image:--x)'],
+        [{ bgPos: '[var(--x)]' }, 'bg-(position:--x)'],
+        [{ border: '[var(--x)]' }, 'border-(length:--x)'],
+        [{ text: '[var(--x)]' }, 'text-(length:--x)'],
+        [{ text: '[var(--x)]!' }, 'text-(length:--x)!'],
+        [{ fontFamily: '[var(--x)]' }, 'font-(family-name:--x)'],
+        [{ strokeWidth: '[var(--x)]' }, 'stroke-(length:--x)'],
+        [{ decorationThickness: '[var(--x)]' }, 'decoration-(length:--x)'],
+        [{ ring: '[var(--x)]' }, 'ring-(length:--x)'],
+        [{ w: '[var(--x)]' }, 'w-(--x)'],
+    ])('%j writes the class of its key, %s', (sz, className) => {
+        expect(lower(sz)).toEqual({ className, kinds: ['redundant-bracket'] });
+    });
+
+    // A finding on the value without brackets is the finding: the brackets
+    // do not hide it, and nothing else is said.
+    it.each([
+        [{ opacity: '[50]' }, 'opacity-[50]', ['clamped-factor']],
+        [{ mask: '[linear-to-r]' }, '', ['moved-value']],
+        [{ hover: { mask: '[radial]' } }, '', ['moved-value']],
+    ])('%j writes %j and reports what its value without brackets does', (sz, className, kinds) => {
+        expect(lower(sz)).toEqual({ className, kinds });
+    });
+
+    // The value without brackets written beside the bracketed one: its
+    // finding stands for both, whichever a dedup set printed first. The
+    // runtime prints a value's finding once, the engines once per site.
+    it.each([
+        [{ opacity: '50', hover: { opacity: '[50]' } }, 'opacity-[50] hover:opacity-[50]'],
+        [{ mask: 'radial', hover: { mask: '[radial]' } }, ''],
+    ])('%j does not name the brackets beside their own value', (sz, className) => {
+        const { className: written, kinds } = lower(sz);
+        expect(written).toBe(className);
+        expect(new Set(kinds)).toEqual(new Set([written ? 'clamped-factor' : 'moved-value']));
+    });
+
+    // A value whose key writes a bare class says nothing for the trial: the
+    // brackets are the only spelling of their class (`justify-[flex-start]`).
+    it.each([
+        [{ justify: '[flex-start]' }, 'justify-[flex-start]'],
+        [{ items: '[flex-end]' }, 'items-[flex-end]'],
+    ])('%j writes %s and names nothing', (sz, className) => {
+        expect(lower(sz)).toEqual({ className, kinds: [] });
+    });
+
+    // Every pair around a grid template is taken off at once, however many.
+    it('lowers a grid template wrapped in thousands of pairs once', () => {
+        const depth = 3000;
+        const value = `${'['.repeat(depth)}[a]_1fr${']'.repeat(depth)}`;
+        expect(lower({ gridCols: value })).toEqual({
+            className: 'grid-cols-[[a]_1fr]',
+            kinds: ['redundant-bracket'],
+        });
+    });
+
+    // A class in brackets with a modifier after it is written as given and,
+    // on a colour key, reported as the slash opacity it is (ADR 0037 §8).
+    it.each([
+        [{ bg: '[#f00]/50' }, 'bg-[#f00]/50'],
+        [{ bg: '[#f00]/50!' }, 'bg-[#f00]/50!'],
+    ])('%j writes %s and reports the slash', (sz, className) => {
+        expect(lower(sz)).toEqual({ className, kinds: ['slash-opacity-string'] });
+    });
+
+    // The value without its brackets writes another class, so the brackets
+    // are the only spelling of this one.
+    it.each([
+        [{ p: '[4]' }, 'p-[4]'],
+        [{ grow: '[2]' }, 'grow-[2]'],
+        [{ z: '[5]' }, 'z-[5]'],
+        [{ md: { p: '[4]!' } }, 'md:p-[4]!'],
+        // No type hint: a name with a capital before the `:`. No fraction:
+        // a part that is not digits.
+        [{ w: '[aB:1]' }, 'w-[aB:1]'],
+        [{ w: '[a/b]' }, 'w-[a/b]'],
+        [{ w: '[1/x]' }, 'w-[1/x]'],
+        // Known: an invalid declaration (`background-color: repeat-x`),
+        // left to the CSS grammar gate (TASK-13.20).
+        [{ bgRepeat: '[repeat-x]' }, 'bg-[repeat-x]'],
+    ])('%j writes %s', (sz, className) => {
+        expect(lower(sz)).toEqual({ className, kinds: [] });
+    });
+
+    it.each([
         [{ w: '[1/2]' }],
         [{ top: '-[1px]' }],
         [{ m: '-[var(--v)]' }],
-        [{ w: '[calc(100% - 2px)]' }],
-        [{ hover: { w: '[10px]' } }],
-        // One pair around a whole grid template, line names inside or not.
-        [{ gridCols: '[1fr_2fr]' }],
-        [{ gridCols: '[[a]_1fr_[b]]' }],
+        // A variable is `'--x'`; a type hint or a property is no value.
+        [{ w: '[--x]' }],
+        [{ w: '[length:13px]' }],
+        [{ text: '[color:red]' }],
+        [{ text: '[color:--x]' }],
+        [{ text: '[color:var(--x)]' }],
+        [{ w: '[]' }],
+        // A bracket at one end only, or the modifier before the value.
+        [{ w: '[10px' }],
+        [{ w: '10px]' }],
+        [{ w: '![10px]' }],
+        [{ content: '[x' }],
+        // A key with no arbitrary utility.
+        [{ srOnly: '[x]' }],
         // Brackets inside a value on a key whose CSS takes no line names.
         [{ p: '[a]_1_[b]' }],
         // Brackets that do not balance are no grid template, wrapped or not.
@@ -97,8 +214,6 @@ describe.each(LANES)('a value wrapped in brackets — %s', (_name, lower) => {
         [{ gridCols: '-[a]_1fr' }],
         [{ gridCols: '-[[a]_1fr]' }],
         [{ gridRows: '-[a]_auto_[b]!' }],
-        // The important modifier sits outside the brackets.
-        [{ w: '[10px]!' }],
         [{ top: '-[1px]!' }],
         // A closed-enum key names it once, as `bracketed-value`.
         [{ display: '[block]' }],
@@ -107,6 +222,10 @@ describe.each(LANES)('a value wrapped in brackets — %s', (_name, lower) => {
         [{ bg: '(--brand)' }],
         [{ ease: '(--e)!' }],
         [{ display: '(--d)' }],
+        // Brackets around a value that is itself bracketed and writes nothing:
+        // the build names it as the runtime does.
+        [{ w: '[(--x)]' }],
+        [{ gridCols: '[[]]' }],
     ])('%j writes nothing and names the key', sz => {
         expect(lower(sz)).toEqual({ className: '', kinds: ['bracketed-value'] });
     });
@@ -128,8 +247,8 @@ describe.each(LANES)('a value wrapped in brackets — %s', (_name, lower) => {
         [{ css: { gridTemplateColumns: '[a] 1fr [b]' } }, '[grid-template-columns:[a]_1fr_[b]]'],
         [{ w: '100px' }, 'w-[100px]'],
         [{ '--cols': '[a]' }, '[--cols:[a]]'],
-        // A bracket that never closes wraps nothing.
-        [{ content: '[x' }, 'content-[[x]'],
+        // A bracket inside a value, at neither end.
+        [{ content: "'[x'" }, "content-['[x']"],
         // The variable as written, and parentheses that are a function's own.
         [{ animate: '--my-animation' }, 'animate-(--my-animation)'],
         [{ w: '--spacing(4)' }, 'w-[--spacing(4)]'],
@@ -194,6 +313,24 @@ describe.each(LANES)('a variable in parentheses on every key — %s', (_name, lo
     });
 });
 
+describe('a bracketed value on every key, every lane alike', () => {
+    // Whether a key writes `key-[…]` or nothing, and whether its spelling
+    // without brackets writes the same class, is decided on each lane; one
+    // value per shape walks every key so a key one lane reads apart shows.
+    // `[a b]`, not `[a_b]`: `bgPos: 'a_b'` is lowered apart already (TASK-13.44).
+    const values = ['[10px]', '[4]', '[red]', '[10px]!', '[a b]'];
+    it.each(Object.keys(PROPERTY_MAP).flatMap(key => values.map(value => [key, value])))(
+        '%s: %s',
+        (key, value) => {
+            const results = LANES.map(([, lower]) => {
+                __resetSzWarnDedupForTests();
+                return lower({ [key]: value });
+            });
+            for (const result of results.slice(1)) expect(result).toEqual(results[0]);
+        },
+    );
+});
+
 /** One lane: an sz object in, the `help:` lines it printed out. */
 type HelpLane = (sz: Record<string, unknown>) => string[];
 
@@ -250,6 +387,16 @@ describe.each(HELP_LANES)('what the help offers for a wrapped value — %s', (_n
         [{ w: '[100px]' }, "write `w: '100px'`"],
         [{ top: '-[1px]!' }, "write `top: '-1px!'`"],
         [{ animate: '(--spin)' }, "write `animate: '--spin'`"],
+        // `grow: '2.5'` writes `grow-[2.5]` since ADR 0037 §1 (TASK-13.19).
+        [{ grow: '[2.5]' }, "write `grow: '2.5'`"],
+        // A type hint is dropped: the key already says what the value is.
+        [{ text: '[length:13px]' }, "write `text: '13px'`"],
+        [{ text: '[length:var(--x)]' }, "write `text: '--x'`"],
+        // The hint is read off the class's own brackets, not a `:` inside.
+        [{ bgImg: '[image:url(a:b)]' }, "write `bgImg: 'url(a:b)'`"],
+        [{ bgSize: '[length:10px]' }, "write `bgSize: '10px'`"],
+        [{ border: '[var(--x)]' }, "write `border: '--x'`"],
+        [{ w: '![10px]' }, "write `w: '10px!'`"],
         // Around a whole grid template the inner value, line names and all.
         [{ gridCols: '[[a]_1fr_[b]]' }, "write `gridCols: '[a]_1fr_[b]'`"],
         [{ gridRows: '[[a]_1fr]' }, "write `gridRows: '[a]_1fr'`"],
@@ -266,6 +413,12 @@ describe.each(HELP_LANES)('what the help offers for a wrapped value — %s', (_n
         [{ gridCols: '[a]_1fr_[b' }],
         [{ gridCols: '-[a]_1fr_[b]' }],
         [{ gridCols: '-[[a]_1fr]' }],
+        [{ w: '[10px' }],
+        [{ w: '10px]' }],
+        // A type hint the key does not write for the value without it.
+        [{ text: '[color:--x]' }],
+        [{ text: '[color:var(--x)]' }],
+        [{ text: '[color:red]' }],
     ])('%j points to `css` instead of a value it cannot write', sz => {
         const lines = help(sz);
         expect(lines).toHaveLength(1);
@@ -292,7 +445,21 @@ describe.each(ENGINES)('the args of a bracketed value — %s', (_name, engine) =
     // `inner` stays a string on both forms, as the args type has it; it is a
     // value to write only when `form` is `unwrap`.
     it.each([
-        [{ w: '[100px]' }, { form: 'unwrap', key: 'w', value: '[100px]', inner: '100px' }],
+        [{ w: '[1/2]' }, { form: 'unwrap', key: 'w', value: '[1/2]', inner: '1/2' }],
+        [
+            { w: '[length:13px]' },
+            { form: 'unwrap', key: 'w', value: '[length:13px]', inner: '13px' },
+        ],
+        [{ w: '![10px]' }, { form: 'unwrap', key: 'w', value: '![10px]', inner: '10px!' }],
+        [
+            { leading: '[line-height:2]' },
+            { form: 'unwrap', key: 'leading', value: '[line-height:2]', inner: '2' },
+        ],
+        [{ w: '[10px' }, { form: 'escape', key: 'w', value: '[10px', inner: '[10px' }],
+        [
+            { text: '[color:--x]' },
+            { form: 'type-hint', key: 'text', value: '[color:--x]', inner: '--x' },
+        ],
         [{ p: '[a]_1_[b]' }, { form: 'escape', key: 'p', value: '[a]_1_[b]', inner: 'a]_1_[b' }],
         [
             { gridCols: '[a]_1fr_[b' },
@@ -300,5 +467,93 @@ describe.each(ENGINES)('the args of a bracketed value — %s', (_name, engine) =
         ],
     ])('%j reports %j', (sz, args) => {
         expect(argsOf(sz)).toEqual(args);
+    });
+
+    // A spelling the class does not need is its own id, with no form.
+    it.each([
+        [{ w: '[100px]' }, { key: 'w', value: '[100px]', inner: '100px' }],
+        [{ w: '[10px]!' }, { key: 'w', value: '[10px]!', inner: '10px!' }],
+        [{ gridRows: '[[a]_1fr]' }, { key: 'gridRows', value: '[[a]_1fr]', inner: '[a]_1fr' }],
+        [{ gridRows: '[[[[a]]]]' }, { key: 'gridRows', value: '[[[[a]]]]', inner: '[a]' }],
+        // A trial that reaches brackets again names the value as written.
+        [{ gridCols: '[[a]]' }, { key: 'gridCols', value: '[[a]]', inner: '[a]' }],
+        [{ border: '[var(--x)]' }, { key: 'border', value: '[var(--x)]', inner: '--x' }],
+    ])('%j reports `redundant-bracket` %j', (sz, args) => {
+        const issues = captureWarnings(
+            engine,
+            `export const A = () => <p sz={${escapeUnsafeChars(JSON.stringify(sz))}} />;`,
+            '/p/src/Bracketed.jsx',
+        ).result.issues;
+        expect(issues?.map(issue => issue.code)).toEqual(['redundant-bracket']);
+        expect(issues?.[0]?.args).toEqual(args);
+    });
+});
+
+describe('the runtime lane in every mode', () => {
+    afterEach(() => {
+        vi.unstubAllEnvs();
+    });
+
+    // The class does not wait on a warning: production writes it, and says
+    // nothing a development build would.
+    it('writes the class in production and prints nothing', () => {
+        vi.stubEnv('NODE_ENV', 'production');
+        expect(runtimeLane({ w: '[100px]' })).toEqual({ className: 'w-[100px]', kinds: [] });
+        expect(runtimeLane({ bgSize: '[10px]' })).toEqual({
+            className: 'bg-[length:10px]',
+            kinds: [],
+        });
+        expect(runtimeLane({ w: '[1/2]' })).toEqual({ className: '', kinds: [] });
+    });
+
+    // Missing output is said in every mode (ADR 0011), as for the value
+    // without brackets.
+    it('prints in production what a value that writes nothing prints', () => {
+        vi.stubEnv('NODE_ENV', 'production');
+        expect(runtimeLane({ mask: '[radial]' })).toEqual({
+            className: '',
+            kinds: ['moved-value'],
+        });
+        expect(runtimeLane({ mask: '[linear]' }).kinds).toEqual(['moved-value']);
+    });
+
+    it('takes no dedup slot of the value without brackets', () => {
+        runtimeLane({ justify: '[flex-start]' });
+        expect(runtimeLane({ justify: 'flex-start' }).kinds).toEqual(['closed-enum-value']);
+    });
+
+    it('names a value once, however often and wherever it is written', () => {
+        expect(runtimeLane({ w: '[10px]', hover: { w: '[10px]' } })).toEqual({
+            className: 'w-[10px] hover:w-[10px]',
+            kinds: ['redundant-bracket'],
+        });
+        expect(runtimeLane({ w: '[10px]' }).kinds).toEqual([]);
+        expect(runtimeLane({ text: '[color:--x]', md: { text: '[color:--x]' } }).kinds).toEqual([
+            'bracketed-value',
+        ]);
+    });
+
+    it('is muted by CSSZYX_QUIET_SZ_WARNINGS, and still writes the class', () => {
+        vi.stubEnv('CSSZYX_QUIET_SZ_WARNINGS', '1');
+        expect(runtimeLane({ w: '[10px]', opacity: '[50]', mask: '[radial]' })).toEqual({
+            className: 'w-[10px] opacity-[50]',
+            kinds: [],
+        });
+    });
+
+    it('prints the words of redundant-bracket with what to write', () => {
+        const warnings: string[] = [];
+        const original = console.warn;
+        console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '));
+        try {
+            transform({ border: '[var(--x)]' });
+        } finally {
+            console.warn = original;
+        }
+        expect(warnings).toHaveLength(1);
+        expect(warnings[0]).toContain(
+            "`border: '[var(--x)]'` writes the class that `border: '--x'` writes; csszyx adds the brackets itself.",
+        );
+        expect(warnings[0]).toContain("help: write `border: '--x'`.");
     });
 });

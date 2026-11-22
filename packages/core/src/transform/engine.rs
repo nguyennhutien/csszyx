@@ -888,7 +888,7 @@ struct KeyValueFindings {
     property_objects: Vec<(String, Vec<String>, u32)>,
     unknown_variants: Vec<(String, u32)>,
     dead_enums: Vec<(String, String, u32)>,
-    slash_opacities: Vec<(String, String, u32)>,
+    slash_opacities: Vec<super::lower::SlashOpacityString>,
     color_slash_opacities: Vec<super::lower::ColorSlashOpacity>,
     invalid_opacities: Vec<super::lower::InvalidOpacity>,
     bracketed_values: Vec<super::lower::BracketedValue>,
@@ -924,6 +924,81 @@ impl KeyValueFindings {
         self.runtime_aliases.clear();
     }
 
+    /// Whether any family holds a finding a reader is told about. Facts for
+    /// the build's oracle (`underscore_values`) are not findings, and nor is
+    /// a bracketed value's own record, which restates the value it wraps.
+    const fn has_findings(&self) -> bool {
+        !(self.unknown.is_empty()
+            && self.dead_steps.is_empty()
+            && self.spacing_fractions.is_empty()
+            && self.clamped_factors.is_empty()
+            && self.removed_sugar.is_empty()
+            && self.border_side_styles.is_empty()
+            && self.property_objects.is_empty()
+            && self.unknown_variants.is_empty()
+            && self.dead_enums.is_empty()
+            && self.slash_opacities.is_empty()
+            && self.color_slash_opacities.is_empty()
+            && self.invalid_opacities.is_empty()
+            && self.mask_members.is_empty()
+            && self.moved_values.is_empty()
+            && self.mask_layers.is_empty()
+            && self.globals_before_groups.is_empty())
+    }
+
+    /// Refill every family from one group of objects, a bracketed value
+    /// reported as the value it stands for wherever that value says something
+    /// (ADR 0037 §2): the group is collected again with each such property
+    /// written as that value, so its findings land in source order in every
+    /// family, and a family added later needs nothing here. The facts for the
+    /// build's oracle are the ones of the objects as written.
+    ///
+    /// `n` is the properties of the group: one pass, plus one per level of
+    /// brackets a value is reported through, each shorter by a pair, so a
+    /// group with none costs the single pass.
+    fn collect_group<'a>(&mut self, objects: impl Iterator<Item = &'a super::StaticSzObject>) {
+        self.clear();
+        let objects: Vec<&super::StaticSzObject> = objects.collect();
+        for object in &objects {
+            self.collect(object);
+        }
+        let swaps = self.bracket_swaps();
+        if swaps.is_empty() {
+            return;
+        }
+        let written = std::mem::take(&mut self.underscore_values);
+        let swapped: Vec<super::StaticSzObject> = objects
+            .iter()
+            .map(|object| swap_bracketed(object, &swaps))
+            .collect();
+        self.collect_group(swapped.iter());
+        self.underscore_values = written;
+    }
+
+    /// Each bracketed value to report as the value it stands for: one that
+    /// writes nothing, always, so it says what that value says or nothing,
+    /// and one whose class the key writes anyway, when that value is reported.
+    fn bracket_swaps(&self) -> Vec<BracketSwap> {
+        let mut swaps = Vec::new();
+        for found in &self.bracketed_values {
+            let Some(property) = &found.stands_for else {
+                continue;
+            };
+            let reported = found.form == super::lower::BracketedForm::Unwrap || {
+                let single = super::StaticSzObject {
+                    properties: vec![property.clone()],
+                };
+                let mut trial = Self::default();
+                trial.collect_group(std::iter::once(&single));
+                trial.has_findings()
+            };
+            if reported {
+                swaps.push((found.at, found.value.clone(), property.clone()));
+            }
+        }
+        swaps
+    }
+
     /// Refill every family from one static object of the group.
     fn collect(&mut self, object: &super::StaticSzObject) {
         collect_unknown_sz_keys(object, &mut self.unknown);
@@ -948,6 +1023,35 @@ impl KeyValueFindings {
     }
 }
 
+/// A bracketed value reported as the value it stands for: where it is
+/// written, the value as written, and the property it stands for.
+type BracketSwap = (u32, String, super::StaticSzProperty);
+
+/// One object with each property a swap names written as the value it stands
+/// for, at any depth. A property is named by where it is written and its
+/// value, so the copies of one property a spread resolved into several
+/// branches all change, and nothing else can: a swap names a property
+/// `collect_bracketed_values` found, and no other property shares its place.
+fn swap_bracketed(object: &super::StaticSzObject, swaps: &[BracketSwap]) -> super::StaticSzObject {
+    let properties = object
+        .properties
+        .iter()
+        .map(|property| match &property.value {
+            super::StaticSzValue::String(value) => swaps
+                .iter()
+                .find(|(at, written, _)| *at == property.span.start && written == value)
+                .map_or_else(|| property.clone(), |(.., stands_for)| stands_for.clone()),
+            super::StaticSzValue::Object(nested) => super::StaticSzProperty {
+                key: property.key.clone(),
+                span: property.span,
+                value: super::StaticSzValue::Object(swap_bracketed(nested, swaps)),
+            },
+            super::StaticSzValue::Number(_) | super::StaticSzValue::Boolean(_) => property.clone(),
+        })
+        .collect();
+    super::StaticSzObject { properties }
+}
+
 /// Run every key and value family over one group of static objects, reporting
 /// each finding once per source occurrence.
 ///
@@ -967,10 +1071,7 @@ fn push_group_key_value_diagnostics<'a>(
     repeat_free: bool,
     found: &mut KeyValueFindings,
 ) {
-    found.clear();
-    for object in objects {
-        found.collect(object);
-    }
+    found.collect_group(objects);
     if !repeat_free {
         let seen = &mut std::collections::HashSet::new();
         retain_first_occurrence(&mut found.unknown, 0, seen, |(_, at)| *at);
@@ -1034,10 +1135,19 @@ fn push_group_key_value_diagnostics<'a>(
         out.push_issue(issue, *offset);
     }
     for found in &found.bracketed_values {
-        let issue = if found.offered {
-            issue::bracketed_value_unwrap(&found.key, &found.value, &found.inner)
-        } else {
-            issue::bracketed_value_escape(&found.key, &found.value, &found.inner)
+        let issue = match found.form {
+            super::lower::BracketedForm::Redundant => {
+                issue::redundant_bracket(&found.key, &found.value, &found.inner)
+            }
+            super::lower::BracketedForm::Unwrap => {
+                issue::bracketed_value_unwrap(&found.key, &found.value, &found.inner)
+            }
+            super::lower::BracketedForm::Escape => {
+                issue::bracketed_value_escape(&found.key, &found.value, &found.inner)
+            }
+            super::lower::BracketedForm::TypeHint => {
+                issue::bracketed_value_type_hint(&found.key, &found.value, &found.inner)
+            }
         };
         out.push_issue(issue, found.at);
     }
@@ -1364,32 +1474,41 @@ fn push_dead_enum_diagnostics(found: &[(String, String, u32)], out: &mut Diagnos
     }
 }
 
-/// Report a colour key whose slash-opacity string the lowering dropped.
-fn push_slash_opacity_diagnostics(found: &[(String, String, u32)], out: &mut Diagnostics) {
-    for (key, value, offset) in found {
-        // The collector found a slash, so the split cannot miss.
-        let (color, opacity) = value.split_once('/').unwrap_or_default();
-        out.push_issue(issue::slash_opacity_string(key, color, opacity), *offset);
+/// Report a colour key whose string carries a slash opacity; the class is
+/// written as given. `op` is the opacity as the object form takes it.
+fn push_slash_opacity_diagnostics(
+    found: &[super::lower::SlashOpacityString],
+    out: &mut Diagnostics,
+) {
+    for (key, color, opacity, important, offset) in found {
+        let op = super::lower::op_literal(opacity);
+        let important = important.then_some("!");
+        out.push_issue(
+            issue::slash_opacity_string(key, color, opacity, &op, important),
+            *offset,
+        );
     }
 }
 
-/// A colour object whose `color` carries a slash opacity: the class is written
-/// (with `op` as the opacity when both are given), and the finding points at
-/// `op`, the one spelling.
+/// A colour object whose `color` carries a slash opacity: `color` is written
+/// as given, and the finding points at `op`, the one spelling.
 fn push_color_slash_opacity_diagnostics(
     found: &[super::lower::ColorSlashOpacity],
     out: &mut Diagnostics,
 ) {
     for (key, color, op, offset) in found {
-        // The collector found a plain opacity, so the split cannot miss.
         let (unmarked, important) = color
             .strip_suffix('!')
             .map_or((color.as_str(), ""), |color| (color, "!"));
-        let (base, opacity) = unmarked.split_once('/').unwrap_or_default();
+        // The collector found a slash, so the split cannot miss.
+        let (base, opacity) = super::lower::slash_opacity_split(unmarked).unwrap_or_default();
         let important_mark = (!important.is_empty()).then_some("!");
         let issue = op.as_deref().map_or_else(
-            || issue::color_slash_opacity_op_absent(key, base, opacity, important_mark, None),
-            |op| issue::color_slash_opacity_op_given(key, base, opacity, important_mark, Some(op)),
+            || {
+                let op = super::lower::op_literal(opacity);
+                issue::color_slash_opacity_op_absent(key, base, opacity, important_mark, &op)
+            },
+            |op| issue::color_slash_opacity_op_given(key, base, opacity, important_mark, op),
         );
         out.push_issue(issue, *offset);
     }
@@ -2702,16 +2821,19 @@ mod tests {
     }
 
     #[test]
-    fn static_engine_names_a_slash_opacity_string_on_a_colour_key() {
-        // A colour key takes its opacity in the object form, so the lowering
-        // drops the string. A drop with nothing said is missing output; the
-        // runtime channel has always named it, and the build now does too.
+    fn a_slash_opacity_string_on_a_colour_key_is_written_and_reported() {
+        // The object form is the one spelling of an opacity (ADR 0037 §8): the
+        // class is written as given (ADR 0036) and the slash is reported, a
+        // slash inside a colour function and a fraction aside.
         let file = TransformFile {
             filename: "/repo/src/App.tsx".to_string(),
             source: [
                 "export const A = () => <div sz={{ bg: 'red-500/50!', p: 2,",
-                "  hover: { from: 'blue-500/20' }, text: 'red-500/50', fill: '1/2',",
-                "  ring: { color: 'red-500', op: 50 }, data: { x: { bg: 'red-500/5' } } }} />;",
+                "  hover: { from: 'blue-500/20' }, data: { x: { bg: 'red-500/5' } },",
+                "  fill: '#f00/[0.3]', color: 'rgb(255_0_0/50%)', stroke: '1/2',",
+                "  outlineColor: 'red-500/[50%]', focus: { bg: 'linear-to-r/oklch', color: 'red-500/40' },",
+                // A key that takes no colour, and a value the bracket lane claims.
+                "  p: 'red-500/50', caret: '[#f00]/[50%]' }} />;",
             ]
             .join("\n"),
         };
@@ -2719,27 +2841,24 @@ mod tests {
         assert_eq!(
             lines(&result),
             [
-                r#"slash-opacity-string {"key":"bg","color":"red-500","opacity":"50"}"#,
-                r#"slash-opacity-string {"key":"from","color":"blue-500","opacity":"20"}"#,
-                r#"slash-opacity-string {"key":"bg","color":"red-500","opacity":"5"}"#,
+                r#"slash-opacity-string {"key":"bg","color":"red-500","opacity":"50","op":"50","important":"!"}"#,
+                r#"slash-opacity-string {"key":"from","color":"blue-500","opacity":"20","op":"20"}"#,
+                r#"slash-opacity-string {"key":"bg","color":"red-500","opacity":"5","op":"5"}"#,
+                r##"slash-opacity-string {"key":"fill","color":"#f00","opacity":"[0.3]","op":"30"}"##,
+                r#"slash-opacity-string {"key":"outlineColor","color":"red-500","opacity":"[50%]","op":"'50%'"}"#,
+                r#"slash-opacity-string {"key":"color","color":"red-500","opacity":"40","op":"40"}"#,
+                r##"bracketed-value {"form":"escape","key":"caret","value":"[#f00]/[50%]","inner":"#f00]/[50%"}"##,
+                // A fact for the build's oracle, not a finding.
+                r#"underscore-space {"key":"color","value":"rgb(255_0_0/50%)","className":"text-[rgb(255_0_0/50%)]"}"#,
             ]
         );
-        assert_eq!(
-            located(&result, &file.source, "slash-opacity-string")
-                .iter()
-                .map(|(_, line, _)| *line)
-                .collect::<Vec<_>>(),
-            [1, 2, 3]
-        );
-        assert_eq!(
-            result
-                .issues
-                .iter()
-                .map(|issue| issue.code)
-                .collect::<Vec<_>>(),
-            [crate::transform::DiagnosticCode::SlashOpacityString; 3]
-        );
-        assert!(!result.code.contains("red-500/50!"), "{}", result.code);
+        for class in [
+            "bg-red-500/50!",
+            "hover:from-blue-500/20",
+            "data-[x]:bg-red-500/5",
+        ] {
+            assert!(result.code.contains(class), "{class}\n{}", result.code);
+        }
     }
 
     #[test]
@@ -3645,6 +3764,51 @@ mod tests {
         assert_eq!(positions(&result, &file.source), [(1, 33)]);
     }
 
+    /// A bracketed value whose value without brackets is reported on its own
+    /// is reported as that, once per family, in source order; one that is
+    /// not keeps its own record.
+    #[test]
+    fn a_bracketed_value_reports_what_its_value_without_brackets_reports() {
+        let file = TransformFile {
+            filename: "src/App.tsx".to_string(),
+            source: "export const A = () => <div sz={{ opacity: '[50]', mask: '[radial]', borderT: '[dashed]', w: '[10px]', text: '[color:--x]', hover: { opacity: '[60]' } }} />;"
+                .to_string(),
+        };
+
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+
+        assert_eq!(
+            lines(&result),
+            [
+                r#"clamped-factor {"key":"opacity","value":"50"}"#,
+                r#"clamped-factor {"key":"opacity","value":"60"}"#,
+                r#"per-side-border-style {"key":"borderT","value":"dashed"}"#,
+                r#"redundant-bracket {"key":"w","value":"[10px]","inner":"10px"}"#,
+                r#"bracketed-value {"form":"type-hint","key":"text","value":"[color:--x]","inner":"--x"}"#,
+                r#"moved-value {"form":"mask-layer","key":"mask","value":"radial","layerKey":"maskRadial"}"#,
+            ]
+        );
+    }
+
+    /// A bracketed value reported as what it stands for changes that
+    /// property only: another key with the same value is not reported as it.
+    #[test]
+    fn a_bracketed_value_reported_as_its_value_changes_only_its_own_property() {
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source:
+                "export const A = () => <div sz={{ mask: '[radial]', w: '[radial]', p: 4 }} />;"
+                    .to_string(),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        assert_eq!(
+            lines(&result),
+            [
+                r#"moved-value {"form":"mask-layer","key":"mask","value":"radial","layerKey":"maskRadial"}"#
+            ]
+        );
+    }
+
     #[test]
     fn a_bracketed_value_offers_its_inner_value_only_for_one_outer_pair() {
         let file = TransformFile {
@@ -3657,16 +3821,17 @@ mod tests {
         let result = transform_static_classes(&file, 0, std::time::Instant::now());
 
         // `gridCols` names two grid lines and lowers; around a whole grid
-        // template, line names inside are offered back.
+        // template, the brackets spell the class the line names write.
         assert_eq!(
             lines(&result),
             [
-                r#"bracketed-value {"form":"unwrap","key":"w","value":"[100px]","inner":"100px"}"#,
+                r#"redundant-bracket {"key":"w","value":"[100px]","inner":"100px"}"#,
                 r#"bracketed-value {"form":"escape","key":"p","value":"[a]_1_[b]","inner":"a]_1_[b"}"#,
-                r#"bracketed-value {"form":"unwrap","key":"gridRows","value":"[[a]_1fr]","inner":"[a]_1fr"}"#,
+                r#"redundant-bracket {"key":"gridRows","value":"[[a]_1fr]","inner":"[a]_1fr"}"#,
                 // A fact, not a verdict: the `_` the author wrote, which the
                 // build asks the project's Tailwind about.
                 r#"underscore-space {"key":"gridCols","value":"[a]_1fr_[b]","className":"grid-cols-[[a]_1fr_[b]]"}"#,
+                r#"underscore-space {"key":"gridRows","value":"[[a]_1fr]","className":"grid-rows-[[a]_1fr]"}"#,
             ]
         );
     }
@@ -5542,7 +5707,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     fn every_diagnostic_carries_its_code_at_its_offset() {
         use super::super::generated::diagnostic_codes::{DiagnosticCode, DIAGNOSTIC_CODES};
-        let cases: [(DiagnosticCode, String, TransformOptions); 35] = [
+        let cases: [(DiagnosticCode, String, TransformOptions); 36] = [
             (
                 DiagnosticCode::UnknownKey,
                 "<div sz={{ xyzzy: 4 }} />".into(),
@@ -5571,6 +5736,11 @@ mod tests {
             (
                 DiagnosticCode::SlashOpacityString,
                 "<div sz={{ bg: 'red-500/50' }} />".into(),
+                TransformOptions::default(),
+            ),
+            (
+                DiagnosticCode::ColorSlashOpacity,
+                "<div sz={{ bg: { color: 'red-500/50', op: 20 } }} />".into(),
                 TransformOptions::default(),
             ),
             (
@@ -5709,12 +5879,12 @@ mod tests {
                 },
             ),
             (
-                DiagnosticCode::ColorSlashOpacity,
-                "<div sz={{ bg: { color: 'red-500/50', op: 20 } }} />".into(),
+                DiagnosticCode::BracketedValue,
+                "<div sz={{ w: '[1/2]' }} />".into(),
                 TransformOptions::default(),
             ),
             (
-                DiagnosticCode::BracketedValue,
+                DiagnosticCode::RedundantBracket,
                 "<div sz={{ w: '[100px]' }} />".into(),
                 TransformOptions::default(),
             ),
@@ -5849,30 +6019,6 @@ mod tests {
         );
     }
 
-    /// A colour key inside a variant is a slash-opacity string like one at
-    /// the top; the `color` member of a colour object is a value and is not.
-    #[test]
-    fn a_slash_opacity_string_is_found_under_a_variant_but_not_in_a_colour_object() {
-        let slash = |source: &str| {
-            run_variant_source(source)
-                .issues
-                .iter()
-                .filter(|issue| issue.code == crate::transform::DiagnosticCode::SlashOpacityString)
-                .count()
-        };
-        assert_eq!(
-            slash("const A = () => <div sz={{ hover: { color: 'red-500/50' } }} />;"),
-            1
-        );
-        assert_eq!(
-            slash("const A = () => <div sz={{ bg: { color: 'red-500/50', op: 50 } }} />;"),
-            0
-        );
-    }
-
-    /// A slash opacity in a colour object's `color` still writes a served
-    /// class, takes `op` as the opacity when both are given, and points at
-    /// `op`, found under variants too; a colour without one says nothing.
     /// An `op` between 0 and 1 is the percent it is, and said, with the
     /// percent to write for the opacity 0.17 gave it.
     #[test]
@@ -5891,38 +6037,43 @@ mod tests {
         );
     }
 
+    /// A slash opacity in a colour object's `color` goes through as written,
+    /// as in a colour string, and `op` adds its own: a slash in both is a
+    /// class no Tailwind serves, which the build reports as a dead class.
     #[test]
-    fn a_colour_object_with_a_slash_opacity_writes_its_class_and_points_at_op() {
+    fn a_colour_object_with_a_slash_opacity_writes_its_color_and_points_at_op() {
         let cases: [(&str, &str, &str); 6] = [
-            (
-                "const A = () => <div sz={{ bg: { color: 'red-500/50!', op: 20 } }} />;",
-                r#"className="bg-red-500/20!""#,
-                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","important":"!","op":"20"}"#,
-            ),
-            (
-                "const A = () => <div sz={{ bg: { color: 'red-500/50', op: 20 } }} />;",
-                r#"className="bg-red-500/20""#,
-                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","op":"20"}"#,
-            ),
             (
                 "const A = () => <div sz={{ bg: { color: 'red-500/50' } }} />;",
                 r#"className="bg-red-500/50""#,
-                r#"color-slash-opacity {"form":"op-absent","key":"bg","base":"red-500","opacity":"50"}"#,
+                r#"color-slash-opacity {"form":"op-absent","key":"bg","base":"red-500","opacity":"50","op":"50"}"#,
             ),
             (
-                "const A = () => <div sz={{ bg: { color: 'red-500/50', op: '78%' } }} />;",
-                r#"className="bg-red-500/[78%]""#,
-                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","op":"'78%'"}"#,
+                "const A = () => <div sz={{ bg: { color: 'red-500/50!' } }} />;",
+                r#"className="bg-red-500/50!""#,
+                r#"color-slash-opacity {"form":"op-absent","key":"bg","base":"red-500","opacity":"50","important":"!","op":"50"}"#,
             ),
             (
-                "const A = () => <div sz={{ hover: { bg: { color: 'red-500/50', op: 2.5 } } }} />;",
-                r#"className="hover:bg-red-500/2.5""#,
-                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","op":"2.5"}"#,
+                "const A = () => <div sz={{ bg: { color: 'red-500/50', op: 20 } }} />;",
+                r#"className="bg-red-500/50/20""#,
+                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","op":"20"}"#,
             ),
             (
-                "const A = () => <div sz={{ md: { hover: { borderColor: { color: 'blue-600/75' } } } }} />;",
-                r#"className="md:hover:border-blue-600/75""#,
-                r#"color-slash-opacity {"form":"op-absent","key":"borderColor","base":"blue-600","opacity":"75"}"#,
+                "const A = () => <div sz={{ md: { hover: { borderColor: { color: '#f00/75' } } } }} />;",
+                r#"className="md:hover:border-[#f00/75]""#,
+                r##"color-slash-opacity {"form":"op-absent","key":"borderColor","base":"#f00","opacity":"75","op":"75"}"##,
+            ),
+            // Every key a colour object serves; the help's `op` is the one the
+            // opacity names.
+            (
+                "const A = () => <div sz={{ ring: { color: 'red-500/(--o)' } }} />;",
+                r#"className="ring-red-500/(--o)""#,
+                r#"color-slash-opacity {"form":"op-absent","key":"ring","base":"red-500","opacity":"(--o)","op":"'--o'"}"#,
+            ),
+            (
+                "const A = () => <div sz={{ textShadow: { color: 'red-500/[0.5]', op: 5 } }} />;",
+                r#"className="text-shadow-red-500/[0.5]/5""#,
+                r#"color-slash-opacity {"form":"op-given","key":"textShadow","base":"red-500","opacity":"[0.5]","op":"5"}"#,
             ),
         ];
         for (source, class_attr, message) in cases {
@@ -5932,43 +6083,19 @@ mod tests {
                 "{source}\n{}",
                 result.code
             );
-            let found = result
-                .issues
-                .iter()
-                .filter(|issue| issue.code == crate::transform::DiagnosticCode::ColorSlashOpacity)
-                .count();
-            assert_eq!(found, 1, "{source}: {:?}", result.issues);
             assert_eq!(lines(&result), [message], "{source}");
         }
-        // A variant holding a `color` key is not a colour object: it is searched.
-        let result = run_variant_source(
-            "const A = () => <div sz={{ hover: { color: 'red-500', bg: { color: 'red-500/50', op: 2 } } }} />;",
-        );
-        assert_eq!(
-            result
-                .issues
-                .iter()
-                .filter(|issue| issue.code == crate::transform::DiagnosticCode::ColorSlashOpacity)
-                .count(),
-            1,
-            "{:?}",
-            result.issues
-        );
+        // A colour without a slash, or with one inside its function, says nothing.
         for source in [
             "const A = () => <div sz={{ bg: { color: 'red-500', op: 20 } }} />;",
-            "const A = () => <div sz={{ bg: { color: 'white/50' } }} />;",
-            "const A = () => <div sz={{ bg: { color: 'red-500/' } }} />;",
-            "const A = () => <div sz={{ bg: { color: 'red-500/50/30', op: 2 } }} />;",
-            "const A = () => <div sz={{ p: { x: { color: 'red-500/50' } } }} />;",
+            "const A = () => <div sz={{ bg: { color: 'rgb(255_0_0/50%)' } }} />;",
         ] {
-            let result = run_variant_source(source);
+            let found = lines(&run_variant_source(source));
             assert!(
-                !result
-                    .issues
+                !found
                     .iter()
-                    .any(|issue| issue.code == crate::transform::DiagnosticCode::ColorSlashOpacity),
-                "{source}: {:?}",
-                result.issues
+                    .any(|line| line.starts_with("color-slash-opacity")),
+                "{source}: {found:?}"
             );
         }
     }

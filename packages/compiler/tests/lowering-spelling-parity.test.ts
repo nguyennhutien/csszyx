@@ -354,287 +354,87 @@ describe.each(LANES)('a slash opacity string — %s', (_name, lower) => {
         expect(result.kinds).toEqual([]);
     });
 
+    // A colour takes its opacity in the object form, the one spelling
+    // (ADR 0037 §8, amended 2026-11-24). A slash on a colour key keeps the
+    // class as written (ADR 0036) and is reported: a theme colour serves it,
+    // a hex, a colour function or a variable writes a value no browser takes.
     it.each([
-        [{ bg: 'red-500/50' }],
-        [{ color: 'red-500/50' }],
-        [{ borderColor: 'red-500/50!' }],
-        [{ hover: { from: 'red-500/50' } }],
-        // Every colour key, a border side and the inset family included.
-        ...[
-            'borderTColor',
-            'borderRColor',
-            'borderBColor',
-            'borderLColor',
-            'borderXColor',
-            'borderYColor',
-            'insetRingColor',
-            'insetShadowColor',
-        ].map(key => [{ [key]: 'red-500/50' }]),
-    ])('drops %j on a colour key, which takes the object form, and says so', sz => {
-        // Nothing is emitted, so the drop is missing output (ADR 0011): every
-        // lane reports it, the engines with the code the runtime text maps to.
-        const result = lower(sz);
-
-        expect(result.className).toBe('');
-        expect(result.kinds).toEqual(['slash-opacity-string']);
+        [{ bg: 'red-500/50' }, 'bg-red-500/50'],
+        [{ color: 'red-500/50' }, 'text-red-500/50'],
+        [{ borderColor: 'red-500/50!' }, 'border-red-500/50!'],
+        [{ hover: { from: 'red-500/50' } }, 'hover:from-red-500/50'],
+        [{ bg: 'white/50' }, 'bg-white/50'],
+        [{ insetRingColor: 'red-500/50' }, 'inset-ring-red-500/50'],
+        [{ bg: '#f00/50' }, 'bg-[#f00/50]'],
+        [{ bg: 'rgb(255 0 0)/50' }, 'bg-[rgb(255_0_0)/50]'],
+        [{ bg: 'var(--c)/50' }, 'bg-[var(--c)/50]'],
+        [{ bg: '--c/50' }, 'bg-(--c/50)'],
+        [{ bg: '[#f00]/50' }, 'bg-[#f00]/50'],
+        [{ bg: 'red-500/[0.3]' }, 'bg-red-500/[0.3]'],
+    ])('writes %j as %s and reports the slash', (sz, className) => {
+        expect(lower(sz)).toEqual({ className, kinds: ['slash-opacity-string'] });
     });
 
-    it('reports nothing for the object form or a key the slash is served on', () => {
-        expect(lower({ bg: { color: 'red-500', op: 50 } }).kinds).toEqual([]);
-        expect(lower({ text: 'red-500/50' }).kinds).toEqual([]);
-    });
-});
-
-describe('the slash opacity diagnostic', () => {
-    // Both lanes render the registry's text; the runtime has no column.
-    const lines = [
-        "`bg: 'red-500/50'` emits nothing: a string value cannot carry a slash opacity.",
-        "help: use the object form: `{ color: 'red-500', op: 50 }`.",
-    ];
-    const expected = engineMessage('slash-opacity-string', '/p/src/Spelling.jsx:1', ...lines);
-    const engineExpected = engineMessage(
-        'slash-opacity-string',
-        '/p/src/Spelling.jsx:1:33',
-        ...lines,
-    );
-
-    it.each(ENGINES)('%s renders the registry text, bang removed', (_name, engine) => {
-        const run = captureWarnings(
-            engine,
-            "export const A = () => <p sz={{ bg: 'red-500/50!', p: 2 }} />;",
-            '/p/src/Spelling.jsx',
-        );
-
-        expect(run.className).toBe('p-2');
-        expect(run.warnings).toEqual([engineExpected]);
-        expect(run.result.issues?.map(issue => [issue.code, issue.args])).toEqual([
-            ['slash-opacity-string', { key: 'bg', color: 'red-500', opacity: '50' }],
-        ]);
+    it('leaves a value the bracket lane writes nothing for to that lane', () => {
+        expect(lower({ bg: '[#f00]/[50%]' })).toEqual({
+            className: '',
+            kinds: ['bracketed-value'],
+        });
     });
 
-    it('the runtime prints the same text once, and its code in production too', () => {
-        // The class is missing, so it is not a development nudge (ADR 0011).
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        setSzWarnLocation('/p/src/Spelling.jsx:1');
-        try {
-            expect(transform({ bg: 'red-500/50!', p: 2 }).className).toBe('p-2');
-            transform({ bg: 'red-500/50' });
-            expect(warn.mock.calls).toEqual([[expected]]);
-
-            warn.mockClear();
-            __resetSzWarnDedupForTests();
-            vi.stubEnv('NODE_ENV', 'production');
-            transform({ bg: 'red-500/50' });
-            transform({ bg: 'red-500/50' });
-            expect(warn.mock.calls).toEqual([
-                [
-                    productionMessage('slash-opacity-string', {
-                        key: 'bg',
-                        color: 'red-500',
-                        opacity: '50',
-                    }),
-                ],
-            ]);
-        } finally {
-            setSzWarnLocation(undefined);
-            vi.unstubAllEnvs();
-            warn.mockRestore();
-        }
+    it('reports nothing for the object form', () => {
+        expect(lower({ bg: { color: 'red-500', op: 50 } })).toEqual({
+            className: 'bg-red-500/50',
+            kinds: [],
+        });
     });
 });
 
 describe.each(LANES)('a slash opacity in a colour object — %s', (_name, lower) => {
-    // A colour object takes its opacity in `op`, the one spelling (user
-    // decision). A slash in `color` still writes a class Tailwind serves, and
-    // the lanes point at `op`; with both, `op` is the opacity, so
-    // `{ color: 'red-500/50', op: 20 }` no longer writes `bg-red-500/50/50`.
+    // `color` is written as given and the slash in it is reported; with `op`
+    // as well, the class carries both, which no Tailwind serves.
     it.each([
         [{ bg: { color: 'red-500/50' } }, 'bg-red-500/50'],
-        [{ bg: { color: 'red-500/50', op: 20 } }, 'bg-red-500/20'],
-        [{ hover: { bg: { color: 'red-500/50', op: 20 } } }, 'hover:bg-red-500/20'],
-        [{ borderColor: { color: 'blue-600/75', op: 20 } }, 'border-blue-600/20'],
-    ])('%j writes %s and points at op', (sz, className) => {
-        const result = lower(sz);
-
-        expect(result.className).toBe(className);
-        expect(result.kinds).toEqual(['color-slash-opacity']);
+        [{ bg: { color: 'red-500/50!' } }, 'bg-red-500/50!'],
+        [{ bg: { color: '#f00/50' } }, 'bg-[#f00/50]'],
+        [{ bg: { color: 'red-500/50', op: 20 } }, 'bg-red-500/50/20'],
+        [{ hover: { bg: { color: 'red-500/50', op: 20 } } }, 'hover:bg-red-500/50/20'],
+        // Every key a colour object serves, not only the colour keys.
+        [{ ring: { color: 'red-500/50' } }, 'ring-red-500/50'],
+        [{ border: { color: 'red-500/50' } }, 'border-red-500/50'],
+        [{ shadow: { color: 'red-500/50', op: 5 } }, 'shadow-red-500/50/5'],
+        [{ outline: { color: 'red-500/50' } }, 'outline-red-500/50'],
+        [{ textShadow: { color: 'red-500/50' } }, 'text-shadow-red-500/50'],
+    ])('%j writes %s and reports the slash', (sz, className) => {
+        expect(lower(sz)).toEqual({ className, kinds: ['color-slash-opacity'] });
     });
 
-    it('reports nothing for the object form', () => {
-        const result = lower({ bg: { color: 'red-500', op: 20 } });
-
-        expect(result.className).toBe('bg-red-500/20');
-        expect(result.kinds).toEqual([]);
-    });
-
-    // The important modifier ends the class: `bg-red-500!/20` is a class no
-    // Tailwind serves, `bg-red-500/20!` is the important one.
-    it.each([
-        [{ bg: { color: 'red-500!', op: 20 } }, 'bg-red-500/20!', []],
-        [{ bg: { color: 'red-500/50!' } }, 'bg-red-500/50!', ['color-slash-opacity']],
-        [{ bg: { color: 'red-500/50!', op: 20 } }, 'bg-red-500/20!', ['color-slash-opacity']],
-    ])('%j keeps the important modifier at the end: %s', (sz, className, kinds) => {
-        const result = lower(sz);
-
-        expect(result.className).toBe(className);
-        expect(result.kinds).toEqual(kinds);
-    });
-
-    // Only a plain opacity after the slash is one `op` can take; anything else
-    // is written as given and judged by the project's Tailwind at build.
-    it.each([
-        [{ bg: { color: 'red-500/' } }, 'bg-red-500/'],
-        [{ bg: { color: 'red-500/50/30' } }, 'bg-red-500/50/30'],
-    ])('%j is not an opacity op can take, and is written as given', (sz, className) => {
-        const result = lower(sz);
-
-        expect(result.className).toBe(className);
-        expect(result.kinds).toEqual([]);
-    });
-});
-
-describe('the colour-object slash opacity diagnostic', () => {
-    // Both lanes render the registry's text; the runtime has no column.
-    const withOpLines = [
-        "`bg: { color: 'red-500/50', op: 20 }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
-        "help: write `{ color: 'red-500', op: 20 }`.",
-        'note: the class uses `op: 20`; the `/50` in `color` is ignored.',
-    ];
-    const runtimeWithOp = engineMessage(
-        'color-slash-opacity',
-        '/p/src/Spelling.jsx:1',
-        ...withOpLines,
-    );
-    const withOp = engineMessage('color-slash-opacity', '/p/src/Spelling.jsx:1:33', ...withOpLines);
-    const withoutOp = engineMessage(
-        'color-slash-opacity',
-        '/p/src/Spelling.jsx:1:33',
-        "`bg: { color: 'red-500/50' }` puts the opacity in `color`; a colour object takes it in `op`.",
-        "help: write `{ color: 'red-500', op: 50 }`.",
-        'note: the class still applies opacity 50.',
-    );
-
-    it.each(ENGINES)('%s renders the registry text', (_name, engine) => {
-        const run = captureWarnings(
-            engine,
-            "export const A = () => <p sz={{ bg: { color: 'red-500/50', op: 20 } }} />;",
-            '/p/src/Spelling.jsx',
-        );
-
-        expect(run.className).toBe('bg-red-500/20');
-        expect(run.warnings).toEqual([withOp]);
-        expect(run.result.issues?.map(issue => [issue.code, issue.args])).toEqual([
-            [
-                'color-slash-opacity',
-                { form: 'op-given', key: 'bg', base: 'red-500', opacity: '50', op: '20' },
-            ],
-        ]);
-    });
-
-    it.each(ENGINES)('%s names the opacity it read from color', (_name, engine) => {
-        const run = captureWarnings(
-            engine,
-            "export const A = () => <p sz={{ bg: { color: 'red-500/50' } }} />;",
-            '/p/src/Spelling.jsx',
-        );
-
-        expect(run.className).toBe('bg-red-500/50');
-        expect(run.warnings).toEqual([withoutOp]);
-        expect(run.result.issues?.map(issue => [issue.code, issue.args])).toEqual([
-            [
-                'color-slash-opacity',
-                { form: 'op-absent', key: 'bg', base: 'red-500', opacity: '50' },
-            ],
-        ]);
-    });
-
-    it.each(ENGINES)(
-        '%s names the important modifier and a string op as written',
-        (_name, engine) => {
-            const run = captureWarnings(
-                engine,
-                "export const A = () => <p sz={{ bg: { color: 'red-500/50!', op: '78%' } }} />;",
-                '/p/src/Spelling.jsx',
-            );
-
-            expect(run.warnings).toEqual([
-                engineMessage(
-                    'color-slash-opacity',
-                    '/p/src/Spelling.jsx:1:33',
-                    "`bg: { color: 'red-500/50!', op: '78%' }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
-                    "help: write `{ color: 'red-500!', op: '78%' }`.",
-                    "note: the class uses `op: '78%'`; the `/50` in `color` is ignored.",
-                ),
-            ]);
-            expect(run.result.issues?.[0]?.args).toEqual({
-                form: 'op-given',
-                key: 'bg',
-                base: 'red-500',
-                opacity: '50',
-                important: '!',
-                op: "'78%'",
-            });
-        },
-    );
-
-    it('the runtime says the same for a string op, and nothing in production', () => {
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        setSzWarnLocation('/p/src/Spelling.jsx:1');
-        try {
-            transform({ bg: { color: 'red-500/50!', op: '78%' } });
-            vi.stubEnv('NODE_ENV', 'production');
-            transform({ bg: { color: 'blue-500/50' } });
-
-            expect(warn.mock.calls).toEqual([
-                [
-                    engineMessage(
-                        'color-slash-opacity',
-                        '/p/src/Spelling.jsx:1',
-                        "`bg: { color: 'red-500/50!', op: '78%' }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
-                        "help: write `{ color: 'red-500!', op: '78%' }`.",
-                        "note: the class uses `op: '78%'`; the `/50` in `color` is ignored.",
-                    ),
-                ],
-            ]);
-        } finally {
-            vi.unstubAllEnvs();
-            setSzWarnLocation(undefined);
-            warn.mockRestore();
-        }
-    });
-
-    it('the runtime prints the same text once', () => {
-        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        setSzWarnLocation('/p/src/Spelling.jsx:1');
-        try {
-            expect(transform({ bg: { color: 'red-500/50', op: 20 } }).className).toBe(
-                'bg-red-500/20',
-            );
-            transform({ bg: { color: 'red-500/50', op: 20 } });
-
-            expect(warn.mock.calls).toEqual([[runtimeWithOp]]);
-        } finally {
-            setSzWarnLocation(undefined);
-            warn.mockRestore();
-        }
+    it('reports nothing for a colour without a slash', () => {
+        expect(lower({ bg: { color: 'red-500!', op: 20 } })).toEqual({
+            className: 'bg-red-500/20!',
+            kinds: [],
+        });
     });
 });
 
 describe.each(LANES)('a colour string the runtime does not judge — %s', (_name, lower) => {
     // Whether the project's Tailwind serves a colour class is its verdict at
     // build (ADR 0022), so the runtime writes what the engines write and the
-    // build's dead-class check reports a dead one. Only a rule about csszyx's
-    // own input — slash opacity in a string, above — emits nothing.
+    // build's dead-class check reports a dead one.
     it.each([
-        [{ bg: 'white/50' }, 'bg-white/50'],
-        [{ hover: { bg: 'black/25' } }, 'hover:bg-black/25'],
         [{ bg: '50%' }, 'bg-[50%]'],
         [{ bg: '1/2' }, 'bg-[1/2]'],
         [{ bg: '4/2.5' }, 'bg-4/2.5'],
         [{ bg: 'calc(100/5)' }, 'bg-[calc(100/5)]'],
         [{ color: 'var(--x)' }, 'text-[var(--x)]'],
         [{ borderColor: '--x' }, 'border-(--x)'],
-        [{ fill: 'white/50!' }, 'fill-white/50!'],
+        // A slash inside a colour function is the function's own.
+        [{ bg: 'rgb(255_0_0/50%)' }, 'bg-[rgb(255_0_0/50%)]'],
+        // A gradient's slash names its interpolation, not an opacity.
+        [{ bg: 'linear-to-r/oklch' }, 'bg-linear-to-r/oklch'],
+        [{ bg: 'linear-45/srgb' }, 'bg-linear-45/srgb'],
+        [{ bg: 'radial/oklch' }, 'bg-radial/oklch'],
+        [{ bg: 'conic-180/decreasing' }, 'bg-conic-180/decreasing'],
     ])('%j writes %s and reports nothing', (sz, className) => {
         const result = lower(sz);
 

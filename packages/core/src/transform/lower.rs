@@ -841,13 +841,13 @@ pub(crate) fn collect_dead_enum_values(
                 // A value in the brackets csszyx writes is named once, by
                 // `bracketed-value`, as the runtime names it.
                 if named
-                    && bracketed_inner(&property.key, value).is_none()
+                    && bracket_spelling(&property.key, value).is_none()
                     && (is_dead_enum_value(&property.key, base)
                         || unclassed_value(&property.key, base).is_some())
                 {
                     out.push((property.key.clone(), base.to_string(), property.span.start));
                 } else if super::generated::tables::is_flag_only(&property.key)
-                    && bracketed_inner(&property.key, value).is_none()
+                    && bracket_spelling(&property.key, value).is_none()
                 {
                     // A numeric string is reported as the number it is read as.
                     out.push((
@@ -877,31 +877,148 @@ pub(crate) fn collect_dead_enum_values(
     }
 }
 
-/// Collect colour keys holding a slash-opacity string, which emit nothing.
+/// The first `/` outside brackets and parentheses.
 ///
-/// A colour key takes its opacity in the object form (`{ color, op }`), so the
-/// lowering drops `bg: 'red-500/50'`; a drop with nothing said is missing
-/// output (ADR 0011), and the runtime channel names the same value. The
-/// important modifier is split off first, as `format_static_class` does.
-/// Descends through variants and parametric variants like the lowering, and
-/// skips a colour object, whose `color` member is a value rather than a key.
+/// `rgb(0_0_0/50%)/20` splits at its last slash. Linear in the text's length.
+/// `csszyx migrate` reads a class's modifier with it, and the engine a colour
+/// value's slash opacity.
+#[cfg(any(feature = "native-engine", feature = "migrate"))]
+pub fn find_top_level_slash(text: &str) -> Option<usize> {
+    let mut depth = 0_i32;
+    for (index, byte) in text.bytes().enumerate() {
+        match byte {
+            b'[' | b'(' => depth += 1,
+            b']' | b')' => depth -= 1,
+            b'/' if depth == 0 => return Some(index),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Whether a background value, its `-` taken off, names a Tailwind gradient
+/// utility: `linear-to-r`, `radial`, `conic-180`, `gradient-to-b`.
+fn is_background_gradient(normalized: &str) -> bool {
+    normalized.starts_with("linear-")
+        || normalized.starts_with("radial")
+        || normalized.starts_with("conic")
+        || normalized.starts_with("gradient-to-")
+}
+
+/// The colour and the opacity of a colour value that carries a slash opacity:
+/// the first `/` outside brackets and parentheses, so `#f00/50`,
+/// `rgb(255 0 0)/50` and `[#f00]/50` split and `rgb(255_0_0/50%)` does not. A
+/// bare fraction or a numeric ratio is a sizing value, and a gradient's slash
+/// names its interpolation (`linear-to-r/oklch`). Mirrors `slashOpacitySplit`
+/// in `transform-core.ts`; linear in the value's length.
+#[cfg(feature = "native-engine")]
+pub(crate) fn slash_opacity_split(value: &str) -> Option<(&str, &str)> {
+    if is_bare_fraction(value) || is_decimal_ratio(value) {
+        return None;
+    }
+    let at = find_top_level_slash(value)?;
+    let (color, opacity) = (&value[..at], &value[at + 1..]);
+    let gradient = is_background_gradient(color.strip_prefix('-').unwrap_or(color));
+    (!color.is_empty() && !opacity.is_empty() && !gradient).then_some((color, opacity))
+}
+
+/// The `op` an opacity modifier names.
+#[cfg(any(feature = "native-engine", feature = "migrate"))]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ModifierOp<'a> {
+    /// A percent: `50`, or `[0.5]` read as 50.
+    Number(f64),
+    /// A string `op`: `[50%]` as `50%`, `(--o)` as `--o`.
+    Text(&'a str),
+}
+
+/// Digits with at most one point, read as a number: `50`, `0.5`, `.5`.
+#[cfg(any(feature = "native-engine", feature = "migrate"))]
+fn plain_decimal(text: &str) -> Option<f64> {
+    let digits = text
+        .bytes()
+        .all(|byte| byte.is_ascii_digit() || byte == b'.');
+    let points = text.bytes().filter(|&byte| byte == b'.').count();
+    if digits && points <= 1 {
+        text.parse().ok()
+    } else {
+        None
+    }
+}
+
+/// The `op` an opacity modifier names, as Tailwind reads the modifier.
+///
+/// `50` is 50, `[50%]` is `'50%'`, `[0.5]` is a fraction of one, 50, and `(--o)` is
+/// `'--o'`. `None` for a modifier no `op` writes, such as `[2]`, which is
+/// 200%. `csszyx migrate` reads a class's modifier with it, and a slash
+/// report's help names the `op` to write. Mirrors `modifierOp`.
+#[cfg(any(feature = "native-engine", feature = "migrate"))]
+pub fn modifier_op(modifier: &str) -> Option<ModifierOp<'_>> {
+    let inner = |open: char, close: char| {
+        (modifier.len() >= 2 && modifier.starts_with(open) && modifier.ends_with(close))
+            .then(|| &modifier[1..modifier.len() - 1])
+    };
+    if let Some(variable) = inner('(', ')') {
+        return Some(ModifierOp::Text(variable));
+    }
+    let Some(bracketed) = inner('[', ']') else {
+        return plain_decimal(modifier).map(ModifierOp::Number);
+    };
+    if bracketed.contains('%') {
+        return Some(ModifierOp::Text(bracketed));
+    }
+    // Rounded so `0.05` reads 5, not 5.000000000000001.
+    plain_decimal(bracketed)
+        .filter(|fraction| *fraction <= 1.0)
+        .map(|fraction| ModifierOp::Number((fraction * 100.0 * 1e9).round() / 1e9))
+}
+
+/// The `op` literal a slash report's help writes for an opacity: what
+/// [`modifier_op`] reads, a number bare and a string quoted, or the opacity
+/// as written, quoted, when no `op` names it. Mirrors `opLiteral`.
+#[cfg(feature = "native-engine")]
+pub(crate) fn op_literal(opacity: &str) -> String {
+    match modifier_op(opacity) {
+        Some(ModifierOp::Number(number)) => format_number_literal(number),
+        Some(ModifierOp::Text(text)) => format!("'{text}'"),
+        None => format!("'{opacity}'"),
+    }
+}
+
+/// A colour key holding a slash opacity in a string: key, colour, opacity,
+/// whether the important modifier ends it, offset.
+#[cfg(feature = "native-engine")]
+pub(crate) type SlashOpacityString = (String, String, String, bool, u32);
+
+/// Collect each colour key whose string carries a slash opacity. The class
+/// is written as given (ADR 0036); the object form is the one spelling of an
+/// opacity (ADR 0037 §8). The important modifier is split off first. Descends
+/// through variants and parametric variants like the lowering, and skips a
+/// colour object, whose `color` member is a value rather than a key.
 #[cfg(feature = "native-engine")]
 pub(crate) fn collect_slash_opacity_strings(
     object: &StaticSzObject,
-    out: &mut Vec<(String, String, u32)>,
+    out: &mut Vec<SlashOpacityString>,
 ) {
     for property in &object.properties {
         match &property.value {
-            StaticSzValue::String(value) => {
-                let base = value.strip_suffix('!').unwrap_or(value);
-                if is_dropped_slash_opacity(&property.key, base) {
-                    out.push((property.key.clone(), base.to_string(), property.span.start));
+            // A value the bracket lane claims is that lane's to report.
+            StaticSzValue::String(value)
+                if super::generated::tables::is_color_property(&property.key)
+                    && bracket_spelling(&property.key, value).is_none() =>
+            {
+                let base = value.strip_suffix('!');
+                if let Some((color, opacity)) = slash_opacity_split(base.unwrap_or(value)) {
+                    out.push((
+                        property.key.clone(),
+                        color.to_owned(),
+                        opacity.to_owned(),
+                        base.is_some(),
+                        property.span.start,
+                    ));
                 }
             }
-            StaticSzValue::Object(nested)
-                if !(property_prefix(&property.key).is_some()
-                    && object_string_property(nested, "color").is_some()) =>
-            {
+            StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
                 for_each_sz_object_in(&property.key, nested, &mut |object| {
                     collect_slash_opacity_strings(object, out);
                 });
@@ -917,9 +1034,8 @@ pub(crate) fn collect_slash_opacity_strings(
 pub(crate) type ColorSlashOpacity = (String, String, Option<String>, u32);
 
 /// Collect the colour objects whose `color` carries a slash opacity
-/// (`color-slash-opacity`). Their class is written, with `op` as the opacity
-/// when both are given; the diagnostic points at the one spelling, `op`.
-/// Descends like [`collect_slash_opacity_strings`].
+/// (`color-slash-opacity`). `color` is written as given; the finding points at
+/// `op`, the one spelling. Descends like [`collect_slash_opacity_strings`].
 #[cfg(feature = "native-engine")]
 pub(crate) fn collect_color_slash_opacities(
     object: &StaticSzObject,
@@ -929,10 +1045,9 @@ pub(crate) fn collect_color_slash_opacities(
         let StaticSzValue::Object(nested) = &property.value else {
             continue;
         };
-        let color = object_string_property(nested, "color");
-        match color {
+        match object_string_property(nested, "color") {
             Some(color) if property_prefix(&property.key).is_some() => {
-                if split_color_slash_opacity(&property.key, split_important(color).0).is_some() {
+                if slash_opacity_split(split_important(color).0).is_some() {
                     let op = nested
                         .properties
                         .iter()
@@ -1420,10 +1535,10 @@ fn lower_object_into_marked(
         // behind it, so emitting the class would leave the element naming a
         // rule nothing generates. `collect_border_side_styles` reports it.
         if let StaticSzValue::String(value) = &property.value {
-            // A value in the brackets csszyx writes itself is not read: the
-            // engine reports it (`collect_bracketed_values`).
-            if is_border_side_style_value(&property.key, value)
-                || bracketed_inner(&property.key, value).is_some()
+            // A value in the brackets csszyx writes itself writes its class
+            // or nothing; the engine names it (`collect_bracketed_values`).
+            if lower_bracketed_value(property, value, prefix, classes)
+                || is_border_side_style_value(&property.key, value)
             {
                 continue;
             }
@@ -2410,15 +2525,6 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
                 return Some(format!("{prefix}{class_key}-[{value}]"));
             }
 
-            // A colour key takes its opacity in the object form
-            // (`{ bg: { color: 'red-500', op: 50 } }`), as in the TypeScript
-            // core. Any other key writes the class as given: `text-red-500/50`
-            // is the colour utility Tailwind serves on every v4, and whether a
-            // project serves `p-red-500/50` is the build-time oracle's verdict.
-            if is_dropped_slash_opacity(key, value) {
-                return None;
-            }
-
             if let Some(typed) = typed_variable_value(key, value) {
                 return Some(format!("{prefix}{class_key}-{typed}"));
             }
@@ -2867,31 +2973,6 @@ fn object_string_property<'a>(object: &'a StaticSzObject, key: &str) -> Option<&
         })
 }
 
-/// The colour and opacity of a `color` that carries a slash opacity
-/// (`red-500/50`), by the rule a colour-key string is dropped for: a colour
-/// object takes its opacity in `op`, so the class is still written and the
-/// build points at `op` (`color-slash-opacity`).
-///
-/// Only a plain opacity after the slash (`50`, `7.5`) is one `op` can take;
-/// `red-500/` or `red-500/50/30` is written as given. `color` is passed
-/// without its trailing `!`.
-fn split_color_slash_opacity<'a>(key: &str, color: &'a str) -> Option<(&'a str, &'a str)> {
-    if !is_dropped_slash_opacity(key, color) {
-        return None;
-    }
-    let (base, opacity) = color.split_once('/')?;
-    is_plain_opacity(opacity).then_some((base, opacity))
-}
-
-/// `50` or `7.5`: digits, at most one decimal point between digits.
-fn is_plain_opacity(value: &str) -> bool {
-    let (whole, fraction) = value.split_once('.').unwrap_or((value, "0"));
-    !whole.is_empty()
-        && !fraction.is_empty()
-        && whole.bytes().all(|byte| byte.is_ascii_digit())
-        && fraction.bytes().all(|byte| byte.is_ascii_digit())
-}
-
 /// A colour without its trailing important modifier, and the modifier. The
 /// modifier ends the class (`bg-red-500/20!`): written before the opacity it
 /// makes a class no Tailwind serves.
@@ -2903,13 +2984,9 @@ fn split_important(color: &str) -> (&str, &'static str) {
 
 fn format_color_opacity_object(key: &str, object: &StaticSzObject, prefix: &str) -> Option<String> {
     let tw_prefix = property_prefix(key)?;
-    let (written_color, important) = split_important(object_string_property(object, "color")?);
-    // `op` is the opacity when both are given; the slash part only stands in
-    // for a missing `op`. Mirrors `buildColorObjectClass` in `transform-core.ts`.
-    let (raw_color, slash_opacity) = match split_color_slash_opacity(key, written_color) {
-        Some((color, opacity)) => (color, Some(opacity)),
-        None => (written_color, None),
-    };
+    // `color` is written as given, a slash opacity included; `op` adds its
+    // own. Mirrors `buildColorObjectClass` in `transform-core.ts`.
+    let (raw_color, important) = split_important(object_string_property(object, "color")?);
 
     let color_base = if is_tailwind_build_function(raw_color)
         || (raw_color.starts_with("--") && raw_color.contains('('))
@@ -2939,18 +3016,12 @@ fn format_color_opacity_object(key: &str, object: &StaticSzObject, prefix: &str)
         .find(|prop| prop.key == "op")
         .map(|prop| &prop.value);
 
-    match (op_value, slash_opacity) {
-        // An `op` that is not an opacity writes the colour alone; the engine
-        // reports it (`collect_invalid_opacities`).
-        (Some(op_value), _) => Some(format_opacity_value(op_value).map_or_else(
-            || format!("{prefix}{tw_prefix}-{color_base}{important}"),
-            |op| format!("{prefix}{tw_prefix}-{color_base}/{op}{important}"),
-        )),
-        (None, Some(opacity)) => Some(format!(
-            "{prefix}{tw_prefix}-{color_base}/{opacity}{important}"
-        )),
-        (None, None) => Some(format!("{prefix}{tw_prefix}-{color_base}{important}")),
-    }
+    // An `op` that is not an opacity writes the colour alone; the engine
+    // reports it (`collect_invalid_opacities`).
+    Some(op_value.and_then(format_opacity_value).map_or_else(
+        || format!("{prefix}{tw_prefix}-{color_base}{important}"),
+        |op| format!("{prefix}{tw_prefix}-{color_base}/{op}{important}"),
+    ))
 }
 
 /// The modifier `op` writes, or `None` when it is not an opacity.
@@ -3112,11 +3183,7 @@ fn format_bg_img_string(value: &str, prefix: &str) -> String {
     if normalized.contains('(') && !normalized.starts_with("url(") {
         return format!("{prefix}bg-[{}]", normalize_arbitrary_value(value));
     }
-    if normalized.starts_with("linear-")
-        || normalized.starts_with("radial")
-        || normalized.starts_with("conic")
-        || normalized.starts_with("gradient-to-")
-    {
+    if is_background_gradient(normalized) {
         let mapped = normalized.replace("gradient-to-", "linear-to-");
         if value.starts_with('-') {
             return format!("{prefix}-bg-{mapped}");
@@ -3245,33 +3312,6 @@ const CSS_UNITS: &[&str] = &[
     "cqh", "deg", "rad", "turn", "grad", "ms", "s", "fr",
 ];
 
-/// Whether the lowering drops this colour-key string for its slash opacity.
-///
-/// One predicate for the drop and for [`collect_slash_opacity_strings`], so the
-/// diagnostic names exactly the values that emit nothing. A bare fraction is a
-/// sizing value and lowers before the drop is reached.
-fn is_dropped_slash_opacity(key: &str, value: &str) -> bool {
-    super::generated::tables::is_color_property(key)
-        && !is_bare_fraction(value)
-        && has_slash_opacity(value)
-}
-
-fn has_slash_opacity(value: &str) -> bool {
-    // Suppress a color/opacity slash (red-500/50, white/50) — the object form
-    // `{ color, op }` is the supported spelling. A numeric ratio (4/2.5, -1/2)
-    // or a function value (calc(100/5)) is a real arbitrary value, not opacity.
-    if value.contains('(') || is_decimal_ratio(value) {
-        return false;
-    }
-    value.find('/').is_some_and(|pos| {
-        pos > 0
-            && value
-                .as_bytes()
-                .get(pos - 1)
-                .is_some_and(u8::is_ascii_digit)
-    })
-}
-
 /// Matches a numeric ratio with optional decimals and an optional leading sign,
 /// such as `4/2.5`, `16/9`, or `-1/2`.
 pub(crate) fn is_decimal_ratio(value: &str) -> bool {
@@ -3365,7 +3405,7 @@ pub(crate) fn numeric_string_value(key: &str, value: &StaticSzValue) -> Option<f
 }
 
 /// Matches a non-empty run of digits with at most one decimal point (`12`, `2.5`).
-fn is_unsigned_decimal(value: &str) -> bool {
+pub(crate) fn is_unsigned_decimal(value: &str) -> bool {
     let mut parts = value.split('.');
     match (parts.next(), parts.next(), parts.next()) {
         (Some(int), None, None) => !int.is_empty() && int.bytes().all(|b| b.is_ascii_digit()),
@@ -3678,27 +3718,6 @@ pub(crate) fn normalize_arbitrary_value(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join("_")
 }
 
-/// The value inside the brackets `value` starts and ends with, its sign kept
-/// in front (`-[1px]` is `-1px`) and an important modifier behind (`[1px]!` is
-/// `1px!`), or the variable inside the parentheses csszyx writes for one
-/// (`(--brand)` is `--brand`), or `None` when it is not wrapped. The first and
-/// last bracket need not be one pair here (`[a] 1fr [b]`); [`bracketed_inner`]
-/// tells them apart on the keys whose CSS takes grid line names. Mirrors
-/// `bracketWrappedInner` in `transform-core.ts`.
-pub(crate) fn bracket_wrapped_inner(value: &str) -> Option<String> {
-    let (body, bang) = value
-        .strip_suffix('!')
-        .map_or((value, ""), |unmarked| (unmarked, "!"));
-    if let Some(variable) = paren_variable(body) {
-        return Some(format!("{variable}{bang}"));
-    }
-    let (sign, rest) = body
-        .strip_prefix('-')
-        .map_or(("", body), |unsigned| ("-", unsigned));
-    let inner = rest.strip_prefix('[')?.strip_suffix(']')?;
-    Some(format!("{sign}{inner}{bang}"))
-}
-
 /// The variable a value wraps in the parentheses csszyx writes for it
 /// (`(--brand)`), or `None`. A function's own parentheses (`--spacing(4)`) and
 /// two variables (`(--a) (--b)`) are no such wrapping.
@@ -3707,30 +3726,268 @@ fn paren_variable(value: &str) -> Option<&str> {
     (inner.starts_with("--") && !inner.contains(['(', ')'])).then_some(inner)
 }
 
-/// [`bracket_wrapped_inner`] for a key's value: the value without the brackets
-/// csszyx writes itself, or `None` when it is lowered as written. A custom
-/// property's value is a declaration value, where `[a]` is a grid line name,
-/// so it never is wrapped. On a key whose CSS takes grid line names, an
-/// unsigned value whose brackets balance and whose first bracket closes before
-/// its end (`[a] 1fr [b]`) names lines and lowers; brackets that do not
-/// balance (`[a] 1fr [b`) are no grid template and are reported as written.
-fn bracketed_inner(key: &str, value: &str) -> Option<String> {
+/// The `bracketed-value` form of a value in brackets that writes nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BracketDrop {
+    /// A shape the brackets cannot carry; `inner` is what to write.
+    Unwrap,
+    /// Brackets that do not wrap the value as one pair.
+    Escape,
+}
+
+/// What a value in brackets is (ADR 0037 §2). Mirrors `BracketSpelling` in
+/// `transform-core.ts`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum BracketSpelling {
+    /// A second spelling of an arbitrary class: `class` is `key-[…]` without
+    /// its variant prefix, written when the key's own lowering of `inner`
+    /// writes a class that is not arbitrary; `inner` is the value without its
+    /// brackets as the main lane spells it ([`main_spelling`]).
+    Emit { class: String, inner: String },
+    /// Nothing is written; `inner` is what to write on the main lane, or the
+    /// value without its outer pair on [`BracketDrop::Escape`]; `hint` is the
+    /// type hint taken off it.
+    Drop {
+        form: BracketDrop,
+        inner: String,
+        hint: Option<String>,
+    },
+}
+
+/// A value as the main lane spells it: a lone `var(--x)`, with no fallback,
+/// is `--x`, and a trailing `!` stays. Mirrors `mainSpelling` in
+/// `transform-core.ts`.
+fn main_spelling(value: &str) -> String {
+    let (body, bang) = value
+        .strip_suffix('!')
+        .map_or((value, ""), |unmarked| (unmarked, "!"));
+    body.strip_prefix("var(")
+        .and_then(|rest| rest.strip_suffix(')'))
+        .map(str::trim)
+        .filter(|name| {
+            name.strip_prefix("--").is_some_and(|ident| {
+                !ident.is_empty()
+                    && ident
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+            })
+        })
+        .map_or_else(|| value.to_owned(), |name| format!("{name}{bang}"))
+}
+
+/// Whether a class is an arbitrary one, a value in brackets or a variable in
+/// parentheses: `w-[10px]`, `bg-(image:--x)`, not `p-4`.
+fn is_arbitrary_class(class: &str) -> bool {
+    class.contains(['[', '('])
+}
+
+/// Whether the class a key writes for a value keeps the type hint its
+/// bracketed spelling named, or needs none: `text-[13px]` for `length`, not
+/// `text-(length:--x)` for `color`. Mirrors `keepsTypeHint`.
+#[cfg(feature = "native-engine")]
+fn keeps_type_hint(class: &str, hint: &str) -> bool {
+    let Some(open) = class.find(['[', '(']) else {
+        return false;
+    };
+    let after = &class[open + 1..];
+    match after.split_once(':') {
+        Some((name, _))
+            if name.starts_with(|c: char| c.is_ascii_lowercase())
+                && name.chars().all(|c| c.is_ascii_lowercase() || c == '-') =>
+        {
+            name == hint
+        }
+        _ => true,
+    }
+}
+
+/// A bracket class with a modifier after it (`[#f00]/50`), written as given.
+fn is_bracket_then_modifier(rest: &str) -> bool {
+    rest.strip_prefix('[')
+        .and_then(|rest| rest.split_once("]/"))
+        .is_some_and(|(class, modifier)| {
+            !class.is_empty()
+                && !class.contains(['[', ']'])
+                && !modifier.is_empty()
+                && !modifier.contains(['[', ']', '/'])
+        })
+}
+
+/// The classes a key writes for a value, lowered as its own one-property
+/// object at the property's span.
+fn lower_one_value(property: &StaticSzProperty, value: &str) -> Vec<String> {
+    let plain = StaticSzObject {
+        properties: vec![StaticSzProperty {
+            key: property.key.clone(),
+            span: property.span,
+            value: StaticSzValue::String(value.to_owned()),
+        }],
+    };
+    let mut classes = Vec::new();
+    lower_object_into(&plain, "", &mut classes);
+    classes
+}
+
+/// Whether a value is a type hint or a property before its value:
+/// `length:13px`, `color:red`.
+fn is_bracket_type_hint(inner: &str) -> bool {
+    inner.split_once(':').is_some_and(|(name, _)| {
+        name.starts_with(|c: char| c.is_ascii_lowercase())
+            && name.chars().all(|c| c.is_ascii_lowercase() || c == '-')
+    })
+}
+
+/// Whether a value is a fraction of two integers (`1/2`), no CSS value alone.
+fn is_digit_fraction(inner: &str) -> bool {
+    let digits = |part: &str| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit());
+    inner
+        .split_once('/')
+        .is_some_and(|(top, bottom)| digits(top) && digits(bottom))
+}
+
+/// The utility a key writes an arbitrary value with, or `None` for a key that
+/// has none: an alias or a removed key, which emits nothing, a key that takes
+/// only a boolean, and a key whose CSS closes its value set. Mirrors
+/// `arbitraryUtility` in `transform-core.ts`, whose key table also holds
+/// aliases; here an alias, a removed key and a boolean-only key have no
+/// prefix to begin with, so only a closed value set is asked.
+fn arbitrary_utility(key: &str) -> Option<&'static str> {
+    if super::generated::tables::is_closed_enum_key(key) {
+        return None;
+    }
+    property_prefix(key)
+}
+
+/// Lower a value in brackets ([`bracket_spelling`]) as its key lowers the
+/// value without them (ADR 0037 §2): an arbitrary class it writes is the
+/// class, nothing is nothing, and a bare class (`p: 4` → `p-4`) leaves the
+/// brackets the only spelling of `key-[…]`. Says whether it was such a value.
+/// Mirrors `collectBracketedValue` in `transform-core.ts`.
+fn lower_bracketed_value(
+    property: &StaticSzProperty,
+    value: &str,
+    prefix: &str,
+    classes: &mut Vec<String>,
+) -> bool {
+    match bracket_spelling(&property.key, value) {
+        Some(BracketSpelling::Emit { class, inner }) => {
+            let plain = lower_one_value(property, &inner);
+            match plain.as_slice() {
+                [] => {}
+                [own] if is_arbitrary_class(own) => classes.push(format!("{prefix}{own}")),
+                _ => classes.push(format!("{prefix}{class}")),
+            }
+            true
+        }
+        Some(BracketSpelling::Drop { .. }) => true,
+        None => false,
+    }
+}
+
+/// Read a value in the brackets (or the parentheses of a variable) csszyx
+/// writes itself, or `None` when the value has none at either end and is
+/// lowered as written. A custom property's value is a declaration value, where
+/// `[a]` is a grid line name, so it never is one. On a key whose CSS takes
+/// grid line names, a value whose first bracket closes before its end
+/// (`[a] 1fr [b]`) names lines and lowers. Mirrors `bracketSpelling` in
+/// `transform-core.ts`.
+pub(crate) fn bracket_spelling(key: &str, value: &str) -> Option<BracketSpelling> {
+    let drop = |form, inner: String| {
+        Some(BracketSpelling::Drop {
+            form,
+            inner,
+            hint: None,
+        })
+    };
     if key.starts_with("--") {
         return None;
     }
-    if crate::transform::generated::tables::takes_grid_line_names(key) && value.contains(['[', ']'])
-    {
-        // A sign is no part of a grid template, whatever its brackets.
-        if value.starts_with('-') {
-            return Some(bracket_wrapped_inner(value).unwrap_or_else(|| value.to_owned()));
-        }
-        match outer_bracket_pair(value) {
-            Some(false) => return None,
-            None => return Some(bracket_wrapped_inner(value).unwrap_or_else(|| value.to_owned())),
-            Some(true) => {}
+    let (body, bang) = value
+        .strip_suffix('!')
+        .map_or((value, ""), |unmarked| (unmarked, "!"));
+    let grid = super::generated::tables::takes_grid_line_names(key) && body.contains(['[', ']']);
+    // A sign is no part of a grid template, whatever its brackets.
+    let pair = if grid && !body.starts_with('-') {
+        outer_bracket_pair(body)
+    } else {
+        None
+    };
+    if pair == Some(false) {
+        return None;
+    }
+    if let Some(variable) = paren_variable(body) {
+        return drop(BracketDrop::Unwrap, format!("{variable}{bang}"));
+    }
+    let lead = if body.starts_with("-[") || body.starts_with("![") {
+        &body[..1]
+    } else {
+        ""
+    };
+    let rest = &body[lead.len()..];
+    let opens = rest.starts_with('[');
+    let closes = rest.ends_with(']');
+    if lead.is_empty() && is_bracket_then_modifier(rest) {
+        return None;
+    }
+    // Balanced line names that do not wrap the template (`[a] 1fr`).
+    if pair == Some(true) && !(opens && closes) {
+        return None;
+    }
+    // A bracket at the end with none before it closes nothing (`10px]`).
+    if !opens && (!closes || rest.contains('[')) {
+        return if grid {
+            drop(BracketDrop::Escape, value.to_owned())
+        } else {
+            None
+        };
+    }
+    if !opens || !closes || rest.len() < 3 {
+        return drop(BracketDrop::Escape, value.to_owned());
+    }
+    let mut inner = &rest[1..rest.len() - 1];
+    // Every pair around a whole grid template at once, so one lowering of the
+    // template stands for the value however deep it is wrapped; a pair with no
+    // bracket inside is a line name (`[a]`) and stays.
+    while pair == Some(true) && outer_bracket_pair(inner) == Some(true) {
+        match inner
+            .strip_prefix('[')
+            .and_then(|rest| rest.strip_suffix(']'))
+        {
+            Some(core) if core.contains('[') => inner = core,
+            _ => break,
         }
     }
-    bracket_wrapped_inner(value)
+    let written = format!(
+        "{}{inner}{}",
+        if lead == "-" { "-" } else { "" },
+        if lead == "!" { "!" } else { bang }
+    );
+    let escape = if grid {
+        pair.is_none()
+    } else {
+        inner.contains(['[', ']'])
+    };
+    if escape {
+        return drop(BracketDrop::Escape, written);
+    }
+    if !lead.is_empty() || inner.starts_with("--") || is_digit_fraction(inner) {
+        return drop(BracketDrop::Unwrap, written);
+    }
+    if is_bracket_type_hint(inner) {
+        let colon = inner.find(':').unwrap_or_default();
+        return Some(BracketSpelling::Drop {
+            form: BracketDrop::Unwrap,
+            inner: main_spelling(&format!("{}{bang}", &inner[colon + 1..])),
+            hint: Some(inner[..colon].to_owned()),
+        });
+    }
+    match arbitrary_utility(key) {
+        None => drop(BracketDrop::Unwrap, written),
+        Some(utility) => Some(BracketSpelling::Emit {
+            class: format!("{utility}-[{}]{bang}", normalize_arbitrary_value(inner)),
+            inner: main_spelling(&written),
+        }),
+    }
 }
 
 /// Whether a grid template value needs the arbitrary form: it names a grid
@@ -3895,49 +4152,96 @@ fn collect_color_underscore(key: &str, nested: &StaticSzObject, out: &mut Vec<Un
     out.extend(found);
 }
 
+/// How a value in brackets the engine names is reported.
+#[cfg(feature = "native-engine")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BracketedForm {
+    /// `redundant-bracket`: the class is written, and the value without
+    /// brackets writes it too.
+    Redundant,
+    /// `bracketed-value`, form `unwrap`: nothing is written; `inner` is what
+    /// to write.
+    Unwrap,
+    /// `bracketed-value`, form `escape`: nothing is written; the brackets do
+    /// not wrap the value as one pair.
+    Escape,
+    /// `bracketed-value`, form `type-hint`: nothing is written; the key's own
+    /// lowering of `inner` does not keep the hint.
+    TypeHint,
+}
+
 /// A value written in the brackets csszyx writes itself.
 #[cfg(feature = "native-engine")]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct BracketedValue {
     /// The sz key.
     pub key: String,
     /// The value as written.
     pub value: String,
-    /// The value without the brackets csszyx writes.
+    /// What to write on the main lane, or the value without its outer pair.
     pub inner: String,
-    /// Whether `inner` is offered as what to write.
-    pub offered: bool,
+    /// Which form names it.
+    pub form: BracketedForm,
     /// Where the property is written.
     pub at: u32,
+    /// The property as the key lowers `inner`, when this stands for that
+    /// lowering: what it reports is reported instead of this.
+    pub stands_for: Option<StaticSzProperty>,
 }
 
 /// Each string value in the brackets csszyx writes itself
-/// ([`bracketed_inner`]): its key, the value, the value without those
-/// brackets, whether that is offered as what to write, and where it is
-/// written. It is not offered when brackets remain inside on a key whose CSS
-/// takes no grid line names (`p: '[a] 1 [b]'`), or when they do not balance:
-/// no `sz` value carries those. Mirrors `warnBracketedValue` in
-/// `transform-core.ts`.
+/// ([`bracket_spelling`]) that the engine names: one that writes nothing, and
+/// one whose class the key writes for the value without its brackets. Those
+/// two stand for that lowering (`stands_for`), whose own findings the engine
+/// reports in their place. A class the brackets alone spell (`p: '[4]'`) is
+/// not named. Mirrors `collectBracketedValue` in `transform-core.ts`.
 #[cfg(feature = "native-engine")]
 pub(crate) fn collect_bracketed_values(object: &StaticSzObject, out: &mut Vec<BracketedValue>) {
     for property in &object.properties {
         match &property.value {
             StaticSzValue::String(value) => {
-                if let Some(inner) = bracketed_inner(&property.key, value) {
-                    let offered = if crate::transform::generated::tables::takes_grid_line_names(
-                        &property.key,
-                    ) && value.contains(['[', ']'])
-                    {
-                        !value.starts_with('-') && outer_bracket_pair(value) == Some(true)
-                    } else {
-                        !inner.contains(['[', ']'])
-                    };
+                let stands_for = |inner: &str| StaticSzProperty {
+                    key: property.key.clone(),
+                    span: property.span,
+                    value: StaticSzValue::String(inner.to_owned()),
+                };
+                let found = match bracket_spelling(&property.key, value) {
+                    Some(BracketSpelling::Drop { form, inner, hint }) => {
+                        let form = match (form, hint) {
+                            (BracketDrop::Escape, _) => BracketedForm::Escape,
+                            (BracketDrop::Unwrap, None) => BracketedForm::Unwrap,
+                            (BracketDrop::Unwrap, Some(hint)) => {
+                                match lower_one_value(property, &inner).as_slice() {
+                                    [own] if keeps_type_hint(own, &hint) => BracketedForm::Unwrap,
+                                    _ => BracketedForm::TypeHint,
+                                }
+                            }
+                        };
+                        Some((form, inner, None))
+                    }
+                    Some(BracketSpelling::Emit { inner, .. }) => {
+                        match lower_one_value(property, &inner).as_slice() {
+                            [] => {
+                                let lowering = stands_for(&inner);
+                                Some((BracketedForm::Unwrap, inner, Some(lowering)))
+                            }
+                            [own] if is_arbitrary_class(own) => {
+                                let lowering = stands_for(&inner);
+                                Some((BracketedForm::Redundant, inner, Some(lowering)))
+                            }
+                            _ => None,
+                        }
+                    }
+                    None => None,
+                };
+                if let Some((form, inner, stands_for)) = found {
                     out.push(BracketedValue {
                         key: property.key.clone(),
                         value: value.clone(),
                         inner,
-                        offered,
+                        form,
                         at: property.span.start,
+                        stands_for,
                     });
                 }
             }
@@ -3986,8 +4290,6 @@ mod tests {
     #[cfg(feature = "native-engine")]
     use super::collect_clamped_factors;
     #[cfg(feature = "native-engine")]
-    use super::collect_color_slash_opacities;
-    #[cfg(feature = "native-engine")]
     use super::collect_dead_enum_values;
     #[cfg(feature = "native-engine")]
     use super::collect_dead_spacing_steps;
@@ -4004,9 +4306,9 @@ mod tests {
     use super::{
         build_mask_radial_classes, build_mask_slot_classes, build_mask_stop_classes,
         collect_unknown_sz_keys, format_color_opacity_object, format_mask_position,
-        format_mask_size, has_slash_opacity, is_known_sz_key, is_mask_layer_value, is_percent,
-        is_removed_sz_key, is_tailwind_build_function, is_unsigned_decimal,
-        lower_source_ir_classes, lower_static_sz_object, needs_brackets, variant_string_prefix,
+        format_mask_size, is_known_sz_key, is_mask_layer_value, is_percent, is_removed_sz_key,
+        is_tailwind_build_function, is_unsigned_decimal, lower_source_ir_classes,
+        lower_static_sz_object, needs_brackets, variant_string_prefix,
     };
     use crate::transform::merge::{GroupsPaused, MergeGroup, MergeGroupScope};
     use crate::transform::test_rng::Rng;
@@ -4094,46 +4396,234 @@ mod tests {
         );
     }
 
+    /// A value in brackets writes the class its key writes for the value
+    /// inside: an arbitrary class as it is, nothing as nothing, and `key-[…]`
+    /// beside a bare class. A bracket class with a modifier after it, and line
+    /// names that do not wrap the template, are lowered as written; every
+    /// pair around a whole template comes off at once.
     #[test]
-    fn a_plain_opacity_is_digits_with_at_most_one_inner_decimal_point() {
-        for value in ["50", "7.5", "0", "100.25"] {
-            assert!(super::is_plain_opacity(value), "{value}");
-        }
-        for value in ["", "5.", ".5", "50/30", "5a", "[0.5]", "1.2.3", "-5"] {
-            assert!(!super::is_plain_opacity(value), "{value}");
-        }
-        assert_eq!(super::split_important("red-500!"), ("red-500", "!"));
-        assert_eq!(super::split_important("red-500"), ("red-500", ""));
+    fn a_bracketed_value_writes_what_its_key_writes_for_the_value_inside() {
+        let lowered = |key: &str, value: &str| {
+            lower_static_sz_object(&StaticSzObject {
+                properties: vec![property(key, StaticSzValue::String(value.into()))],
+            })
+        };
+        assert_eq!(lowered("bgSize", "[10px]"), ["bg-[length:10px]"]);
+        assert_eq!(lowered("mask", "[radial]"), Vec::<String>::new());
+        assert_eq!(lowered("p", "[4]"), ["p-[4]"]);
+        assert_eq!(lowered("bg", "[#f00]/50"), ["bg-[#f00]/50"]);
+        assert_eq!(lowered("gridRows", "[a]_1fr"), ["grid-rows-[[a]_1fr]"]);
+        assert_eq!(lowered("gridCols", "[[[a]_1fr]]"), ["grid-cols-[[a]_1fr]"]);
+        assert_eq!(lowered("gridCols", "[[a]]"), ["grid-cols-[a]"]);
+        // Brackets on a grid key that open nowhere do not pair.
+        assert!(matches!(
+            super::bracket_spelling("gridCols", "a]_1fr_[b]"),
+            Some(super::BracketSpelling::Drop {
+                form: super::BracketDrop::Escape,
+                ..
+            })
+        ));
+        assert_eq!(lowered("gridCols", "a]_1fr_[b]"), Vec::<String>::new());
     }
 
-    /// An `op` that is neither a number nor a string is not an opacity the
-    /// finding can name, so it is reported as if `op` were absent.
+    /// The `op` a colour-slash finding names is the literal written: a number
+    /// bare, a string quoted, and anything else as if `op` were absent.
     #[cfg(feature = "native-engine")]
     #[test]
-    fn a_colour_slash_finding_names_only_an_op_it_can_write() {
-        let object = StaticSzObject {
+    fn a_colour_slash_finding_names_the_op_as_written() {
+        let colour = |op: StaticSzValue| StaticSzObject {
             properties: vec![property(
                 "bg",
                 object(vec![
                     property("color", StaticSzValue::String("red-500/50".to_string())),
-                    property("op", StaticSzValue::Boolean(true)),
+                    property("op", op),
                 ]),
             )],
         };
-        let mut found = Vec::new();
-        collect_color_slash_opacities(&object, &mut found);
-        assert_eq!(
-            found,
-            [("bg".to_string(), "red-500/50".to_string(), None, 0)]
-        );
+        for (op, named) in [
+            (StaticSzValue::Number(20.0), Some("20".to_string())),
+            (
+                StaticSzValue::String("78%".to_string()),
+                Some("'78%'".to_string()),
+            ),
+            (StaticSzValue::Boolean(true), None),
+        ] {
+            let mut found = Vec::new();
+            super::collect_color_slash_opacities(&colour(op), &mut found);
+            assert_eq!(
+                found,
+                [("bg".to_string(), "red-500/50".to_string(), named, 0)]
+            );
+        }
     }
 
-    /// A value wrapped whole in one pair of brackets is named with what to
-    /// write, under a variant too; brackets that do not wrap all of it, a
-    /// colour object and `css` are not read.
+    /// The `op` a modifier names, as `csszyx migrate` and a slash report's
+    /// help read it.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn a_modifier_names_the_op_tailwind_reads_it_as() {
+        use super::{modifier_op, op_literal, ModifierOp};
+        for (modifier, op) in [
+            ("50", Some(ModifierOp::Number(50.0))),
+            ("0.5", Some(ModifierOp::Number(0.5))),
+            (".5", Some(ModifierOp::Number(0.5))),
+            ("[0.5]", Some(ModifierOp::Number(50.0))),
+            ("[0.05]", Some(ModifierOp::Number(5.0))),
+            ("[1]", Some(ModifierOp::Number(100.0))),
+            ("[50%]", Some(ModifierOp::Text("50%"))),
+            ("(--o)", Some(ModifierOp::Text("--o"))),
+            ("()", Some(ModifierOp::Text(""))),
+            ("[2]", None),
+            ("[]", None),
+            ("[x]", None),
+            ("[", None),
+            ("(", None),
+            ("(5", None),
+            ("5)", None),
+            ("[0.5", None),
+            ("0.5]", None),
+            (".", None),
+            ("1.2.3", None),
+            ("50%", None),
+            ("--o", None),
+        ] {
+            assert_eq!(modifier_op(modifier), op, "{modifier}");
+        }
+        for (opacity, literal) in [
+            ("50", "50"),
+            ("[0.333]", "33.3"),
+            ("[50%]", "'50%'"),
+            ("(--o)", "'--o'"),
+            ("50%", "'50%'"),
+        ] {
+            assert_eq!(op_literal(opacity), literal, "{opacity}");
+        }
+    }
+
+    /// A gradient's slash names its interpolation; a fraction is a size.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn a_slash_opacity_split_leaves_gradients_and_fractions_alone() {
+        use super::slash_opacity_split;
+        for value in [
+            "linear-to-r/oklch",
+            "-linear-45/srgb",
+            "radial/oklch",
+            "conic-180/decreasing",
+            "gradient-to-b/oklch",
+            "1/2",
+            "4/2.5",
+            "red-500/",
+            "/50",
+            "rgb(255_0_0/50%)",
+        ] {
+            assert_eq!(slash_opacity_split(value), None, "{value}");
+        }
+        assert_eq!(slash_opacity_split("[#f00]/50"), Some(("[#f00]", "50")));
+    }
+
+    /// A key that takes only a boolean, or closes its value set, has no
+    /// arbitrary utility, so a bracketed value writes nothing; a grid
+    /// template is unwrapped one whole pair at a time, never through a pair
+    /// that closes early, and no other key unwraps.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn a_bracketed_value_unwraps_only_what_its_key_reads() {
+        let lowered = |key: &str, value: &str| {
+            lower_static_sz_object(&StaticSzObject {
+                properties: vec![property(key, StaticSzValue::String(value.into()))],
+            })
+        };
+        assert_eq!(lowered("truncate", "[x]"), Vec::<String>::new());
+        assert_eq!(lowered("display", "[grid]"), Vec::<String>::new());
+        assert_eq!(
+            lowered("gridCols", "[[a]_1fr_[b]]"),
+            ["grid-cols-[[a]_1fr_[b]]"]
+        );
+        assert_eq!(lowered("gridCols", "[[[a]_1fr]]"), ["grid-cols-[[a]_1fr]"]);
+        assert_eq!(lowered("w", "[[[x]]]"), Vec::<String>::new());
+        // The record names the value inside every pair the lane takes off.
+        for (key, value, inner) in [
+            ("w", "[[[x]]]", "[[x]]"),
+            ("gridCols", "[[[a]_1fr]]", "[a]_1fr"),
+            ("gridCols", "[[a]]", "[a]"),
+        ] {
+            let mut found = Vec::new();
+            super::collect_bracketed_values(
+                &StaticSzObject {
+                    properties: vec![property(key, StaticSzValue::String(value.into()))],
+                },
+                &mut found,
+            );
+            assert_eq!(found[0].inner, inner, "{key}: {value}");
+        }
+    }
+
+    #[test]
+    fn a_lone_variable_is_spelled_as_the_main_lane_spells_it() {
+        for (value, spelled) in [
+            ("var(--x)", "--x"),
+            ("var( --brand-2 )!", "--brand-2!"),
+            ("var(--a_b)", "--a_b"),
+            ("var(--x, 2px)", "var(--x, 2px)"),
+            ("var(--)", "var(--)"),
+            ("var(x)", "var(x)"),
+            ("var(--x)y", "var(--x)y"),
+            ("10px", "10px"),
+        ] {
+            assert_eq!(super::main_spelling(value), spelled, "{value}");
+        }
+    }
+
+    #[test]
+    fn a_bracket_class_with_a_modifier_after_it_is_written_as_given() {
+        for rest in ["[#f00]/50", "[a]/b"] {
+            assert!(super::is_bracket_then_modifier(rest), "{rest}");
+        }
+        for rest in [
+            "[#f00]",
+            "[]/50",
+            "[#f00]/",
+            "[#f00]/[50]",
+            "[#f00]/5/0",
+            "[[a]]/5",
+            "#f00/50",
+        ] {
+            assert!(!super::is_bracket_then_modifier(rest), "{rest}");
+        }
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn a_type_hint_is_kept_when_the_class_names_it_or_needs_none() {
+        for (class, hint, kept) in [
+            ("text-[length:13px]", "length", true),
+            ("text-(length:--x)", "length", true),
+            ("text-(length:--x)", "color", false),
+            ("text-[13px]", "length", true),
+            ("w-[13px]", "length", true),
+            ("text-red", "color", false),
+            ("bg-[url(a:b)]", "image", true),
+        ] {
+            assert_eq!(super::keeps_type_hint(class, hint), kept, "{class} {hint}");
+        }
+    }
+
+    #[test]
+    fn the_important_modifier_comes_off_the_end_of_a_colour() {
+        assert_eq!(super::split_important("red-500!"), ("red-500", "!"));
+        assert_eq!(super::split_important("red-500"), ("red-500", ""));
+    }
+
+    /// A value in brackets is named with its form and what to write, under a
+    /// variant too: a second spelling of a class the value without brackets
+    /// writes, a shape the brackets cannot carry, and brackets that do not
+    /// pair. Brackets that do not wrap all of it, a colour object and `css`
+    /// are not read.
     #[cfg(feature = "native-engine")]
     #[test]
     fn a_value_in_brackets_csszyx_writes_is_named_with_what_to_write() {
+        use super::BracketedForm::{Escape, Redundant, Unwrap};
         let text = |value: &str| StaticSzValue::String(value.to_string());
         let object = StaticSzObject {
             properties: vec![
@@ -4160,6 +4650,16 @@ mod tests {
                 property("w", text("--spacing(4)")),
                 property("bg", text("(--a) (--b)")),
                 property("p", text("(4)")),
+                // A type hint, a hyphen in its name too; a name with a
+                // capital is no hint, and the class is written unnamed.
+                property("w", text("[length:13px]")),
+                property("leading", text("[line-height:2]")),
+                property("w", text("[aB:1]")),
+                // A fraction of two integers; a part that is not digits is
+                // no fraction.
+                property("w", text("[1/2]")),
+                property("w", text("[a/b]")),
+                property("w", text("[1/x]")),
             ],
         };
         let mut found = Vec::new();
@@ -4170,29 +4670,35 @@ mod tests {
                 (
                     found.key.as_str(),
                     found.value.as_str(),
-                    found.offered.then_some(found.inner.as_str()),
+                    found.form,
+                    (found.form != Escape).then_some(found.inner.as_str()),
                 )
             })
             .collect();
         assert_eq!(
             named,
             [
-                ("w", "[100px]", Some("100px")),
-                ("top", "-[1px]", Some("-1px")),
-                ("h", "[2px]", Some("2px")),
+                ("w", "[100px]", Redundant, Some("100px")),
+                ("top", "-[1px]", Unwrap, Some("-1px")),
+                // A bracket that never closes.
+                ("m", "[a", Escape, None),
+                ("h", "[2px]", Redundant, Some("2px")),
                 // One pair around a grid template: line names inside are CSS.
-                ("gridRows", "[[a]_1fr]", Some("[a]_1fr")),
+                ("gridRows", "[[a]_1fr]", Redundant, Some("[a]_1fr")),
                 // Brackets that do not balance: no grid template, no offer.
-                ("gridCols", "[[a]", None),
-                ("gridCols", "[a]]_[b]", None),
-                ("gridCols", "[a]_1fr_[b", None),
-                ("gridCols", "-[a]_1fr_[b]", None),
-                ("gridCols", "(--cols)", Some("--cols")),
+                ("gridCols", "[[a]", Escape, None),
+                ("gridCols", "[a]]_[b]", Escape, None),
+                ("gridCols", "[a]_1fr_[b", Escape, None),
+                ("gridCols", "-[a]_1fr_[b]", Escape, None),
+                ("gridCols", "(--cols)", Unwrap, Some("--cols")),
                 // Brackets inside elsewhere: no value of that key carries them.
-                ("p", "[a]_1_[b]", None),
-                ("mt", "-[3px]!", Some("-3px!")),
-                ("animate", "(--spin)", Some("--spin")),
-                ("ease", "(--snappy)!", Some("--snappy!")),
+                ("p", "[a]_1_[b]", Escape, None),
+                ("mt", "-[3px]!", Unwrap, Some("-3px!")),
+                ("animate", "(--spin)", Unwrap, Some("--spin")),
+                ("ease", "(--snappy)!", Unwrap, Some("--snappy!")),
+                ("w", "[length:13px]", Unwrap, Some("13px")),
+                ("leading", "[line-height:2]", Unwrap, Some("2")),
+                ("w", "[1/2]", Unwrap, Some("1/2")),
             ]
         );
         // What is not offered still carries the value without its outer pair.
@@ -4408,8 +4914,9 @@ mod tests {
     }
 
     /// Grid line names are CSS's own brackets: on the keys whose property
-    /// takes them, the value is bracketed and lowered, and only one pair
-    /// around the whole value is a wrapping, which writes nothing.
+    /// takes them, the value is bracketed and lowered, and one pair around the
+    /// whole value is the second spelling of the same class; brackets that do
+    /// not balance or a sign write nothing.
     #[test]
     fn grid_line_names_lower_as_an_arbitrary_value() {
         let text = |value: &str| StaticSzValue::String(value.to_string());
@@ -4433,6 +4940,7 @@ mod tests {
             [
                 "grid-cols-[[a]_1fr_[b]]",
                 "grid-rows-[[a]_auto]",
+                "grid-cols-[[a]_1fr]",
                 "grid-rows-[1fr_2fr]",
                 "grid-cols-[auto_1fr]",
                 "grid-cols-[min-content_auto]",
@@ -5096,15 +5604,6 @@ mod tests {
             out.is_empty(),
             "a mask slot's members are geometry, not owned keys: {out:?}"
         );
-    }
-
-    #[test]
-    fn has_slash_opacity_truth_table() {
-        assert!(has_slash_opacity("blue-500/20"));
-        assert!(has_slash_opacity("brand-500/50"));
-        // A digit before the slash counts as opacity here; the color filter runs upstream.
-        assert!(has_slash_opacity("w-1/2"));
-        assert!(!has_slash_opacity("blue-500"));
     }
 
     #[test]
@@ -6642,10 +7141,10 @@ mod tests {
         );
     }
 
-    /// Slash opacity is dropped on a colour key only; elsewhere the class is
-    /// written as given, the colour utility Tailwind serves on every v4.
+    /// A slash opacity is written as given on every key, the colour utility
+    /// Tailwind serves on every v4.
     #[test]
-    fn keeps_a_slash_opacity_string_off_the_colour_keys() {
+    fn writes_a_slash_opacity_string_as_given_on_every_key() {
         let string = |key: &str, value: &str| property(key, StaticSzValue::String(value.into()));
         let object = StaticSzObject {
             properties: vec![
@@ -6658,7 +7157,13 @@ mod tests {
         };
         assert_eq!(
             lower_static_sz_object(&object),
-            ["text-red-500/50", "decoration-red-500/50", "p-red-500/50"]
+            [
+                "bg-red-500/50",
+                "fill-red-500/50",
+                "text-red-500/50",
+                "decoration-red-500/50",
+                "p-red-500/50"
+            ]
         );
     }
 
@@ -6978,7 +7483,7 @@ mod tests {
     }
 
     #[test]
-    fn brackets_arbitrary_values_and_suppresses_slash_opacity() {
+    fn brackets_arbitrary_values_and_writes_slash_opacity_as_given() {
         let object = StaticSzObject {
             properties: vec![
                 property("w", StaticSzValue::String("12px".to_string())),
@@ -6986,7 +7491,10 @@ mod tests {
             ],
         };
 
-        assert_eq!(lower_static_sz_object(&object), ["w-[12px]"]);
+        assert_eq!(
+            lower_static_sz_object(&object),
+            ["w-[12px]", "bg-red-500/50"]
+        );
     }
 
     #[test]

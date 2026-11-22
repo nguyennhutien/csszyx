@@ -117,11 +117,10 @@ describe('@csszyx/core Integration', () => {
             expect(transform_sz({ my: -2.5 })).toBe('-my-2.5');
         });
 
-        it('should suppress string slash opacity on a colour key (use { color, op } object form)', () => {
-            // A colour key takes its opacity in the object form — the TypeScript
-            // core warns + suppresses, Rust suppresses at WASM level.
-            expect(transform_sz({ bg: 'red-500/50' })).toBe('');
-            expect(transform_sz({ bg: 'brand-500/20' })).toBe('');
+        it('should write a slash opacity string on a colour key as given', () => {
+            // A support lane that goes straight through, as in the TypeScript core.
+            expect(transform_sz({ bg: 'red-500/50' })).toBe('bg-red-500/50');
+            expect(transform_sz({ bg: 'brand-500/20' })).toBe('bg-brand-500/20');
         });
 
         it('should write a slash opacity string on a key that is not only a colour', () => {

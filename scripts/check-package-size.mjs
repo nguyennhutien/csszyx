@@ -297,7 +297,21 @@ export const SIZE_BUDGETS = [
         // branch base, +213): numbers and numeric strings lowered by what the bracket means
         // (the four numeric key cells, and `__szFactorVar` for a runtime
         // value on a factor key). ~300 above.
-        maxGzipBytes: 18_200,
+        //
+        // Raised from 18,200 on 2026-11-22, measured 18,290 (18,015 at the
+        // branch base, +275): the bracket lane (ADR 0037 §2) writes
+        // `key-[…]` for `'[…]'`, which takes the reading of what a bracket
+        // can carry and of the keys with no arbitrary utility in the runtime
+        // lowering. ~300 above.
+        // Lowered from 18,600 on 2026-11-23, measured 18,094: a slash opacity
+        // in a colour string or in `color` goes straight through, so the
+        // drop, its two collectors and their words are gone. ~270 above.
+        // Raised to 18,600 on 2026-11-23, measured 18,318: a bracketed value
+        // writes the class its key writes for the value without brackets,
+        // which takes a trial lowering in production too (ADR 0037 §2).
+        // Raised to 18,900 on 2026-11-24, measured 18,753: `./color-modifier`, the
+        // slash-opacity reader `dynamic()` shares; `./browser` itself did not grow.
+        maxGzipBytes: 18_900,
         // Measured 2026-10-08: 15,104 / 346 / 675 / 366 / 257 / 691.
         // `./browser` raised from 15,250 the same day: the special-key box
         // roles took it to 15,104, 146 under, so it went back to the usual
@@ -315,7 +329,15 @@ export const SIZE_BUDGETS = [
             // 16,793 with grid line names lowering, 2026-11-07 (16,581
             // before, see the union), so raised from 16,600. 17,137 on
             // 2026-11-21 (16,980 before, see the union), so raised from 17,100.
-            './browser': 17_400,
+            // 17,486 on 2026-11-22 with the bracket lane (17,213 before, see
+            // the union), so raised from 17,400.
+            // Lowered from 17,800 on 2026-11-23, measured 17,284: a slash opacity
+            // in a colour string or in `color` goes straight through, so the
+            // drop, its two collectors and their words are gone. ~270 above.
+            // Raised to 17,800 on 2026-11-23, measured 17,499: a bracketed value
+            // writes the class its key writes for the value without brackets,
+            // which takes a trial lowering in production too (ADR 0037 §2).
+            './browser': 17_800,
             // `./sz-limits` measured 501 on 2026-10-20 (346 before):
             // `SzDepthError` extends the error class of `./errors`, measured
             // 357 alone, which ships to the browser because the runtime
@@ -325,6 +347,8 @@ export const SIZE_BUDGETS = [
             './keyword-families': 1_000,
             './bool-class': 650,
             './color-var': 550,
+            // Measured 2026-11-24: 526.
+            './color-modifier': 850,
             './spacing-var': 1_000,
         },
         // The capability rows (with the category map) have to be laid out
@@ -346,19 +370,38 @@ export const SIZE_BUDGETS = [
             // 17,362 on 2026-11-07 with grid line names lowering (see the
             // esbuild union), 138 under, so raised from 17,500. 17,860 on
             // 2026-11-21 (17,627 before, see the esbuild union), so raised
-            // from 17,650.
-            maxGzipBytes: 18_150,
+            // from 17,650. 18,199 on 2026-11-22 with the bracket lane (17,945
+            // before, see the esbuild union), so raised from 18,150.
+            // Lowered from 18,500 on 2026-11-23, measured 17,974: a slash opacity
+            // in a colour string or in `color` goes straight through, so the
+            // drop, its two collectors and their words are gone. ~270 above.
+            // Raised to 18,500 on 2026-11-23, measured 18,221: a bracketed value
+            // writes the class its key writes for the value without brackets,
+            // which takes a trial lowering in production too (ADR 0037 §2).
+            // Raised to 18,750 on 2026-11-24, measured 18,628: `./color-modifier`, the
+            // slash-opacity reader `dynamic()` shares; `./browser` itself did not grow.
+            maxGzipBytes: 18_750,
             entryBudgets: {
                 // 16,589 on 2026-11-07 with grid line names lowering (see the
                 // esbuild union), so raised from 16,650. 17,021 on 2026-11-21
                 // (16,823 before, see the esbuild union), so raised from 16,900.
-                './browser': 17_300,
+                // 17,362 on 2026-11-22 (17,101 before, see the esbuild
+                // union), so raised from 17,300.
+                // Lowered from 17,650 on 2026-11-23, measured 17,131: a slash opacity
+                // in a colour string or in `color` goes straight through, so the
+                // drop, its two collectors and their words are gone. ~270 above.
+                // Raised to 17,650 on 2026-11-23, measured 17,343: a bracketed value
+                // writes the class its key writes for the value without brackets,
+                // which takes a trial lowering in production too (ADR 0037 §2).
+                './browser': 17_650,
                 // Measured 2026-10-20: 527 and 393.
                 './sz-limits': 700,
                 './errors': 700,
                 './keyword-families': 1_050,
                 './bool-class': 750,
                 './color-var': 600,
+                // Measured 2026-11-24: 561.
+                './color-modifier': 900,
                 './spacing-var': 1_050,
             },
         },
@@ -408,7 +451,17 @@ export const SIZE_BUDGETS = [
         // string the scanner refuses an escape, a comment and a bad url, the
         // three places it and CSS disagreed on nesting (+95; `@csszyx/dynamic`
         // alone +105).
-        maxGzipBytes: 41_450,
+        // Raised to 41,800 on 2026-11-22, measured 41,528 (41,251 at the
+        // branch base, +277): the bracket lane (see the compiler's budget).
+        // Lowered from 41,800 on 2026-11-23, measured 41,378: a slash opacity
+        // in a colour string or in `color` goes straight through, so the
+        // drop, its two collectors and their words are gone. ~270 above.
+        // Raised to 41,850 on 2026-11-23, measured 41,580: a bracketed value
+        // writes the class its key writes for the value without brackets,
+        // which takes a trial lowering in production too (ADR 0037 §2).
+        // Raised to 42,100 on 2026-11-24, measured 41,954: `dynamic()` reads a
+        // colour class's modifier through `./color-modifier`, as Tailwind reads it.
+        maxGzipBytes: 42_100,
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
     // The wasm build of the parser is the fourth surface: not browser code,
@@ -669,7 +722,19 @@ export const SIZE_BUDGETS = [
         // formatting; the spacing key list moves into the lowering so every
         // build reads it; and `leading` checks that `text` is a font size
         // before it folds. ~300 bytes of headroom.
-        maxGzipBytes: 602_550,
+        //
+        // Raised from 602,550 on 2026-11-24: CI read 602,249 on `main`; this
+        // branch measures +5,453 over `main` with the same toolchain (598,977
+        // -> 604,430, un-optimized, gzip -9 of the nodejs parser build). A
+        // bracketed value writes the class its key writes and is reported as
+        // the value it stands for (`bracket_spelling`, the trial in
+        // `bracket_swaps`, `swap_bracketed`), and a slash opacity on a colour
+        // key is reported with the `op` its modifier names (`modifier_op`,
+        // the two slash collectors). Reporting through a swap rather than
+        // merging each family's findings back in keeps a new family free; the
+        // merge cost +18,862 as a sort per family, +7,771 as a rotation.
+        // ~300 bytes of headroom.
+        maxGzipBytes: 608_000,
     },
     // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
     // bundles from the compiler's source, unminified, and that every editor
@@ -713,8 +778,15 @@ export const SIZE_BUDGETS = [
         // so `sz = {{…}}` is an expression the editor reads (+163 gzip -9).
         // Raised from 51,700 on 2026-11-21, measured 51,790 (51,521 at the
         // branch base): the numeric lowering it carries with the compiler's
-        // (see that budget). ~300 bytes of headroom.
-        maxGzipBytes: 52_050,
+        // (see that budget). ~300 bytes of headroom. Raised from 52,050 on
+        // 2026-11-24, measured 52,443: the bracket lane it carries with the
+        // compiler's (a bracketed value writes the class its key writes for
+        // the value without brackets, with the words of `redundant-bracket`
+        // and the `type-hint` form). ~300 bytes of headroom.
+        // Raised to 53,050 on 2026-11-24, measured 52,754: a slash opacity on a
+        // colour key is reported again (`slash-opacity-string`,
+        // `color-slash-opacity`), whose words only a development build prints.
+        maxGzipBytes: 53_050,
         // Built as production, so the leak gate reads it, except for the ids
         // whose words the extension shows as its own editor diagnostics
         // (`diagnostic-provider.ts`, from `SZ_EDITOR_DIAGNOSTIC_TEMPLATES`).
@@ -744,8 +816,16 @@ export const SIZE_BUDGETS = [
         // Raised from 16,200 on 2026-11-07, measured 16,347: the grid line
         // names lowering (see the compiler's budget). Raised from 16,650 on
         // 2026-11-21, measured 16,662 (16,497 at the branch base): the numeric
-        // lowering (see the compiler's budget).
-        maxGzipBytes: 16_950,
+        // lowering (see the compiler's budget). Raised from 16,950 on
+        // 2026-11-22, measured 17,023 (16,745 at the branch base): the
+        // bracket lane (see the compiler's budget).
+        // Lowered from 17,300 on 2026-11-23, measured 16,825: a slash opacity
+        // in a colour string or in `color` goes straight through, so the
+        // drop, its two collectors and their words are gone. ~270 above.
+        // Raised to 17,300 on 2026-11-23, measured 17,035: a bracketed value
+        // writes the class its key writes for the value without brackets,
+        // which takes a trial lowering in production too (ADR 0037 §2).
+        maxGzipBytes: 17_300,
         // A `<script>` tag loads it as built, so the leak gate reads its bytes.
         templateFree: {},
         build: cdnBuildOptions('production'),
@@ -807,12 +887,26 @@ export const SIZE_BUDGETS = [
     // (`p: '1/2'`), and the font-size check before `leading` folds into
     // `text`. Production carries the checks but not the words: the production
     // bundle measured 16,748 (16,654 on `main`), under its budget. Budget 267
-    // above.
+    // above. Raised from 24,600 to 25,000 on 2026-11-22, measured 24,717
+    // (24,338 at the branch base, +379): the bracket lane, and in
+    // development the trial lowering that says whether `'[…]'` writes the
+    // class its value without brackets writes (`redundant-bracket`) with its
+    // words. Production +278. That note as an id of its own measured 24,731
+    // (+14).
     {
         name: 'csszyx CDN development bundle',
         kind: 'file',
         target: 'packages/csszyx/dist/browser.dev.iife.js',
-        maxGzipBytes: 24_600,
+        // Lowered from 25,000 on 2026-11-23, measured 24,190: a slash opacity
+        // in a colour string or in `color` goes straight through, so the
+        // drop, its two collectors and their words are gone. ~270 above.
+        // Raised to 24,900 on 2026-11-23, measured 24,618: a bracketed value
+        // writes the class its key writes for the value without brackets,
+        // which takes a trial lowering in production too (ADR 0037 §2).
+        // Raised to 25,500 on 2026-11-24, measured 25,202: a slash opacity on a
+        // colour key is reported again (`slash-opacity-string`,
+        // `color-slash-opacity`), whose words only a development build prints.
+        maxGzipBytes: 25_500,
         build: cdnBuildOptions('development'),
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
@@ -925,7 +1019,9 @@ export const SIZE_BUDGETS = [
         // numbers and numeric strings lowered by what the bracket means
         // (the four numeric key cells, and `__szFactorVar` for a runtime
         // value on a factor key).
-        maxGzipBytes: 31_950,
+        // Raised to 32,000 on 2026-11-24, measured 31,960: the two slash-opacity
+        // reports carry a note.
+        maxGzipBytes: 32_000,
         excludedModules: [
             'src/state-variants.generated.ts',
             'src/template-sz.ts',
@@ -1173,8 +1269,23 @@ export const SIZE_BUDGETS = [
         // (see `./engine`). ~300 bytes of headroom. 61,550 on 2026-11-22,
         // measured 61,257 (60,935 on `main`): `off-scale-value` gains its
         // `fraction` form, reported where `p: '1/2'` is written, and `leading`
-        // folds only into a `text` class that is a font size.
-        maxGzipBytes: 61_550,
+        // folds only into a `text` class that is a font size. 62,200 on
+        // 2026-11-22, measured 61,902 (61,278 at the branch base): the
+        // bracket lane and its `redundant` form (see the CDN development
+        // bundle).
+        // Lowered from 62,200 on 2026-11-23, measured 60,980: a slash opacity
+        // in a colour string or in `color` goes straight through, so the
+        // drop, its two collectors and their words are gone. ~270 above.
+        // Raised to 61,750 on 2026-11-23, measured 61,460: a bracketed value
+        // writes the class its key writes for the value without brackets,
+        // which takes a trial lowering in production too (ADR 0037 §2).
+        // Raised to 62,700 on 2026-11-24, measured 62,402: a slash opacity on a
+        // colour key is reported again (`slash-opacity-string`,
+        // `color-slash-opacity`), whose words only a development build prints.
+        // Raised to 63,100 on 2026-11-24, measured 63,018: the slash-opacity
+        // reader is the `./color-modifier` chunk `dynamic()` shares, a file of its
+        // own, and the two reports carry a note.
+        maxGzipBytes: 63_100,
     },
     {
         name: '@csszyx/compiler `./migrate`, loaded by Node',
@@ -1188,7 +1299,9 @@ export const SIZE_BUDGETS = [
         // (see `./engine`).
         // 29,200 on 2026-11-21, measured 28,941 (28,686 at the branch base):
         // the numeric lowering (see `./engine`).
-        maxGzipBytes: 29_200,
+        // Raised to 29,250 on 2026-11-24, measured 29,207: the two slash-opacity
+        // reports carry a note, which the migrate entry's words ship.
+        maxGzipBytes: 29_250,
     },
     {
         name: '@csszyx/compiler `./report`, loaded by Node',

@@ -9,6 +9,7 @@ export type SzDiagnosticCode =
     | 'numeric-key'
     | 'closed-enum-value'
     | 'slash-opacity-string'
+    | 'color-slash-opacity'
     | 'off-scale-value'
     | 'clamped-factor'
     | 'per-side-border-style'
@@ -34,8 +35,8 @@ export type SzDiagnosticCode =
     | 'unsupported-dynamic-sz'
     | 'ast-budget'
     | 'mangle-vars-hoist-skipped'
-    | 'color-slash-opacity'
     | 'bracketed-value'
+    | 'redundant-bracket'
     | 'opacity-value'
     | 'underscore-space';
 
@@ -50,7 +51,8 @@ export interface SzDiagnosticArgs {
     'removed-key': { readonly form: 'runtime-alias' | 'sugar-replaced' | 'sugar' | 'removed' | 'replaced'; readonly key: string; readonly replacement?: string };
     'numeric-key': { readonly key: string };
     'closed-enum-value': { readonly form: 'sibling-group' | 'dead' | 'css-value' | 'font-style' | 'font-smoothing' | 'flag'; readonly key: string; readonly value: string; readonly suggestion?: string; readonly groupKey?: string; readonly groupValue?: string };
-    'slash-opacity-string': { readonly key: string; readonly color: string; readonly opacity: string };
+    'slash-opacity-string': { readonly key: string; readonly color: string; readonly opacity: string; readonly op: string; readonly important?: '!' };
+    'color-slash-opacity': { readonly form: 'op-given' | 'op-absent'; readonly key: string; readonly base: string; readonly opacity: string; readonly important?: '!'; readonly op: string };
     'off-scale-value': { readonly form: 'step' | 'fraction'; readonly key: string; readonly value: string; readonly percent?: string };
     'clamped-factor': { readonly key: string; readonly value: string };
     'per-side-border-style': { readonly key: string; readonly value: string };
@@ -76,8 +78,8 @@ export interface SzDiagnosticArgs {
     'unsupported-dynamic-sz': Readonly<Record<string, never>>;
     'ast-budget': { readonly form: 'transform' | 'prescan' };
     'mangle-vars-hoist-skipped': { readonly name: string; readonly usageCount: number; readonly reason: 'no-lca' | 'non-host-ancestor' | 'max-depth'; readonly maxDepth?: number };
-    'color-slash-opacity': { readonly form: 'op-given' | 'op-absent'; readonly key: string; readonly base: string; readonly opacity: string; readonly important?: '!'; readonly op?: string };
-    'bracketed-value': { readonly form: 'unwrap' | 'escape'; readonly key: string; readonly value: string; readonly inner: string };
+    'bracketed-value': { readonly form: 'unwrap' | 'escape' | 'type-hint'; readonly key: string; readonly value: string; readonly inner: string };
+    'redundant-bracket': { readonly key: string; readonly value: string; readonly inner: string };
     'opacity-value': { readonly form: 'range' | 'fraction'; readonly key: string; readonly op: string; readonly percent?: string };
     'underscore-space': { readonly key: string; readonly value?: string; readonly className: string; readonly literal?: string; readonly spaced?: string; readonly escaped?: string };
     'unsigned-value': { readonly className: string; readonly utility: string };
@@ -221,6 +223,7 @@ export const SZ_DIAGNOSTIC_CODES: readonly SzDiagnosticCode[] = [
     'numeric-key',
     'closed-enum-value',
     'slash-opacity-string',
+    'color-slash-opacity',
     'off-scale-value',
     'clamped-factor',
     'per-side-border-style',
@@ -246,8 +249,8 @@ export const SZ_DIAGNOSTIC_CODES: readonly SzDiagnosticCode[] = [
     'unsupported-dynamic-sz',
     'ast-budget',
     'mangle-vars-hoist-skipped',
-    'color-slash-opacity',
     'bracketed-value',
+    'redundant-bracket',
     'opacity-value',
     'underscore-space',
 ];
@@ -288,6 +291,7 @@ export type SzSettableDiagnosticId =
     | 'numeric-key'
     | 'closed-enum-value'
     | 'slash-opacity-string'
+    | 'color-slash-opacity'
     | 'off-scale-value'
     | 'clamped-factor'
     | 'per-side-border-style'
@@ -313,8 +317,8 @@ export type SzSettableDiagnosticId =
     | 'unsupported-dynamic-sz'
     | 'ast-budget'
     | 'mangle-vars-hoist-skipped'
-    | 'color-slash-opacity'
     | 'bracketed-value'
+    | 'redundant-bracket'
     | 'opacity-value'
     | 'underscore-space'
     | 'unsigned-value'
@@ -337,6 +341,7 @@ export const SZ_SETTABLE_DIAGNOSTIC_IDS: readonly SzSettableDiagnosticId[] = [
     'numeric-key',
     'closed-enum-value',
     'slash-opacity-string',
+    'color-slash-opacity',
     'off-scale-value',
     'clamped-factor',
     'per-side-border-style',
@@ -362,8 +367,8 @@ export const SZ_SETTABLE_DIAGNOSTIC_IDS: readonly SzSettableDiagnosticId[] = [
     'unsupported-dynamic-sz',
     'ast-budget',
     'mangle-vars-hoist-skipped',
-    'color-slash-opacity',
     'bracketed-value',
+    'redundant-bracket',
     'opacity-value',
     'underscore-space',
     'unsigned-value',
@@ -380,6 +385,7 @@ export type SzDiagnosticId =
     | 'numeric-key'
     | 'closed-enum-value'
     | 'slash-opacity-string'
+    | 'color-slash-opacity'
     | 'off-scale-value'
     | 'clamped-factor'
     | 'per-side-border-style'
@@ -405,8 +411,8 @@ export type SzDiagnosticId =
     | 'unsupported-dynamic-sz'
     | 'ast-budget'
     | 'mangle-vars-hoist-skipped'
-    | 'color-slash-opacity'
     | 'bracketed-value'
+    | 'redundant-bracket'
     | 'opacity-value'
     | 'underscore-space'
     | 'unsigned-value'
@@ -606,7 +612,7 @@ export const SZ_DIAGNOSTIC_DEFAULT_LEVELS: Readonly<
     'fallback-nudge': ['info', 'warn'],
     'merge-classifier-unavailable': ['warn', 'warn'],
     'mangle-vars-hoist-skipped': ['info', 'info'],
-    'color-slash-opacity': ['info', 'warn'],
+    'redundant-bracket': ['info', 'warn'],
     'merge-covered-key': ['info', 'warn'],
     'merge-covered-class': ['info', 'warn'],
 };

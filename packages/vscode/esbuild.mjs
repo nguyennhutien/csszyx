@@ -32,7 +32,7 @@ const options = {
     logLevel: 'info',
     // Resolve .js imports to .ts when the .ts file exists.
     // Required because @csszyx/compiler/browser is raw TypeScript and its internal
-    // imports use .js extensions (e.g. `import ... from './color-validation.js'`).
+    // imports use .js extensions (e.g. `import ... from './transform-core.js'`).
     plugins: [{
         name: 'js-to-ts',
         setup(build) {

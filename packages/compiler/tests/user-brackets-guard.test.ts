@@ -1,12 +1,11 @@
 /**
  * A value wrapped in the brackets csszyx writes itself.
  *
- * Rule: sz prop VALUES never carry their own outer `[]`; the compiler writes
- * them. One spelling is supported (PROJECT-RULES §5): `{ top: '[-1px]' }` or
- * `{ w: '[100px]' }` writes nothing and reports `bracketed-value` naming the
- * value to write, on the runtime as on the engine
- * (`bracketed-value-parity.test.ts`). The bracket-free form is the one that
- * lowers.
+ * The compiler writes the brackets of an arbitrary value itself, so the
+ * bracket-free form is the main spelling. `'[…]'` is a second spelling of the
+ * same class (ADR 0037 §2): `{ top: '[-1px]' }` writes the class
+ * `{ top: '-1px' }` writes, and `redundant-bracket` names the main spelling, on
+ * the runtime as on the engine (`bracketed-value-parity.test.ts`).
  */
 
 import { describe, expect, it } from 'vitest';
@@ -33,8 +32,18 @@ describe('a value in its own brackets', () => {
         { perspective: '[500px]' },
         { decorationThickness: '[3px]' },
         { before: { top: '[-1px]' } },
-    ])('%j writes nothing', sz => {
-        expect(t(sz)).toBe('');
+    ])('%j writes the class its value without brackets writes', sz => {
+        const [key, value] = Object.entries(sz)[0];
+        const plain =
+            typeof value === 'string'
+                ? { [key]: value.slice(1, -1) }
+                : {
+                      [key]: Object.fromEntries(
+                          Object.entries(value).map(([k, v]) => [k, String(v).slice(1, -1)]),
+                      ),
+                  };
+        expect(t(sz)).not.toBe('');
+        expect(t(sz)).toBe(t(plain as never));
     });
 
     it.each([

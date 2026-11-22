@@ -2321,7 +2321,7 @@ mod tests {
                 "export const App = () => <div className={undefined} />;",
             ),
             (
-                "export const App = () => <div sz={{ bg: 'red-500/50' }} />;",
+                "export const App = () => <div sz={{ w: '[1/2]' }} />;",
                 "export const App = () => <div className={undefined} />;",
             ),
         ] {

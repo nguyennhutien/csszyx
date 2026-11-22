@@ -14,6 +14,7 @@ use super::value::{js_number, js_number_to_string, Extra, ParsedClass, SzObject,
 use super::verdict::{lowered_class, lowers_back_to, Judge};
 use crate::transform::generated::migrate_tables as tables;
 use crate::transform::generated::reverse_tables::reverse_property_key;
+use crate::transform::lower::{modifier_op, ModifierOp};
 
 /// Parse a single Tailwind utility, without variants, into an sz prop and
 /// value. `None` when the class is not one migrate recognises.
@@ -297,19 +298,7 @@ fn parse_gradient_direction(input: &str, negative: bool, judge: Judge<'_>) -> Op
     Some(SzValue::from(direction))
 }
 
-/// The first `/` outside brackets and parens.
-pub fn find_top_level_slash(text: &str) -> Option<usize> {
-    let mut depth = 0_i32;
-    for (index, byte) in text.bytes().enumerate() {
-        match byte {
-            b'[' | b'(' => depth += 1,
-            b']' | b')' => depth -= 1,
-            b'/' if depth == 0 => return Some(index),
-            _ => {}
-        }
-    }
-    None
-}
+pub use crate::transform::lower::find_top_level_slash;
 
 /// The class read by the longest known prefix its text is or starts with.
 ///
@@ -621,33 +610,11 @@ fn extract_opacity<'a>(prefix: &str, raw_value: &'a str) -> (&'a str, Option<SzV
 /// `op` is a percent, and Tailwind reads a bracket without `%` as a fraction of
 /// one: `/[0.5]` is 50%, so it becomes `op: 50`, where `op: 0.5` is 0.5%.
 fn parse_opacity(raw: &str) -> SzValue {
-    if let Some(inner) = wrapped(raw, '[', ']') {
-        if inner.contains('%') {
-            return SzValue::from(inner);
-        }
-        return match js_number(inner) {
-            Some(fraction) if is_plain_decimal(inner) && fraction <= 1.0 => {
-                // Rounded so `0.05` reads `5`, not `5.000000000000001`.
-                SzValue::Number((fraction * 100.0 * 1e9).round() / 1e9)
-            }
-            _ => SzValue::Null,
-        };
+    match modifier_op(raw) {
+        Some(ModifierOp::Number(number)) => SzValue::Number(number),
+        Some(ModifierOp::Text(text)) => SzValue::from(text),
+        None => SzValue::Null,
     }
-    if let Some(inner) = wrapped(raw, '(', ')') {
-        return SzValue::from(inner);
-    }
-    js_number(raw)
-        .filter(|_| is_plain_decimal(raw))
-        .map_or(SzValue::Null, SzValue::Number)
-}
-
-/// Digits with at most one point: `50`, `0.5`, `.5`.
-fn is_plain_decimal(text: &str) -> bool {
-    !text.is_empty()
-        && text
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || byte == b'.')
-        && text.bytes().filter(|&byte| byte == b'.').count() <= 1
 }
 
 /// Pick the prefix's key by the value's shape and spell the value.

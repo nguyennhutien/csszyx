@@ -21,8 +21,10 @@ pub enum DiagnosticCode {
     NumericKey,
     /// A value a closed-enum key does not take.
     ClosedEnumValue,
-    /// A colour key given its opacity in a string, which emits nothing; the object form takes it.
+    /// A colour key given its opacity in a string; the object form is the one spelling of it.
     SlashOpacityString,
+    /// A colour object with a slash opacity in `color`; the object takes it in `op`.
+    ColorSlashOpacity,
     /// A spacing value off Tailwind's quarter-step scale, or a fraction on a key that takes none.
     OffScaleValue,
     /// A numeric string above 1 on a key whose CSS function stops at 1.
@@ -73,10 +75,10 @@ pub enum DiagnosticCode {
     AstBudget,
     /// A CSS variable mangleVars could not hoist to a component.
     MangleVarsHoistSkipped,
-    /// A colour object with a slash opacity in `color`; the object takes it in `op`.
-    ColorSlashOpacity,
     /// A value wrapped in the brackets or parentheses csszyx writes itself.
     BracketedValue,
+    /// A value in brackets that writes the class its value without them writes.
+    RedundantBracket,
     /// An `op` that is not a number from 0 to 100, or one below 1 that reads as a fraction.
     OpacityValue,
     /// An `_` in an `sz` value that this project's Tailwind reads as a space.
@@ -94,6 +96,7 @@ impl DiagnosticCode {
             Self::NumericKey => "numeric-key",
             Self::ClosedEnumValue => "closed-enum-value",
             Self::SlashOpacityString => "slash-opacity-string",
+            Self::ColorSlashOpacity => "color-slash-opacity",
             Self::OffScaleValue => "off-scale-value",
             Self::ClampedFactor => "clamped-factor",
             Self::PerSideBorderStyle => "per-side-border-style",
@@ -119,8 +122,8 @@ impl DiagnosticCode {
             Self::UnsupportedDynamicSz => "unsupported-dynamic-sz",
             Self::AstBudget => "ast-budget",
             Self::MangleVarsHoistSkipped => "mangle-vars-hoist-skipped",
-            Self::ColorSlashOpacity => "color-slash-opacity",
             Self::BracketedValue => "bracketed-value",
+            Self::RedundantBracket => "redundant-bracket",
             Self::OpacityValue => "opacity-value",
             Self::UnderscoreSpace => "underscore-space",
         }
@@ -128,13 +131,14 @@ impl DiagnosticCode {
 }
 
 /// Every code, in registry order.
-pub const DIAGNOSTIC_CODES: [DiagnosticCode; 35] = [
+pub const DIAGNOSTIC_CODES: [DiagnosticCode; 36] = [
     DiagnosticCode::UnknownKey,
     DiagnosticCode::CanonicalKey,
     DiagnosticCode::RemovedKey,
     DiagnosticCode::NumericKey,
     DiagnosticCode::ClosedEnumValue,
     DiagnosticCode::SlashOpacityString,
+    DiagnosticCode::ColorSlashOpacity,
     DiagnosticCode::OffScaleValue,
     DiagnosticCode::ClampedFactor,
     DiagnosticCode::PerSideBorderStyle,
@@ -160,8 +164,8 @@ pub const DIAGNOSTIC_CODES: [DiagnosticCode; 35] = [
     DiagnosticCode::UnsupportedDynamicSz,
     DiagnosticCode::AstBudget,
     DiagnosticCode::MangleVarsHoistSkipped,
-    DiagnosticCode::ColorSlashOpacity,
     DiagnosticCode::BracketedValue,
+    DiagnosticCode::RedundantBracket,
     DiagnosticCode::OpacityValue,
     DiagnosticCode::UnderscoreSpace,
 ];
@@ -436,16 +440,71 @@ pub mod issue {
         )
     }
 
-    /// `slash-opacity-string`: A colour key given its opacity in a string, which emits nothing; the object form takes it.
+    /// `slash-opacity-string`: A colour key given its opacity in a string; the object form is the one spelling of it.
     #[must_use]
     #[inline]
-    pub fn slash_opacity_string(key: &str, color: &str, opacity: &str) -> (DiagnosticCode, Args) {
+    pub fn slash_opacity_string(
+        key: &str,
+        color: &str,
+        opacity: &str,
+        op: &str,
+        important: Option<&'static str>,
+    ) -> (DiagnosticCode, Args) {
+        debug_assert!(important.is_none_or(|v| ["!"].contains(&v)));
         (
             DiagnosticCode::SlashOpacityString,
             Args::default()
                 .text("key", key)
                 .text("color", color)
-                .text("opacity", opacity),
+                .text("opacity", opacity)
+                .text("op", op)
+                .optional_text("important", important),
+        )
+    }
+
+    /// `color-slash-opacity` (`op-given`): A colour object with a slash opacity in `color`; the object takes it in `op`.
+    #[must_use]
+    #[inline]
+    pub fn color_slash_opacity_op_given(
+        key: &str,
+        base: &str,
+        opacity: &str,
+        important: Option<&'static str>,
+        op: &str,
+    ) -> (DiagnosticCode, Args) {
+        debug_assert!(important.is_none_or(|v| ["!"].contains(&v)));
+        (
+            DiagnosticCode::ColorSlashOpacity,
+            Args::default()
+                .text("form", "op-given")
+                .text("key", key)
+                .text("base", base)
+                .text("opacity", opacity)
+                .optional_text("important", important)
+                .text("op", op),
+        )
+    }
+
+    /// `color-slash-opacity` (`op-absent`): A colour object with a slash opacity in `color`; the object takes it in `op`.
+    #[must_use]
+    #[inline]
+    pub fn color_slash_opacity_op_absent(
+        key: &str,
+        base: &str,
+        opacity: &str,
+        important: Option<&'static str>,
+        op: &str,
+    ) -> (DiagnosticCode, Args) {
+        debug_assert!(important.is_none_or(|v| ["!"].contains(&v)));
+        (
+            DiagnosticCode::ColorSlashOpacity,
+            Args::default()
+                .text("form", "op-absent")
+                .text("key", key)
+                .text("base", base)
+                .text("opacity", opacity)
+                .optional_text("important", important)
+                .text("op", op),
         )
     }
 
@@ -975,52 +1034,6 @@ pub mod issue {
         )
     }
 
-    /// `color-slash-opacity` (`op-given`): A colour object with a slash opacity in `color`; the object takes it in `op`.
-    #[must_use]
-    #[inline]
-    pub fn color_slash_opacity_op_given(
-        key: &str,
-        base: &str,
-        opacity: &str,
-        important: Option<&'static str>,
-        op: Option<&str>,
-    ) -> (DiagnosticCode, Args) {
-        debug_assert!(important.is_none_or(|v| ["!"].contains(&v)));
-        (
-            DiagnosticCode::ColorSlashOpacity,
-            Args::default()
-                .text("form", "op-given")
-                .text("key", key)
-                .text("base", base)
-                .text("opacity", opacity)
-                .optional_text("important", important)
-                .optional_text("op", op),
-        )
-    }
-
-    /// `color-slash-opacity` (`op-absent`): A colour object with a slash opacity in `color`; the object takes it in `op`.
-    #[must_use]
-    #[inline]
-    pub fn color_slash_opacity_op_absent(
-        key: &str,
-        base: &str,
-        opacity: &str,
-        important: Option<&'static str>,
-        op: Option<&str>,
-    ) -> (DiagnosticCode, Args) {
-        debug_assert!(important.is_none_or(|v| ["!"].contains(&v)));
-        (
-            DiagnosticCode::ColorSlashOpacity,
-            Args::default()
-                .text("form", "op-absent")
-                .text("key", key)
-                .text("base", base)
-                .text("opacity", opacity)
-                .optional_text("important", important)
-                .optional_text("op", op),
-        )
-    }
-
     /// `bracketed-value` (`unwrap`): A value wrapped in the brackets or parentheses csszyx writes itself.
     #[must_use]
     #[inline]
@@ -1043,6 +1056,37 @@ pub mod issue {
             DiagnosticCode::BracketedValue,
             Args::default()
                 .text("form", "escape")
+                .text("key", key)
+                .text("value", value)
+                .text("inner", inner),
+        )
+    }
+
+    /// `bracketed-value` (`type-hint`): A value wrapped in the brackets or parentheses csszyx writes itself.
+    #[must_use]
+    #[inline]
+    pub fn bracketed_value_type_hint(
+        key: &str,
+        value: &str,
+        inner: &str,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::BracketedValue,
+            Args::default()
+                .text("form", "type-hint")
+                .text("key", key)
+                .text("value", value)
+                .text("inner", inner),
+        )
+    }
+
+    /// `redundant-bracket`: A value in brackets that writes the class its value without them writes.
+    #[must_use]
+    #[inline]
+    pub fn redundant_bracket(key: &str, value: &str, inner: &str) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::RedundantBracket,
+            Args::default()
                 .text("key", key)
                 .text("value", value)
                 .text("inner", inner),
@@ -1301,17 +1345,45 @@ mod tests {
             args.to_json(),
             r#"{"form":"flag","key":"key","value":"value"}"#
         );
-        let (code, args) = issue::slash_opacity_string("key", "color", "opacity");
+        let (code, args) = issue::slash_opacity_string("key", "color", "opacity", "op", Some("!"));
         assert_eq!(code, DiagnosticCode::SlashOpacityString);
         assert_eq!(
             args.to_json(),
-            r#"{"key":"key","color":"color","opacity":"opacity"}"#
+            r#"{"key":"key","color":"color","opacity":"opacity","op":"op","important":"!"}"#
         );
-        let (code, args) = issue::slash_opacity_string("key", "color", "opacity");
+        let (code, args) = issue::slash_opacity_string("key", "color", "opacity", "op", None);
         assert_eq!(code, DiagnosticCode::SlashOpacityString);
         assert_eq!(
             args.to_json(),
-            r#"{"key":"key","color":"color","opacity":"opacity"}"#
+            r#"{"key":"key","color":"color","opacity":"opacity","op":"op"}"#
+        );
+        let (code, args) =
+            issue::color_slash_opacity_op_given("key", "base", "opacity", Some("!"), "op");
+        assert_eq!(code, DiagnosticCode::ColorSlashOpacity);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"op-given","key":"key","base":"base","opacity":"opacity","important":"!","op":"op"}"#
+        );
+        let (code, args) =
+            issue::color_slash_opacity_op_given("key", "base", "opacity", None, "op");
+        assert_eq!(code, DiagnosticCode::ColorSlashOpacity);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"op-given","key":"key","base":"base","opacity":"opacity","op":"op"}"#
+        );
+        let (code, args) =
+            issue::color_slash_opacity_op_absent("key", "base", "opacity", Some("!"), "op");
+        assert_eq!(code, DiagnosticCode::ColorSlashOpacity);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"op-absent","key":"key","base":"base","opacity":"opacity","important":"!","op":"op"}"#
+        );
+        let (code, args) =
+            issue::color_slash_opacity_op_absent("key", "base", "opacity", None, "op");
+        assert_eq!(code, DiagnosticCode::ColorSlashOpacity);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"op-absent","key":"key","base":"base","opacity":"opacity","op":"op"}"#
         );
         let (code, args) = issue::off_scale_value_step("key", "value", Some("percent"));
         assert_eq!(code, DiagnosticCode::OffScaleValue);
@@ -1643,34 +1715,6 @@ mod tests {
             args.to_json(),
             r#"{"name":"name","usageCount":7,"reason":"no-lca"}"#
         );
-        let (code, args) =
-            issue::color_slash_opacity_op_given("key", "base", "opacity", Some("!"), Some("op"));
-        assert_eq!(code, DiagnosticCode::ColorSlashOpacity);
-        assert_eq!(
-            args.to_json(),
-            r#"{"form":"op-given","key":"key","base":"base","opacity":"opacity","important":"!","op":"op"}"#
-        );
-        let (code, args) =
-            issue::color_slash_opacity_op_given("key", "base", "opacity", None, None);
-        assert_eq!(code, DiagnosticCode::ColorSlashOpacity);
-        assert_eq!(
-            args.to_json(),
-            r#"{"form":"op-given","key":"key","base":"base","opacity":"opacity"}"#
-        );
-        let (code, args) =
-            issue::color_slash_opacity_op_absent("key", "base", "opacity", Some("!"), Some("op"));
-        assert_eq!(code, DiagnosticCode::ColorSlashOpacity);
-        assert_eq!(
-            args.to_json(),
-            r#"{"form":"op-absent","key":"key","base":"base","opacity":"opacity","important":"!","op":"op"}"#
-        );
-        let (code, args) =
-            issue::color_slash_opacity_op_absent("key", "base", "opacity", None, None);
-        assert_eq!(code, DiagnosticCode::ColorSlashOpacity);
-        assert_eq!(
-            args.to_json(),
-            r#"{"form":"op-absent","key":"key","base":"base","opacity":"opacity"}"#
-        );
         let (code, args) = issue::bracketed_value_unwrap("key", "value", "inner");
         assert_eq!(code, DiagnosticCode::BracketedValue);
         assert_eq!(
@@ -1694,6 +1738,30 @@ mod tests {
         assert_eq!(
             args.to_json(),
             r#"{"form":"escape","key":"key","value":"value","inner":"inner"}"#
+        );
+        let (code, args) = issue::bracketed_value_type_hint("key", "value", "inner");
+        assert_eq!(code, DiagnosticCode::BracketedValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"type-hint","key":"key","value":"value","inner":"inner"}"#
+        );
+        let (code, args) = issue::bracketed_value_type_hint("key", "value", "inner");
+        assert_eq!(code, DiagnosticCode::BracketedValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"type-hint","key":"key","value":"value","inner":"inner"}"#
+        );
+        let (code, args) = issue::redundant_bracket("key", "value", "inner");
+        assert_eq!(code, DiagnosticCode::RedundantBracket);
+        assert_eq!(
+            args.to_json(),
+            r#"{"key":"key","value":"value","inner":"inner"}"#
+        );
+        let (code, args) = issue::redundant_bracket("key", "value", "inner");
+        assert_eq!(code, DiagnosticCode::RedundantBracket);
+        assert_eq!(
+            args.to_json(),
+            r#"{"key":"key","value":"value","inner":"inner"}"#
         );
         let (code, args) = issue::opacity_value_range("key", "op", Some("percent"));
         assert_eq!(code, DiagnosticCode::OpacityValue);

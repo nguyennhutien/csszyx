@@ -128,22 +128,30 @@ const CASES: Readonly<Record<string, readonly SzObject[]>> = {
         { hover: { srOnly: 'yes' } },
         { not: { supports: { 'display:grid': { numOrdinal: 0.5 } } } },
     ],
-    'slash-opacity-string': [{ bg: 'red-500/50' }],
+    'slash-opacity-string': [{ bg: 'red-500/50' }, { hover: { bg: '#f00/50!' } }],
     'off-scale-value/fraction': [{ p: '1/2' }, { hover: { mx: '2/3' } }],
     'off-scale-value/step': [
         { p: 1.4 },
         { has: { img: { p: 1.3 } } },
         { group: { has: { img: { p: 1.1 } } } },
     ],
-    'bracketed-value/unwrap': [
+    'redundant-bracket': [
         { w: '[100px]' },
-        { hover: { top: '-[1px]' } },
         { md: { gridRows: '[[a]_1fr]' } },
+        { hover: { leading: '[1.5]!' } },
+    ],
+    'bracketed-value/unwrap': [
+        { w: '[1/2]' },
+        { hover: { top: '-[1px]' } },
+        { md: { text: '[length:13px]' } },
         // Reported once, as `bracketed-value`: a flag-only key adds no
         // `flag` line for a bracketed value.
         { truncate: '[2]' },
     ],
-    'bracketed-value/escape': [{ p: '[a]_1_[b]' }, { md: { w: '[[a]_1fr]' } }],
+    'bracketed-value/escape': [{ p: '[a]_1_[b]' }, { md: { w: '[[a]_1fr]' } }, { w: '[10px' }],
+    'bracketed-value/type-hint': [{ text: '[color:--x]' }, { hover: { border: '[color:red]' } }],
+    'color-slash-opacity/op-given': [{ bg: { color: 'red-500/50', op: 30 } }],
+    'color-slash-opacity/op-absent': [{ bg: { color: 'blue-500/40!' } }],
     'opacity-value/range': [
         { bg: { color: 'red-500', op: 150 } },
         { hover: { borderColor: { color: 'blue-600', op: '20' } } },
@@ -179,8 +187,6 @@ const CASES: Readonly<Record<string, readonly SzObject[]>> = {
         { contain: 3, containLayout: true },
         { touch: true, touchPanX: 'x' },
     ],
-    'color-slash-opacity/op-given': [{ bg: { color: 'red-500/50', op: 30 } }],
-    'color-slash-opacity/op-absent': [{ bg: { color: 'blue-500/40!' } }],
 };
 
 /**
@@ -264,7 +270,7 @@ describe('runtime and engine diagnostics', () => {
     });
 
     it('has a case for every (id, form) both lanes report', () => {
-        expect(SHARED.map(spec => spec.id)).toHaveLength(17);
+        expect(SHARED.map(spec => spec.id)).toHaveLength(18);
         expect([...Object.keys(CASES), ...Object.keys(ONE_LANE_FORMS)].sort()).toEqual(
             [...SHARED_FORMS].sort(),
         );

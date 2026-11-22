@@ -112,6 +112,9 @@ export default defineBuild([
             internal: 'src/internal.ts',
             // What a template adapter lowers with; only a template file loads it.
             template: 'src/template.ts',
+            // The slash-opacity reader `dynamic()` shares with the lowering's
+            // reports; `dynamic()` is an ES module, so no CommonJS build.
+            'color-modifier': 'src/color-modifier.ts',
         },
         hooks: {
             // The root is an ES module, and the declarations of `@csszyx/runtime`
