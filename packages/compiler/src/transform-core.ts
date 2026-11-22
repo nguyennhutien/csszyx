@@ -3866,6 +3866,25 @@ interface LeadingEntry {
 }
 
 const TEXT_SIZE_BASE_RE = /^text-(xs|sm|base|lg|[2-9]?xl|\[[^\]]+\]|\([^)]+\))$/;
+
+/** How a bracket value that is certainly a length starts. */
+const FONT_SIZE_VALUE_START = /^(?:[\d.]|(?:calc|clamp|min|max)\()/;
+
+/**
+ * Whether a `text-` size matched by {@link TEXT_SIZE_BASE_RE} is a font size a
+ * `leading-` class can fold into. A bracket value counts only when it is a
+ * length for certain: a digit or a point first, or a length function. A
+ * `length:` hint never reaches here: the variant prefix is cut at the last
+ * `:`, so `text-[length:var(--s)]` stays apart from its leading class. `text-[#f00]` is a colour to Tailwind, and `text-[#f00]/6`
+ * would be that colour at 6% opacity with no line-height. Mirrors
+ * `is_font_size_value` in `lower.rs`.
+ *
+ * @param size - What follows `text-`.
+ * @returns Whether it is a font size.
+ */
+function isFontSize(size: string): boolean {
+    return !size.startsWith('[') || FONT_SIZE_VALUE_START.test(size.slice(1, -1));
+}
 const LEADING_BASE_RE = /^leading-(.+)$/;
 
 /** Merges compatible text-size and line-height utilities with equal prefixes. */
@@ -3910,7 +3929,8 @@ function collectTextLeadingEntry(
     const prefix = lastColon === -1 ? '' : className.slice(0, lastColon + 1);
     const base = lastColon === -1 ? className : className.slice(lastColon + 1);
     const textMatch = TEXT_SIZE_BASE_RE.exec(base);
-    if (textMatch) textEntries.push({ index, prefix, size: textMatch[1] });
+    if (textMatch && isFontSize(textMatch[1]))
+        textEntries.push({ index, prefix, size: textMatch[1] });
     const leadingMatch = LEADING_BASE_RE.exec(base);
     if (leadingMatch) leadingEntries.push({ index, prefix, value: leadingMatch[1] });
 }

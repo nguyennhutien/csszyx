@@ -98,6 +98,8 @@ for the full contrast. You write no brackets or parens either way.
 // { text, leading } together → merged single class
 { text: 'lg', leading: 7 }    // → text-lg/7
 { text: 'sm', leading: 'tight' } // → text-sm/tight
+{ text: '14px', leading: 6 }     // → text-[14px]/6
+{ text: '#f00', leading: 6 }     // → text-[#f00] leading-6 (a colour is not merged)
 ```
 
 ## Text Alignment & Transform

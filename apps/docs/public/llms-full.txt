@@ -3616,17 +3616,19 @@ Controlling the leading (line height).
 
 ### Text/Leading Shorthand
 
-When both `text` (font-size) and `leading` (line-height) are specified together, they are automatically merged into a single Tailwind class using the `/` shorthand syntax.
+When `text` is a font size and `leading` (line-height) is set beside it, they are merged into a single Tailwind class using the `/` shorthand syntax. A bracket value merges only when it is a length for certain (a digit or a point first, or `calc`/`clamp`/`min`/`max`); a colour keeps both classes, because `text-[#f00]/6` would be the colour at 6% opacity with no line-height.
 
-| Input                               | Output             | Note                                                                                      |
-| :---------------------------------- | :----------------- | :---------------------------------------------------------------------------------------- |
-| `{ text: 'lg', leading: 7 }`        | `text-lg/7`        | Numeric leading merged with text size.                                                    |
-| `{ text: 'sm', leading: 'tight' }`  | `text-sm/tight`    | Keyword leading merged with text size.                                                    |
-| `{ text: 'sm', leading: '1.5' }`    | `text-sm/[1.5]`    | Numeric string = unitless ratio (1.5 × font-size).                                        |
-| `{ text: 'sm', leading: 1.5 }`      | `text-sm/1.5`      | Number = spacing scale (`calc(var(--spacing) * 1.5)` = 0.375rem — a length, not a ratio). |
-| `{ text: 'xl', leading: '1.5rem' }` | `text-xl/[1.5rem]` | Arbitrary leading merged with text size.                                                  |
-| `{ text: 'lg' }`                    | `text-lg`          | No merge — `leading` not present.                                                         |
-| `{ leading: 7 }`                    | `leading-7`        | No merge — `text` not present.                                                            |
+| Input                               | Output                  | Note                                                                                      |
+| :---------------------------------- | :---------------------- | :---------------------------------------------------------------------------------------- |
+| `{ text: 'lg', leading: 7 }`        | `text-lg/7`             | Numeric leading merged with text size.                                                    |
+| `{ text: 'sm', leading: 'tight' }`  | `text-sm/tight`         | Keyword leading merged with text size.                                                    |
+| `{ text: 'sm', leading: '1.5' }`    | `text-sm/[1.5]`         | Numeric string = unitless ratio (1.5 × font-size).                                        |
+| `{ text: 'sm', leading: 1.5 }`      | `text-sm/1.5`           | Number = spacing scale (`calc(var(--spacing) * 1.5)` = 0.375rem — a length, not a ratio). |
+| `{ text: 'xl', leading: '1.5rem' }` | `text-xl/[1.5rem]`      | Arbitrary leading merged with text size.                                                  |
+| `{ text: 'lg' }`                    | `text-lg`               | No merge — `leading` not present.                                                         |
+| `{ leading: 7 }`                    | `leading-7`             | No merge — `text` not present.                                                            |
+| `{ text: '14px', leading: 6 }`      | `text-[14px]/6`         | A length in brackets is a font size and merges.                                           |
+| `{ text: '#f00', leading: 6 }`      | `text-[#f00] leading-6` | No merge — a colour, not a font size.                                                     |
 
 ## Text Align
 

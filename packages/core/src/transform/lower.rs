@@ -1272,9 +1272,25 @@ fn text_size_class_parts(class_name: &str) -> Option<(&str, &str)> {
             | "7xl"
             | "8xl"
             | "9xl"
-    ) || (size.starts_with('[') && size.ends_with(']'))
+    ) || size
+        .strip_prefix('[')
+        .and_then(|inner| inner.strip_suffix(']'))
+        .is_some_and(is_font_size_value)
         || (size.starts_with('(') && size.ends_with(')'));
     known_size.then_some((prefix, size))
+}
+
+/// Whether an arbitrary `text-[…]` value is a font size for certain, so a
+/// leading class can fold into it: a digit or a point first, or a length
+/// function. A `length:` hint never reaches here, since the variant prefix is
+/// cut at the last `:`. `text-[#f00]` is a colour to Tailwind, and
+/// `text-[#f00]/6` would be that colour at 6% opacity with no line-height.
+/// Mirrors `TEXT_SIZE_BASE_RE` in `transform-core.ts`.
+fn is_font_size_value(inner: &str) -> bool {
+    inner.starts_with(|c: char| c.is_ascii_digit() || c == '.')
+        || ["calc(", "clamp(", "min(", "max("]
+            .iter()
+            .any(|function| inner.starts_with(function))
 }
 
 fn leading_class_parts(class_name: &str) -> Option<(&str, &str)> {
@@ -5186,6 +5202,42 @@ mod tests {
         };
 
         assert_eq!(lower_static_sz_object(&object), ["hover:bg-blue-500"]);
+    }
+
+    /// A bracket `text-` value folds a leading class in only when it is a
+    /// length for certain; a colour keeps both classes.
+    #[test]
+    fn folds_leading_into_a_bracket_text_size_and_never_into_a_colour() {
+        for size in [
+            "14px",
+            ".875rem",
+            "calc(1rem+2px)",
+            "clamp(1rem,2vw,2rem)",
+            "min(2rem,5vw)",
+            "max(1rem,2vw)",
+        ] {
+            assert!(super::is_font_size_value(size), "{size}");
+        }
+        for colour in [
+            "#f00",
+            "rgb(0_0_0)",
+            "oklch(0.6_0.2_30)",
+            "var(--brand)",
+            "red",
+            "",
+        ] {
+            assert!(!super::is_font_size_value(colour), "{colour}");
+        }
+        let lower = |text: &str| {
+            lower_static_sz_object(&StaticSzObject {
+                properties: vec![
+                    property("text", StaticSzValue::String(text.into())),
+                    property("leading", StaticSzValue::Number(6.0)),
+                ],
+            })
+        };
+        assert_eq!(lower("#f00"), ["text-[#f00]", "leading-6"]);
+        assert_eq!(lower("14px"), ["text-[14px]/6"]);
     }
 
     #[test]
