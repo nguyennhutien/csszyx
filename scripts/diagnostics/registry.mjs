@@ -1734,6 +1734,38 @@ export const DIAGNOSTICS = [
         sources: ['packages/dynamic/src/css-generator.ts'],
     },
     {
+        id: 'dynamic-unsupported',
+        summary:
+            'A class dynamic() writes no rule for: a variant it has no selector for, or a `css:` declaration.',
+        surfaces: { runtime: { production: false, host: 'browser' } },
+        position: 'none',
+        // `variant`: `group-hover:`, `peer-focus:`, or text a runtime value put
+        // before a `:`; applying the utility without it styled the wrong state
+        // and let a value inject any utility `dynamic()` knows. `css-property`:
+        // the whole-utility arbitrary property `css:` lowers to, build-time
+        // only by decision (2026-11-22).
+        forms: ['variant', 'css-property'],
+        args: {
+            form: formArg(['variant', 'css-property']),
+            className: STRING,
+            variant: OPTIONAL_STRING,
+        },
+        text: {
+            variant:
+                '`dynamic()` has no selector for the `{variant}` variant, so `{className}` writes no rule.',
+            'css-property':
+                '`{className}` is a `css:` declaration, which `dynamic()` does not write at runtime, so it writes no rule.',
+        },
+        help: {
+            variant:
+                'write the value as a literal so the build lowers it, or use a variant `dynamic()` knows: the breakpoints, `dark`, and the state variants such as `hover` and `focus`.',
+            'css-property':
+                "for a runtime value, use the property's own key or the `style` prop; `css:` is lowered at build time only.",
+        },
+        note: 'only the first class of each form in a session is reported.',
+        sources: ['packages/dynamic/src/css-generator.ts'],
+    },
+    {
         id: 'dynamic-non-boolean',
         summary: 'A runtime value that is not a boolean on a key only a boolean can toggle.',
         surfaces: { runtime: { production: true, host: 'browser' } },
