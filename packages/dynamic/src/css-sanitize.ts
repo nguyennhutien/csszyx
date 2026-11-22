@@ -90,6 +90,11 @@ export function isSafeCssValue(value: string): boolean {
             i += next > 0xffff ? 3 : 2;
             continue;
         }
+        // A comment is nothing to CSS, so a bracket or quote inside it opens
+        // nothing, and `/*(*/;position:fixed;/*)*/` hides a top-level `;` from
+        // this scan. No arbitrary value needs one, so it is refused, not
+        // skipped.
+        if (char === '/' && value[i + 1] === '*') return false;
         if (!scanUnquotedCssCharacter(char, state)) {
             return false;
         }

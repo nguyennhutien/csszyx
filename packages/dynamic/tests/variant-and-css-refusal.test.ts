@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * `dynamic()` writes CSS itself, so a class it does not fully understand emits
  * no rule rather than a wrong one.
@@ -80,6 +81,13 @@ describe('a runtime value cannot add a declaration through dynamic()', () => {
         '(--a"(");position:fixed;--z:(")")',
         "calc(1px'(');position:fixed;--z:(')')",
         'x\\[;position:fixed;--z:\\]',
+        // A comment is nothing to CSS, so a bracket or quote inside one
+        // opens nothing, while a scanner that reads it does.
+        'calc(1px)/*(*/;position:fixed;/*)*/',
+        'var(--a)/*(*/;position:fixed;/*)*/',
+        'url(x)/*"*/;position:fixed;/*"*/',
+        "url(x)/*'*/;position:fixed;/*'*/",
+        'x/*[*/;position:fixed;/*]*/',
     ];
     const keys = [
         'w',
@@ -94,56 +102,28 @@ describe('a runtime value cannot add a declaration through dynamic()', () => {
         'bgImg',
         '--brand',
     ];
-    /**
-     * The properties a rule body declares, read as CSS reads it: an escape
-     * (`\\3b`) is a character of the value, and a `;` inside quotes or
-     * parentheses belongs to its token, so neither ends a declaration.
-     *
-     * @param body - The text between a rule's braces.
-     * @returns Each top-level declaration's property name.
-     */
-    function declaredProperties(body: string): string[] {
-        const names: string[] = [];
-        let depth = 0;
-        let quote: string | null = null;
-        let start = 0;
-        for (let i = 0; i <= body.length; i++) {
-            const char = body[i];
-            if (char === '\\') {
-                i++;
-            } else if (quote !== null) {
-                if (char === quote) quote = null;
-            } else if (char === '"' || char === "'") {
-                quote = char;
-            } else if (char === '(') {
-                depth++;
-            } else if (char === ')') {
-                depth--;
-            } else if ((char === ';' && depth === 0) || i === body.length) {
-                const declaration = body.slice(start, i).trim();
-                if (declaration !== '')
-                    names.push(declaration.slice(0, declaration.indexOf(':')).trim());
-                start = i + 1;
-            }
-        }
-        return names;
-    }
-
     it.each(keys)('on `%s`', key => {
         vi.spyOn(console, 'warn').mockImplementation(() => {});
         for (const payload of payloads) {
             const { className } = transform({ [key]: payload } as SzObject);
             for (const cls of className.split(' ').filter(Boolean)) {
                 const rule = generateCSSRule(cls);
-                const body = rule.slice(rule.indexOf('{') + 1, rule.lastIndexOf('}'));
+                if (rule === '') continue;
                 const message = `${key}: ${JSON.stringify(payload)} -> ${rule}`;
-                // One rule, no markup, and nothing but the key's own properties.
-                expect(rule.split('{').length, message).toBeLessThanOrEqual(2);
-                expect(/<|>/.test(body), message).toBe(false);
-                for (const name of declaredProperties(body)) {
-                    expect(['position', 'display', 'inset', 'z-index'], message).not.toContain(
-                        name,
-                    );
+                expect(/<|>/.test(rule), message).toBe(false);
+                // The CSSOM reads the rule, so escapes, quotes and comments
+                // count as the browser counts them. A rule it refuses is
+                // dropped, as the injector drops it.
+                const sheet = new CSSStyleSheet();
+                try {
+                    sheet.insertRule(rule);
+                } catch {
+                    continue;
+                }
+                const { style } = sheet.cssRules[0] as CSSStyleRule;
+                const declared = Array.from({ length: style.length }, (_, i) => style[i]);
+                for (const name of ['position', 'display', 'inset', 'z-index', 'top', 'left']) {
+                    expect(declared, message).not.toContain(name);
                 }
             }
         }

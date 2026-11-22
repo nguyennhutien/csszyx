@@ -49,6 +49,8 @@ describe('isSafeCssValue', () => {
             'x\\(;position:fixed;--z:\\)', // an escaped paren opens nothing
             'red\\', // an escape with nothing to escape
             'red\\\n;x', // an escaped newline is still a control character
+            'calc(1px)/*(*/;position:fixed;/*)*/', // a comment opens nothing
+            'red/**/',
         ]) {
             expect(isSafeCssValue(v), v).toBe(false);
         }
