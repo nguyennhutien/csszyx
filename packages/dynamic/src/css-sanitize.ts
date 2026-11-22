@@ -57,6 +57,31 @@ function scanQuotedCssCharacter(value: string, index: number, state: CssValueSca
 }
 
 /**
+ * True when the `(` at `open` starts an unquoted url that CSS reads as a bad
+ * url. `url(` not preceded by a name character is a url token unless a quote
+ * comes first; that token ends at the first `)`, and a quote, a `(`, an
+ * escape, DEL or inner whitespace makes it a bad url, which ends at a `)` this
+ * scan cannot place (`url(a'b)c;position:fixed;d'e)`). A clean url body holds
+ * none of the characters the scan reads as structure, so the scan goes on
+ * through it as it reads any parenthesis. Linear in the url's length.
+ *
+ * @param value - The candidate CSS value.
+ * @param open - The index of a `(`.
+ * @returns Whether CSS reads a bad url from here.
+ */
+function isBadUrl(value: string, open: number): boolean {
+    if (
+        value.slice(open - 3, open).toLowerCase() !== 'url' ||
+        /[\w\u0080-\uffff-]/.test(value[open - 4] ?? '')
+    ) {
+        return false;
+    }
+    const rest = value.slice(open + 1);
+    const close = rest.indexOf(')');
+    return !/^(?:["']|[^\s"'(\\\x7f]*$)/.test((close === -1 ? rest : rest.slice(0, close)).trim());
+}
+
+/**
  * True when a single CSS *property value* cannot break out of its declaration.
  * Tracks quote and parenthesis state with a linear scan (no backtracking regex):
  * `{`/`}`/`<`/`>` are rejected outside quotes (never valid in a value), a `;` is
@@ -79,22 +104,14 @@ export function isSafeCssValue(value: string): boolean {
             i = scanQuotedCssCharacter(value, i, state);
             continue;
         }
-        // An escape is one character of the value (`\\(` is no parenthesis,
-        // `\\;` no separator), so it moves no depth. Reading it as structure
-        // let `x\\(;position:fixed;--z:\\)` look nested while CSS reads three
-        // declarations. An escaped control character is still a control
-        // character.
-        if (char === '\\') {
-            const next = value.codePointAt(i + 1);
-            if (next === undefined || next < 0x20) return false;
-            i += next > 0xffff ? 3 : 2;
-            continue;
-        }
-        // A comment is nothing to CSS, so a bracket or quote inside it opens
-        // nothing, and `/*(*/;position:fixed;/*)*/` hides a top-level `;` from
-        // this scan. No arbitrary value needs one, so it is refused, not
-        // skipped.
-        if (char === '/' && value[i + 1] === '*') return false;
+        // Outside a string, an escape and a comment are refused rather than
+        // read. `\\(` is no parenthesis to CSS and a bracket inside a comment
+        // opens nothing, so `x\\(;position:fixed;--z:\\)` and
+        // `/*(*/;position:fixed;/*)*/` hid a top-level `;` from this scan; an
+        // escape can also spell a function name, `u\\72l(` being `url(`. No
+        // arbitrary value needs either outside a quoted string.
+        if (char === '\\' || (char === '/' && value[i + 1] === '*')) return false;
+        if (char === '(' && isBadUrl(value, i)) return false;
         if (!scanUnquotedCssCharacter(char, state)) {
             return false;
         }

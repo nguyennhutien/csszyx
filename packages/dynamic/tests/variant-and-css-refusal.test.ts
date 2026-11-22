@@ -22,6 +22,7 @@ import {
     generateCSSRule,
     parseVariants,
 } from '../src/css-generator.js';
+import { isSafeCssValue } from '../src/css-sanitize.js';
 
 beforeEach(() => {
     __resetUnsupportedWarningsForTests();
@@ -88,6 +89,11 @@ describe('a runtime value cannot add a declaration through dynamic()', () => {
         'url(x)/*"*/;position:fixed;/*"*/',
         "url(x)/*'*/;position:fixed;/*'*/",
         'x/*[*/;position:fixed;/*]*/',
+        // An unquoted url ends at its first `)`, and a quote or a `(` inside
+        // it makes it a bad url, so neither opens anything to CSS.
+        "url(a'b)c;position:fixed;d'e)",
+        'url(a"b)c;position:fixed;d"e)',
+        'url(a()x;position:fixed;)',
     ];
     const keys = [
         'w',
@@ -127,6 +133,55 @@ describe('a runtime value cannot add a declaration through dynamic()', () => {
                 }
             }
         }
+    });
+});
+
+describe('isSafeCssValue reads a value as the CSSOM does', () => {
+    // Three bypasses (an escape, a comment, an unquoted url) were each a text
+    // around a `;` that the scanner read as nesting and CSS did not. This
+    // checks every such text up to a bound rather than the last one found:
+    // each value is `left;position:fixed;right`, with `left` up to three and
+    // `right` up to two of the pieces a CSS tokenizer treats specially. All
+    // three known bypasses fit inside the bound.
+    const pieces = ['(', ')', '"', "'", '\\', '/*', '*/', 'url(', 'a', ' '];
+
+    /**
+     * Every sequence of up to `max` pieces, joined.
+     *
+     * @param max - The longest sequence.
+     * @returns The joined texts, the empty one included.
+     */
+    function sequences(max: number): string[] {
+        let level = [''];
+        const all = [''];
+        for (let length = 1; length <= max; length++) {
+            level = level.flatMap(text => pieces.map(piece => text + piece));
+            all.push(...level);
+        }
+        return all;
+    }
+
+    it('declares only the property itself for every value it accepts', () => {
+        const rights = sequences(2);
+        let accepted = 0;
+        for (const left of sequences(3)) {
+            for (const right of rights) {
+                const value = `${left};position:fixed;${right}`;
+                if (!isSafeCssValue(value)) continue;
+                accepted++;
+                const sheet = new CSSStyleSheet();
+                try {
+                    sheet.insertRule(`.x { width: ${value} }`);
+                } catch {
+                    continue;
+                }
+                const { style } = sheet.cssRules[0] as CSSStyleRule;
+                const declared = Array.from({ length: style.length }, (_, i) => style[i]);
+                expect(declared, JSON.stringify(value)).not.toContain('position');
+            }
+        }
+        // Values the scanner accepts must exist, or the check proves nothing.
+        expect(accepted).toBeGreaterThan(100);
     });
 });
 

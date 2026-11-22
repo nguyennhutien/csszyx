@@ -27,7 +27,9 @@ describe('isSafeCssValue', () => {
             'url(data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=)', // ; inside url() is fine
             '"some;text"', // ; inside a quoted string is fine
             '"launch 🚀"',
-            'a\\🚀b', // an escaped astral character is one character
+            'url( /img.png )', // whitespace around an unquoted url is allowed
+            "url( 'a;b' )", // a quoted url is a function holding a string
+            'xurl(a b)', // `xurl(` is another function, not a url
             '1fr 2fr',
         ]) {
             expect(isSafeCssValue(v), v).toBe(true);
@@ -47,8 +49,14 @@ describe('isSafeCssValue', () => {
             'calc(1px', // unbalanced paren
             '"unterminated', // unterminated quote
             'x\\(;position:fixed;--z:\\)', // an escaped paren opens nothing
-            'red\\', // an escape with nothing to escape
-            'red\\\n;x', // an escaped newline is still a control character
+            'red\\', // an escape outside a string
+            'a\\🚀b',
+            'u\\72l(a"b)c;position:fixed;d"e)', // an escaped name spelling `url(`
+            "url(a'b)c;position:fixed;d'e)", // a quote makes a bad url
+            'URL(a()x;position:fixed;)', // so does a `(`, in any case
+            'url(a b)', // whitespace inside the url
+            'url(/img.png', // an unclosed url
+            'url(\u007f)', // a control character
             'calc(1px)/*(*/;position:fixed;/*)*/', // a comment opens nothing
             'red/**/',
         ]) {

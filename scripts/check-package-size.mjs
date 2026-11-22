@@ -404,7 +404,11 @@ export const SIZE_BUDGETS = [
         // one character, and a utility's text outside its brackets must be a
         // plain token or a custom property, so an escape cannot carry a `;`
         // out of a value (+238; `@csszyx/dynamic` alone +239).
-        maxGzipBytes: 41_300,
+        // Raised to 41,450 two commits later, measured 41,251: outside a
+        // string the scanner refuses an escape, a comment and a bad url, the
+        // three places it and CSS disagreed on nesting (+95; `@csszyx/dynamic`
+        // alone +105).
+        maxGzipBytes: 41_450,
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
     // The wasm build of the parser is the fourth surface: not browser code,
