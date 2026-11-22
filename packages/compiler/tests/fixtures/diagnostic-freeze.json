@@ -258,10 +258,41 @@
                 "line": 1,
                 "column": 35,
                 "args": {
+                    "form": "step",
                     "key": "p",
                     "value": "1.3"
                 },
                 "text": "[csszyx] off-scale-value: src/freeze.tsx:1:35\n  `p: 1.3` is not on Tailwind's spacing scale, so the class produces no CSS.\n  help: use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'1.3rem'`.\n  docs: https://csszyx.com/e/off-scale-value"
+            }
+        ]
+    },
+    {
+        "code": "off-scale-value",
+        "variant": "spacing-fraction",
+        "issues": [
+            {
+                "code": "off-scale-value",
+                "line": 1,
+                "column": 35,
+                "args": {
+                    "form": "fraction",
+                    "key": "p",
+                    "value": "1/2",
+                    "percent": "50"
+                },
+                "text": "[csszyx] off-scale-value: src/freeze.tsx:1:35\n  `p: '1/2'` is a fraction, and `p` has no fraction utilities, so the class produces no CSS.\n  help: write it with a unit: `p: '50%'` where `p` takes a percentage, or a length such as `p: '0.5rem'`.\n  docs: https://csszyx.com/e/off-scale-value"
+            },
+            {
+                "code": "off-scale-value",
+                "line": 1,
+                "column": 45,
+                "args": {
+                    "form": "fraction",
+                    "key": "m",
+                    "value": "1/3",
+                    "percent": "33.3333"
+                },
+                "text": "[csszyx] off-scale-value: src/freeze.tsx:1:45\n  `m: '1/3'` is a fraction, and `m` has no fraction utilities, so the class produces no CSS.\n  help: write it with a unit: `m: '33.3333%'` where `m` takes a percentage, or a length such as `m: '0.5rem'`.\n  docs: https://csszyx.com/e/off-scale-value"
             }
         ]
     },

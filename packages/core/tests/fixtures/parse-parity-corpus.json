@@ -21,10 +21,21 @@
     "source": "const A = () => <div sz={{ m: -2, gap: \"1/2\" }} />;",
     "classes": [
       "-m-2",
-      "gap-[1/2]"
+      "gap-1/2"
     ],
     "rawClassNames": [],
-    "issues": []
+    "issues": [
+      {
+        "code": "off-scale-value",
+        "start": 34,
+        "args": {
+          "form": "fraction",
+          "key": "gap",
+          "value": "1/2",
+          "percent": "50"
+        }
+      }
+    ]
   },
   {
     "source": "const A = () => <div sz={{ w: \"280px minmax(0,1fr)\" }} />;",

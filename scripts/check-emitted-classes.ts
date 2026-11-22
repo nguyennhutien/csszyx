@@ -97,6 +97,13 @@ const BASELINE: ReadonlyMap<string, Baseline> = new Map([
             reason: "a number on `leading` is the spacing scale like on `p` (ADR 0037), and 1.4 is off its quarter step; the build reports `off-scale-value` at the site and points to `leading: '1.4'` for the ratio",
         },
     ],
+    [
+        'p-1/2',
+        {
+            kind: 'accepted',
+            reason: "a fraction on a spacing key with no fraction utilities is written as a Tailwind author would (ADR 0036): its bracket `p-[1/2]` was `padding: 1/2`, which the browser drops; every lane reports `off-scale-value` (form `fraction`) at the site and names `p: '50%'`",
+        },
+    ],
     // ── known-dead: a fraction that no bare utility spells ───────────────────
     // `aspect` and `weight` bracket every number and `grow`/`shrink`/`flex`/
     // `stroke`/`tabSize` bracket a decimal (ADR 0037), because there the

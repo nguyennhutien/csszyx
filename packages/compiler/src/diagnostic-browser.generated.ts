@@ -26,8 +26,8 @@ export const CLOSED_ENUM_VALUE: SzBrowserDiagnostic<SzDiagnosticArgs['closed-enu
 /** `slash-opacity-string`: A colour key given its opacity in a string, which emits nothing; the object form takes it. */
 export const SLASH_OPACITY_STRING: SzBrowserDiagnostic<SzDiagnosticArgs['slash-opacity-string']> = {"id":"slash-opacity-string","args":"key color opacity","text":"`{key}: '{color}/{opacity}'` emits nothing: a string value cannot carry a slash opacity.","help":"use the object form: `{ color: '{color}', op: {opacity} }`."};
 
-/** `off-scale-value`: A spacing value off Tailwind's quarter-step scale. */
-export const OFF_SCALE_VALUE: SzBrowserDiagnostic<SzDiagnosticArgs['off-scale-value']> = {"id":"off-scale-value","args":"key value","text":"`{key}: {value}` is not on Tailwind's spacing scale, so the class produces no CSS.","help":"use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'{value}rem'`."};
+/** `off-scale-value`: A spacing value off Tailwind's quarter-step scale, or a fraction on a key that takes none. */
+export const OFF_SCALE_VALUE: SzBrowserDiagnostic<SzDiagnosticArgs['off-scale-value']> = {"id":"off-scale-value","args":"form key value percent?","text":{"step":"`{key}: {value}` is not on Tailwind's spacing scale, so the class produces no CSS.","fraction":"`{key}: '{value}'` is a fraction, and `{key}` has no fraction utilities, so the class produces no CSS."},"help":{"step":"use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'{value}rem'`.","fraction":"write it with a unit: `{key}: '{percent}%'` where `{key}` takes a percentage, or a length such as `{key}: '0.5rem'`."}};
 
 /** `clamped-factor`: A numeric string above 1 on a key whose CSS function stops at 1. */
 export const CLAMPED_FACTOR: SzBrowserDiagnostic<SzDiagnosticArgs['clamped-factor']> = {"id":"clamped-factor","args":"key value","text":"`{key}: '{value}'` is the CSS value {value}, which the browser clamps to 1, the same as `'1'`.","help":"for {value}%, write the number `{key}: {value}`; for a fraction of 1, write a string below 1 such as `'0.5'`."};

@@ -129,7 +129,8 @@ const CASES: Readonly<Record<string, readonly SzObject[]>> = {
         { not: { supports: { 'display:grid': { numOrdinal: 0.5 } } } },
     ],
     'slash-opacity-string': [{ bg: 'red-500/50' }],
-    'off-scale-value': [
+    'off-scale-value/fraction': [{ p: '1/2' }, { hover: { mx: '2/3' } }],
+    'off-scale-value/step': [
         { p: 1.4 },
         { has: { img: { p: 1.3 } } },
         { group: { has: { img: { p: 1.1 } } } },

@@ -97,6 +97,11 @@ export const FREEZE_SOURCES: ReadonlyArray<FreezeSource> = [
     shared('style-override', 'spread'),
     shared('runtime-value', 'no-var-form'),
     shared('off-scale-value', 'spacing-step'),
+    {
+        code: 'off-scale-value',
+        variant: 'spacing-fraction',
+        source: "export const A = () => <div sz={{ p: '1/2', m: '1/3' }} />;",
+    },
     shared('per-side-border-style', 'side-style'),
     {
         code: 'property-object',

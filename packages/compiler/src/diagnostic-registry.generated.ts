@@ -127,9 +127,15 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "off-scale-value",
         "position": "site",
-        "args": "key value",
-        "text": "`{key}: {value}` is not on Tailwind's spacing scale, so the class produces no CSS.",
-        "help": "use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'{value}rem'`."
+        "args": "form key value percent?",
+        "text": {
+            "step": "`{key}: {value}` is not on Tailwind's spacing scale, so the class produces no CSS.",
+            "fraction": "`{key}: '{value}'` is a fraction, and `{key}` has no fraction utilities, so the class produces no CSS."
+        },
+        "help": {
+            "step": "use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'{value}rem'`.",
+            "fraction": "write it with a unit: `{key}: '{percent}%'` where `{key}` takes a percentage, or a length such as `{key}: '0.5rem'`."
+        }
     },
     {
         "id": "clamped-factor",

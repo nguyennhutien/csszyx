@@ -788,6 +788,15 @@ pub fn prefix_takes_fractions(prefix: &str) -> bool {
 /// sign no sz value carries.
 pub fn parse_value(prefix: &str, value: &str, negative: bool, judge: Judge<'_>) -> Option<SzValue> {
     if let Some(inner) = wrapped(value, '[', ']') {
+        // `p-[1/2]` stays in `className`: `{ p: '1/2' }` lowers to `p-1/2`
+        // (reported as `off-scale-value`), not back to this class, so no sz
+        // value writes it.
+        if crate::transform::lower::is_spacing_fraction(
+            reverse_property_key(prefix).unwrap_or(prefix),
+            inner,
+        ) {
+            return None;
+        }
         return parse_arbitrary_value(prefix, &judge.spaces(inner), negative).map(SzValue::from);
     }
     if let Some(inner) = wrapped(value, '(', ')') {

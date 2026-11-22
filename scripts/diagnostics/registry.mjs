@@ -428,12 +428,36 @@ export const DIAGNOSTICS = [
     },
     {
         id: 'off-scale-value',
-        summary: "A spacing value off Tailwind's quarter-step scale.",
+        summary:
+            "A spacing value off Tailwind's quarter-step scale, or a fraction on a key that takes none.",
         surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
         position: 'site',
-        args: { key: STRING, value: STRING },
-        text: "`{key}: {value}` is not on Tailwind's spacing scale, so the class produces no CSS.",
-        help: "use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'{value}rem'`.",
+        // `step`: a number off the quarter steps (`p: 1.4`). `fraction`: a
+        // fraction on a spacing key with no fraction utilities (`p: '1/2'`);
+        // the class is written as a Tailwind author would (`p-1/2`), since the
+        // bracket `p-[1/2]` was `padding: 1/2`, which the browser drops.
+        // `percent` is the fraction times 100, to four places, the fraction form
+        // only.
+        forms: ['step', 'fraction'],
+        args: {
+            form: formArg(['step', 'fraction']),
+            key: STRING,
+            value: STRING,
+            percent: OPTIONAL_STRING,
+        },
+        text: {
+            step: "`{key}: {value}` is not on Tailwind's spacing scale, so the class produces no CSS.",
+            fraction:
+                "`{key}: '{value}'` is a fraction, and `{key}` has no fraction utilities, so the class produces no CSS.",
+        },
+        help: {
+            step: "use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'{value}rem'`.",
+            // One sentence true on every key the form fires on: `scrollM*`,
+            // `borderSpacing*`, `outlineOffset` and `ringOffset` take no
+            // percentage, so the percent is offered only where it applies.
+            fraction:
+                "write it with a unit: `{key}: '{percent}%'` where `{key}` takes a percentage, or a length such as `{key}: '0.5rem'`.",
+        },
         sources: [ENGINE, CORE_TS],
     },
     {

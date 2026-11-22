@@ -2371,11 +2371,17 @@ fn format_static_class_value(key: &str, value: &StaticSzValue, prefix: &str) -> 
 
             // Bare numeric fractions (1/2, 3/4) are sizing values, not the
             // `color/op` slash strings the guard below suppresses. Fraction-
-            // friendly properties keep them native (w-1/2, basis-1/3); the rest
-            // wrap them as arbitrary (p-[1/2]). Mirrors the JavaScript transform it replaced.
+            // friendly properties keep them native (w-1/2, basis-1/3). A spacing
+            // key with no fraction utilities writes the class a Tailwind author
+            // would (`p-1/2`, no CSS, reported as `off-scale-value`): its bracket
+            // `p-[1/2]` was `padding: 1/2`, which the browser drops. Any other
+            // key brackets it (`row-[1/3]` is `grid-row: 1/3`). Mirrors
+            // `normalizeRatioValue` in `transform-core.ts`.
             if is_bare_fraction(value) {
                 return Some(
-                    if super::generated::tables::is_fraction_supported_prop(key) {
+                    if super::generated::tables::is_fraction_supported_prop(key)
+                        || is_spacing_fraction(key, value)
+                    {
                         format!("{prefix}{class_key}-{value}")
                     } else {
                         format!("{prefix}{class_key}-[{value}]")
@@ -3392,6 +3398,153 @@ fn kebab_case(key: &str) -> String {
         }
     }
     out
+}
+
+/// Keys whose numbers are steps of Tailwind's spacing scale (`p`, `gap`, `w`,
+/// `translateX`, …): the `Spacing` category of a runtime value, and the keys
+/// `off-scale-value` speaks for. Here rather than in the parser so the lowering
+/// reads it in every build.
+pub(crate) fn is_spacing_scale_key(key: &str) -> bool {
+    matches!(
+        key,
+        "p" | "pt"
+            | "pr"
+            | "pb"
+            | "pl"
+            | "px"
+            | "py"
+            | "ps"
+            | "pe"
+            | "pbs"
+            | "pbe"
+            | "m"
+            | "mt"
+            | "mr"
+            | "mb"
+            | "ml"
+            | "mx"
+            | "my"
+            | "ms"
+            | "me"
+            | "mbs"
+            | "mbe"
+            | "spaceX"
+            | "spaceY"
+            | "gap"
+            | "gapX"
+            | "gapY"
+            | "inset"
+            | "insetX"
+            | "insetY"
+            | "top"
+            | "right"
+            | "bottom"
+            | "left"
+            | "start"
+            | "end"
+            | "insetS"
+            | "insetE"
+            | "insetBs"
+            | "insetBe"
+            | "w"
+            | "minW"
+            | "maxW"
+            | "h"
+            | "minH"
+            | "maxH"
+            | "size"
+            | "blockSize"
+            | "minBlockSize"
+            | "maxBlockSize"
+            | "inlineSize"
+            | "minInlineSize"
+            | "maxInlineSize"
+            | "basis"
+            | "indent"
+            | "scrollM"
+            | "scrollMt"
+            | "scrollMr"
+            | "scrollMb"
+            | "scrollMl"
+            | "scrollMs"
+            | "scrollMe"
+            | "scrollMx"
+            | "scrollMy"
+            | "scrollP"
+            | "scrollPt"
+            | "scrollPr"
+            | "scrollPb"
+            | "scrollPl"
+            | "scrollPs"
+            | "scrollPe"
+            | "scrollPx"
+            | "scrollPy"
+            | "scrollPbs"
+            | "scrollPbe"
+            | "scrollMbs"
+            | "scrollMbe"
+            | "translateX"
+            | "translateY"
+            | "borderSpacing"
+            | "borderSpacingX"
+            | "borderSpacingY"
+            | "outlineOffset"
+            | "ringOffset"
+            | "underlineOffset"
+    )
+}
+
+/// Whether `value` is a fraction on a spacing key that has no fraction
+/// utilities (`p: '1/2'`), which lowers bare and is reported. A zero
+/// denominator is no share of anything and keeps the bracket.
+pub(crate) fn is_spacing_fraction(key: &str, value: &str) -> bool {
+    is_bare_fraction(value)
+        && !super::generated::tables::is_fraction_supported_prop(key)
+        && value
+            .split_once('/')
+            .is_some_and(|(_, denominator)| denominator.bytes().any(|b| b != b'0'))
+        && is_spacing_scale_key(key)
+}
+
+/// A bare fraction as the percent it is, to four places, printed as
+/// JavaScript prints it: `1/2` → `50`, `1/3` → `33.3333`. Mirrors
+/// `fractionPercent` in `transform-core.ts`.
+#[cfg(feature = "native-engine")]
+pub(crate) fn fraction_percent(value: &str) -> String {
+    let (numerator, denominator) = value.split_once('/').unwrap_or((value, "1"));
+    let share = numerator.parse::<f64>().unwrap_or(0.0) / denominator.parse::<f64>().unwrap_or(1.0);
+    format_number_literal((share * 100.0 * 1e4).round() / 1e4)
+}
+
+/// Fractions on spacing keys with no fraction utilities, for the
+/// `off-scale-value` fraction form: `(key, value without its \`!\`, offset)`.
+///
+/// Same descent rules as [`collect_dead_spacing_steps`].
+#[cfg(feature = "native-engine")]
+pub(crate) fn collect_spacing_fractions(
+    object: &StaticSzObject,
+    out: &mut Vec<(String, String, u32)>,
+) {
+    for property in &object.properties {
+        match &property.value {
+            StaticSzValue::String(text) => {
+                let unbanged = text.strip_suffix('!').unwrap_or(text);
+                if is_spacing_fraction(&property.key, unbanged) {
+                    out.push((
+                        property.key.clone(),
+                        unbanged.to_string(),
+                        property.span.start,
+                    ));
+                }
+            }
+            StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
+                for_each_sz_object_in(&property.key, nested, &mut |object| {
+                    collect_spacing_fractions(object, out);
+                });
+            }
+            _ => {}
+        }
+    }
 }
 
 /// Matches a bare numeric fraction such as `1/2` or `3/4` (the `^\d+/\d+$` form).
@@ -5204,6 +5357,73 @@ mod tests {
         assert_eq!(lower_static_sz_object(&object), ["hover:bg-blue-500"]);
     }
 
+    /// A fraction lowers bare and is reported only on a spacing key with no
+    /// fraction utilities and a non-zero denominator; one row per condition.
+    #[test]
+    fn a_fraction_is_a_spacing_fraction_only_where_the_key_has_no_fraction_utility() {
+        assert!(super::is_spacing_fraction("p", "1/2"));
+        assert!(super::is_spacing_fraction("gap", "10/4"));
+        assert!(super::is_spacing_fraction("p", "1/10"));
+        for (key, value) in [
+            ("p", "1.5"),
+            ("p", "1/2/3"),
+            ("w", "1/2"),
+            ("translateX", "1/2"),
+            ("p", "1/0"),
+            ("p", "1/00"),
+            ("row", "1/3"),
+            ("opacity", "1/2"),
+        ] {
+            assert!(!super::is_spacing_fraction(key, value), "{key}: {value}");
+        }
+        assert!(super::is_spacing_scale_key("scrollPbe"));
+        assert!(!super::is_spacing_scale_key("row"));
+    }
+
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn a_fraction_is_written_as_the_percent_it_is_to_four_places() {
+        for (value, percent) in [
+            ("1/2", "50"),
+            ("1/3", "33.3333"),
+            ("2/3", "66.6667"),
+            ("5/4", "125"),
+        ] {
+            assert_eq!(super::fraction_percent(value), percent, "{value}");
+        }
+    }
+
+    /// Spacing fractions are collected under variants, without their `!`,
+    /// and never inside a colour object.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn collects_a_spacing_fraction_at_any_variant_depth() {
+        let text = |value: &str| StaticSzValue::String(value.to_string());
+        let mut out = Vec::new();
+        super::collect_spacing_fractions(
+            &StaticSzObject {
+                properties: vec![
+                    property("p", text("1/2!")),
+                    property("w", text("1/2")),
+                    property("hover", object(vec![property("mx", text("2/3"))])),
+                    property(
+                        "bg",
+                        object(vec![
+                            property("color", text("red-500")),
+                            property("p", text("1/2")),
+                        ]),
+                    ),
+                ],
+            },
+            &mut out,
+        );
+        let found: Vec<_> = out
+            .into_iter()
+            .map(|(key, value, _)| format!("{key}:{value}"))
+            .collect();
+        assert_eq!(found, ["p:1/2", "mx:2/3"]);
+    }
+
     /// A bracket `text-` value folds a leading class in only when it is a
     /// length for certain; a colour keeps both classes.
     #[test]
@@ -6567,10 +6787,17 @@ mod tests {
         };
         assert_eq!(lower_static_sz_object(&supported), ["w-1/2", "basis-1/3"]);
 
-        let arbitrary = StaticSzObject {
+        // A spacing key with no fraction utilities writes the bare class a
+        // Tailwind author would (reported as `off-scale-value`); any other key
+        // keeps the bracket, where it is valid CSS.
+        let spacing = StaticSzObject {
             properties: vec![property("p", StaticSzValue::String("1/2".to_string()))],
         };
-        assert_eq!(lower_static_sz_object(&arbitrary), ["p-[1/2]"]);
+        assert_eq!(lower_static_sz_object(&spacing), ["p-1/2"]);
+        let arbitrary = StaticSzObject {
+            properties: vec![property("row", StaticSzValue::String("1/3".to_string()))],
+        };
+        assert_eq!(lower_static_sz_object(&arbitrary), ["row-[1/3]"]);
     }
 
     #[test]
