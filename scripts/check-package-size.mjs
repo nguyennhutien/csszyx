@@ -381,7 +381,12 @@ export const SIZE_BUDGETS = [
         kind: 'installed-app',
         target: 'packages/csszyx',
         imports: ['@csszyx/runtime', '@csszyx/dynamic'],
-        maxGzipBytes: 40_700,
+        // Raised from 40,700 to 41,000 on 2026-11-22, measured 40,747 (40,682
+        // with `main`'s sanitizer, same build): `isUtilityArbitrarySafe`
+        // checks that a bracket segment's inner brackets balance, so
+        // `w-[1px]_p-[2px]` no longer declares `width: 1px] p-[2px` (+65;
+        // `@csszyx/dynamic` alone +81). ~250 bytes of headroom.
+        maxGzipBytes: 41_000,
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
     // The wasm build of the parser is the fourth surface: not browser code,

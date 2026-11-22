@@ -99,6 +99,35 @@ export function isSafeCssPropertyName(name: string): boolean {
 }
 
 /**
+ * True when every `[` in a bracket segment's inner text closes before the
+ * segment does, outside quoted strings: `[a]_1fr_[b]` (grid line names) is
+ * one value, while `1px]_p-[2px` is the text between the first `[` and the last
+ * `]` of two utilities, `w-[1px]_p-[2px]`, which would declare `width: 1px]
+ * p-[2px`. One linear pass over `n` characters.
+ *
+ * @param inner - The text between a segment's first `[` and its last `]`.
+ * @returns Whether its brackets balance.
+ */
+function innerBracketsBalance(inner: string): boolean {
+    let depth = 0;
+    let quote: string | null = null;
+    for (let i = 0; i < inner.length; i++) {
+        const char = inner[i];
+        if (quote !== null) {
+            if (char === '\\') i++;
+            else if (char === quote) quote = null;
+        } else if (char === '"' || char === "'") {
+            quote = char;
+        } else if (char === '[') {
+            depth++;
+        } else if (char === ']' && --depth < 0) {
+            return false;
+        }
+    }
+    return depth === 0;
+}
+
+/**
  * True when a Tailwind utility's arbitrary `[...]` segment (if any) is safe to
  * emit. Utilities with no `[...]` are always safe (csszyx-generated). For the
  * whole-utility arbitrary-property form `[property:value]`, both the name and the
@@ -117,6 +146,9 @@ export function isUtilityArbitrarySafe(utility: string): boolean {
         return true; // malformed bracket — downstream emits nothing anyway
     }
     const inner = utility.slice(open + 1, close);
+    if (!innerBracketsBalance(inner)) {
+        return false;
+    }
 
     // Whole-utility arbitrary property: [property:value]
     if (

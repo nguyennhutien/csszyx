@@ -104,6 +104,30 @@ describe('isUtilityArbitrarySafe', () => {
         }
     });
 
+    it('rejects a bracket segment whose inner brackets do not balance', () => {
+        // First `[` to last `]` spans two utilities: `width: 1px] p-[2px`.
+        for (const u of [
+            'w-[1px]_p-[2px]',
+            'w-[a]b]',
+            'w-[[a]',
+            'grid-cols-[a]_[b]',
+            '[--c:a]b]',
+        ]) {
+            expect(isUtilityArbitrarySafe(u), u).toBe(false);
+        }
+        // Balanced inner brackets are values: grid line names.
+        for (const u of [
+            'grid-cols-[[a]_1fr_[b]]',
+            'grid-rows-[[top]_auto]',
+            '[--c:[x]]',
+            // A bracket inside a quoted string is text, an escaped quote included.
+            'content-["[x"]',
+            "content-['a\\'[']",
+        ]) {
+            expect(isUtilityArbitrarySafe(u), u).toBe(true);
+        }
+    });
+
     it('treats a malformed bracket pair (close before open) as safe — downstream emits nothing', () => {
         // lastIndexOf(']') < indexOf('['): there's no well-formed [...] segment
         // to validate, and the generator's own bracket checks won't match this
