@@ -10,6 +10,7 @@ import {
     isSafeCssPropertyName,
     isSafeCssValue,
     isUtilityArbitrarySafe,
+    isUtilityStructureSafe,
 } from '../src/css-sanitize.js';
 
 describe('isSafeCssValue', () => {
@@ -26,6 +27,9 @@ describe('isSafeCssValue', () => {
             'url(data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=)', // ; inside url() is fine
             '"some;text"', // ; inside a quoted string is fine
             '"launch 🚀"',
+            'url( /img.png )', // whitespace around an unquoted url is allowed
+            "url( 'a;b' )", // a quoted url is a function holding a string
+            'xurl(a b)', // `xurl(` is another function, not a url
             '1fr 2fr',
         ]) {
             expect(isSafeCssValue(v), v).toBe(true);
@@ -44,6 +48,17 @@ describe('isSafeCssValue', () => {
             'red\t;x', // control char
             'calc(1px', // unbalanced paren
             '"unterminated', // unterminated quote
+            'x\\(;position:fixed;--z:\\)', // an escaped paren opens nothing
+            'red\\', // an escape outside a string
+            'a\\🚀b',
+            'u\\72l(a"b)c;position:fixed;d"e)', // an escaped name spelling `url(`
+            "url(a'b)c;position:fixed;d'e)", // a quote makes a bad url
+            'URL(a()x;position:fixed;)', // so does a `(`, in any case
+            'url(a b)', // whitespace inside the url
+            'url(/img.png', // an unclosed url
+            'url(\u007f)', // a control character
+            'calc(1px)/*(*/;position:fixed;/*)*/', // a comment opens nothing
+            'red/**/',
         ]) {
             expect(isSafeCssValue(v), v).toBe(false);
         }
@@ -104,11 +119,68 @@ describe('isUtilityArbitrarySafe', () => {
         }
     });
 
+    it('rejects a bracket segment whose inner brackets do not balance', () => {
+        // First `[` to last `]` spans two utilities: `width: 1px] p-[2px`.
+        for (const u of [
+            'w-[1px]_p-[2px]',
+            'w-[a]b]',
+            'w-[[a]',
+            'grid-cols-[a]_[b]',
+            '[--c:a]b]',
+        ]) {
+            expect(isUtilityArbitrarySafe(u), u).toBe(false);
+        }
+        // Balanced inner brackets are values: grid line names.
+        for (const u of [
+            'grid-cols-[[a]_1fr_[b]]',
+            'grid-rows-[[top]_auto]',
+            '[--c:[x]]',
+            // A bracket inside a quoted string is text, an escaped quote included.
+            'content-["[x"]',
+            "content-['a\\'[']",
+        ]) {
+            expect(isUtilityArbitrarySafe(u), u).toBe(true);
+        }
+    });
+
     it('treats a malformed bracket pair (close before open) as safe — downstream emits nothing', () => {
         // lastIndexOf(']') < indexOf('['): there's no well-formed [...] segment
         // to validate, and the generator's own bracket checks won't match this
         // shape either, so it's passed through rather than rejected outright.
         expect(isUtilityArbitrarySafe('a]b[c')).toBe(true);
+    });
+});
+
+describe('isUtilityStructureSafe', () => {
+    it.each([
+        'p-4',
+        'bg-red-500/50',
+        'text-[14px]',
+        'bg-[#fff]/50',
+        'bg-red-500/[0.5]',
+        'bg-[#fff]!',
+        'bg-(--brand)',
+        'text-(length:--fs)',
+        'bg-(--c)/50',
+        // The modifier can be a custom property too.
+        'bg-blue-500/(--alpha)',
+        'bg-[#fff]/(--a)',
+        'bg-(--c)/(--a)',
+    ])('accepts %s', utility => {
+        expect(isUtilityStructureSafe(utility)).toBe(true);
+    });
+
+    it.each([
+        // The text after a bracket's `]` is copied into the rule as well.
+        'bg-[#fff]/(--a;position:fixed)',
+        'bg-[#fff]/x;position:fixed',
+        'w-[1px]x',
+        'bg-blue-500/(--a;position:fixed)',
+        'bg-blue-500/(red)',
+        'bg-(red)',
+        'w-a;position:fixed',
+    ])('refuses %s', utility => {
+        expect(isUtilityStructureSafe(utility)).toBe(false);
     });
 });
 

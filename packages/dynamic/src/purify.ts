@@ -81,7 +81,9 @@ function isVariantKey(key: string): boolean {
  */
 function isValueSafe(value: string, strict: boolean): boolean {
     if (!isSafeCssValue(value)) return false;
-    if (strict && DANGEROUS_VALUE_RE.test(value)) return false;
+    // An escape spells `url(` past the expression below (`u\\rl(`), so strict
+    // mode keeps none.
+    if (strict && (DANGEROUS_VALUE_RE.test(value) || value.includes('\\'))) return false;
     return true;
 }
 

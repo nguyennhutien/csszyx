@@ -121,6 +121,7 @@ export interface SzDiagnosticArgs {
     'szv-object-as-string': Readonly<Record<string, never>>;
     'dynamic-injection-growth': { readonly count: number };
     'dynamic-unsafe-arbitrary': { readonly utility: string };
+    'dynamic-unsupported': { readonly form: 'variant' | 'css-property'; readonly className: string; readonly variant?: string };
     'dynamic-non-boolean': { readonly key: string; readonly valueType: string };
     'dynamic-unresolvable': { readonly key: string; readonly valueType: string };
     'dev-warnings-partial': Readonly<Record<string, never>>;
@@ -449,6 +450,7 @@ export type SzDiagnosticId =
     | 'szv-object-as-string'
     | 'dynamic-injection-growth'
     | 'dynamic-unsafe-arbitrary'
+    | 'dynamic-unsupported'
     | 'dynamic-non-boolean'
     | 'dynamic-unresolvable'
     | 'dev-warnings-partial'

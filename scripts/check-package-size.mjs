@@ -193,11 +193,24 @@ export const SIZE_BUDGETS = [
         target: 'packages/dynamic',
         // 13,902 measured with React bundled in; React is a peer dependency the
         // app already ships, and the unsafe-value warning now folds away.
-        maxGzipBytes: 10_950,
+        //
+        // Raised on 2026-11-22, measured 10,977 / 10,676 / 8,217 (10,822 /
+        // 10,517 / 8,060 before, same build): `dynamic()` splits a variant only
+        // outside brackets and writes no rule for a variant it has no selector
+        // for or for a `css:` declaration, so a runtime value cannot bring in a
+        // utility after a `:` (`w-'a';position:fixed` declared `position:
+        // fixed`). Vite 10,925 / 10,641 / 8,082 (10,810 / 10,520 / 7,960).
+        //
+        // Raised again the same day, measured 11,216 / 10,918 / 8,447, Vite
+        // 11,168 / 10,880 / 8,309: the scanners read a `\` escape as one
+        // character and a utility's text outside its brackets must be a plain
+        // token or a custom property, so an escape cannot carry a `;` out of a
+        // value (`x\(;position:fixed;--z:\)`). About 200 bytes of headroom.
+        maxGzipBytes: 11_450,
         // Measured 2026-10-08: 10,358 / 7,897.
-        entryBudgets: { '.': 10_650, './react': 8_200 },
+        entryBudgets: { '.': 11_150, './react': 8_650 },
         // Built by Vite, measured 2026-10-19: 10,659, then 10,373 / 7,800.
-        vite: { maxGzipBytes: 11_000, entryBudgets: { '.': 10_700, './react': 8_100 } },
+        vite: { maxGzipBytes: 11_400, entryBudgets: { '.': 11_100, './react': 8_500 } },
         // None today: its one production failure, an unreachable manifest, is
         // a rejected fetch it catches. Read from the registry all the same, so
         // a production line added to its sources has to be registered.
@@ -381,7 +394,21 @@ export const SIZE_BUDGETS = [
         kind: 'installed-app',
         target: 'packages/csszyx',
         imports: ['@csszyx/runtime', '@csszyx/dynamic'],
-        maxGzipBytes: 40_700,
+        // Raised from 40,700 to 41,000 on 2026-11-22, measured 40,747 (40,682
+        // with `main`'s sanitizer, same build): `isUtilityArbitrarySafe`
+        // checks that a bracket segment's inner brackets balance, so
+        // `w-[1px]_p-[2px]` no longer declares `width: 1px] p-[2px` (+65;
+        // `@csszyx/dynamic` alone +81). ~250 bytes of headroom.
+        // Raised to 41,300 the same day, measured 41,144 (40,906 one commit
+        // earlier, same build): the declaration scanners read a `\` escape as
+        // one character, and a utility's text outside its brackets must be a
+        // plain token or a custom property, so an escape cannot carry a `;`
+        // out of a value (+238; `@csszyx/dynamic` alone +239).
+        // Raised to 41,450 two commits later, measured 41,251: outside a
+        // string the scanner refuses an escape, a comment and a bad url, the
+        // three places it and CSS disagreed on nesting (+95; `@csszyx/dynamic`
+        // alone +105).
+        maxGzipBytes: 41_450,
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
     // The wasm build of the parser is the fourth surface: not browser code,
@@ -1169,8 +1196,9 @@ export const SIZE_BUDGETS = [
         target: 'packages/compiler',
         subpath: './report',
         // Measured 31,045. 32,000 on 2026-11-12, measured 31,733: the
-        // `mangle-mark-missed` registry entry.
-        maxGzipBytes: 32_000,
+        // `mangle-mark-missed` registry entry. 32,350 on 2026-11-22, measured
+        // 32,072 (31,883 before): the `dynamic-unsupported` registry entry.
+        maxGzipBytes: 32_350,
     },
     // The MCP server's bin, which is also its `.` export: an editor starts
     // it for every session.

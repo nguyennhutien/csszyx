@@ -685,6 +685,11 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
         "args": "utility"
     },
     {
+        "id": "dynamic-unsupported",
+        "position": "none",
+        "args": "form className variant?"
+    },
+    {
         "id": "dynamic-non-boolean",
         "position": "none",
         "args": "key valueType"

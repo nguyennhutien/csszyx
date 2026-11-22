@@ -55,6 +55,12 @@ describe('purifySz', () => {
         });
     });
 
+    it('drops a value carrying a CSS escape in strict mode, which can spell `url(` past the check', () => {
+        // `u\\rl(` is `url(` to the CSS tokenizer and not to `/url\\s*\\(/`.
+        expect(purifySz({ bg: 'u\\rl(//evil.example/p)' })).toEqual({});
+        expect(purifySz({ p: 'x\\(;position:fixed;--z:\\)' }, { strict: false })).toEqual({});
+    });
+
     it('strips url()/expression() in strict mode, keeps them when strict:false', () => {
         const sz = { bg: '[url(/img.png)]' } as SzObject;
         expect(purifySz(sz)).toEqual({}); // strict default

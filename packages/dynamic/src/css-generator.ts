@@ -13,9 +13,9 @@
  * Returns empty string for unknown classes — graceful no-op, not a crash.
  */
 
-import { DYNAMIC_UNSAFE_ARBITRARY, szReport } from '@csszyx/compiler/report';
+import { DYNAMIC_UNSAFE_ARBITRARY, DYNAMIC_UNSUPPORTED, szReport } from '@csszyx/compiler/report';
 import { classify } from '@csszyx/runtime/split';
-import { isUtilityArbitrarySafe } from './css-sanitize.js';
+import { isUtilityArbitrarySafe, isUtilityStructureSafe } from './css-sanitize.js';
 
 /**
  * A table's own entry for text a class carries. An index or `in` reads
@@ -32,6 +32,37 @@ function own<T>(table: Readonly<Record<string, T>>, name: string): T | undefined
 
 /** Warn once (in dev) when an arbitrary value is dropped for being unsafe. */
 let warnedUnsafeArbitrary = false;
+
+/** The forms of `dynamic-unsupported` already reported this session. */
+const warnedUnsupported = new Set<string>();
+
+/**
+ * Forget which `dynamic-unsupported` forms were reported. Tests only.
+ *
+ * @internal
+ */
+export function __resetUnsupportedWarningsForTests(): void {
+    warnedUnsupported.clear();
+}
+
+/**
+ * Say once per form, in development, that a class writes no rule because
+ * `dynamic()` cannot write it correctly.
+ *
+ * @param className - The class as given.
+ * @param variant - The variant with no selector, or undefined for a `css:`
+ *   declaration.
+ */
+function warnUnsupported(className: string, variant: string | undefined): void {
+    const form = variant === undefined ? 'css-property' : 'variant';
+    if (process.env.NODE_ENV !== 'production' && !warnedUnsupported.has(form)) {
+        warnedUnsupported.add(form);
+        szReport({
+            diagnostic: DYNAMIC_UNSUPPORTED,
+            args: variant === undefined ? { form, className } : { form, className, variant },
+        });
+    }
+}
 /**
  * Warn once (in dev) that an arbitrary value was dropped for being unsafe.
  *
@@ -726,6 +757,45 @@ export interface ParsedVariants {
     selectorPrefix: string;
     /** The base utility class name (e.g. "p-4", "bg-blue-500"). */
     utility: string;
+    /**
+     * The first variant with no selector here (`group-hover`), if any. The
+     * class then writes no rule: applying the utility without its variant
+     * styled the wrong state, and let a runtime value put any utility after a
+     * `:` (`w-'a';position:fixed`).
+     */
+    unknownVariant?: string;
+}
+
+/**
+ * Split a class at each `:` outside brackets and parentheses: the `:` in
+ * `bg-[url(https://x.example/a.png)]` or `bg-(--a:b)` is part of the value, not a
+ * variant separator. One pass over `n` characters.
+ *
+ * @param cls - The class.
+ * @returns Its variants, then the utility.
+ */
+function splitVariants(cls: string): string[] {
+    const parts: string[] = [];
+    let depth = 0;
+    let start = 0;
+    let quote: string | null = null;
+    for (let i = 0; i < cls.length; i++) {
+        const char = cls[i];
+        // An escaped character and a quoted string are text, never a bracket or
+        // a separator, as CSS reads them.
+        if (char === '\\') i++;
+        else if (quote !== null) {
+            if (char === quote) quote = null;
+        } else if (char === '"' || char === "'") quote = char;
+        else if (char === '[' || char === '(') depth++;
+        else if ((char === ']' || char === ')') && depth > 0) depth--;
+        else if (char === ':' && depth === 0) {
+            parts.push(cls.slice(start, i));
+            start = i + 1;
+        }
+    }
+    parts.push(cls.slice(start));
+    return parts;
 }
 
 /**
@@ -739,11 +809,12 @@ export interface ParsedVariants {
  * @returns parsed variant metadata including tier, pseudoSuffix, selectorPrefix, and utility
  */
 export function parseVariants(cls: string): ParsedVariants {
-    const parts = cls.split(':');
+    const parts = splitVariants(cls);
     let tier: Tier = 'base';
     let pseudoSuffix = '';
     let selectorPrefix = '';
     let utilityIdx = 0;
+    let unknownVariant: string | undefined;
 
     for (let i = 0; i < parts.length - 1; i++) {
         const variant = parts[i];
@@ -755,12 +826,15 @@ export function parseVariants(cls: string): ParsedVariants {
             selectorPrefix = `.${variant} `;
         } else if (own(PSEUDO_CLASS_MAP, variant) !== undefined) {
             pseudoSuffix += own(PSEUDO_CLASS_MAP, variant);
+        } else {
+            unknownVariant ??= variant;
         }
-        // Unknown variants (e.g. group-hover, aria-*, data-*) keep the base tier.
     }
 
     const utility = parts.slice(utilityIdx).join(':');
-    return { tier, pseudoSuffix, selectorPrefix, utility };
+    return unknownVariant === undefined
+        ? { tier, pseudoSuffix, selectorPrefix, utility }
+        : { tier, pseudoSuffix, selectorPrefix, utility, unknownVariant };
 }
 
 /** One stage in the ordered utility-to-declaration pipeline. */
@@ -1237,7 +1311,23 @@ export function generateDeclarations(utility: string): string {
  *          or empty string for unknown classes
  */
 export function generateCSSRule(className: string): string {
-    const { utility, pseudoSuffix, selectorPrefix } = parseVariants(className);
+    const { utility, pseudoSuffix, selectorPrefix, unknownVariant } = parseVariants(className);
+    // A variant with no selector here, or a `css:` declaration (a whole-utility
+    // arbitrary property, build-time only): no rule rather than a wrong one.
+    if (unknownVariant !== undefined) {
+        warnUnsupported(className, unknownVariant);
+        return '';
+    }
+    if (utility.startsWith('[') && utility.endsWith(']') && utility.includes(':')) {
+        warnUnsupported(className, undefined);
+        return '';
+    }
+    // Text a runtime value put into the utility reaches the declaration only
+    // through a structure that states one value.
+    if (!isUtilityStructureSafe(utility)) {
+        warnUnsafeArbitrary(utility);
+        return '';
+    }
     const declarations = generateDeclarations(utility);
 
     if (!declarations) {

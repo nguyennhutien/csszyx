@@ -130,10 +130,12 @@ describe('parseVariants — nested variant prefixes', () => {
         expect(parseVariants('max-lg:p-4').tier).toBe('max-lg');
     });
 
-    it('treats an unknown variant as base and keeps the utility', () => {
+    it('names an unknown variant, so the class writes no rule', () => {
         const v = parseVariants('group-hover:opacity-50');
         expect(v.tier).toBe('base');
         expect(v.utility).toBe('opacity-50');
+        expect(v.unknownVariant).toBe('group-hover');
+        expect(parseVariants('hover:opacity-50').unknownVariant).toBeUndefined();
     });
 
     it('returns the bare utility when there is no variant', () => {

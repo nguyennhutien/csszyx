@@ -2264,6 +2264,37 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         }
     },
     {
+        "id": "dynamic-unsupported",
+        "summary": "A class dynamic() writes no rule for: a variant it has no selector for, or a `css:` declaration.",
+        "surfaces": {
+            "runtime": {
+                "production": false,
+                "host": "browser"
+            }
+        },
+        "position": "none",
+        "forms": [
+            "variant",
+            "css-property"
+        ],
+        "args": {
+            "form": {
+                "type": [
+                    "enum",
+                    "variant",
+                    "css-property"
+                ]
+            },
+            "className": {
+                "type": "string"
+            },
+            "variant": {
+                "type": "string",
+                "optional": true
+            }
+        }
+    },
+    {
         "id": "dynamic-non-boolean",
         "summary": "A runtime value that is not a boolean on a key only a boolean can toggle.",
         "surfaces": {

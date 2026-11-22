@@ -48,7 +48,18 @@ Built-in protections on this path (active regardless of `purifySz`):
 - CSS is injected via `CSSStyleSheet.insertRule`, which is atomic — a `}`/`</style>`
   rule breakout throws and is ignored (no second rule, no markup injection).
 - The declaration value + arbitrary property name are validated before injection
-  (no `;`/`{`/`}`/`<`/`>`/control chars escaping the declaration).
+  (no `;`/`{`/`}`/`<`/`>`/control chars escaping the declaration), and a bracket
+  segment's own brackets must balance. Outside a quoted string, a value holding
+  a `\` escape, a CSS comment (`/*`), or an unquoted `url(...)` with a quote,
+  a `(` or a space inside is refused: CSS reads none of those as nesting, so
+  a `;` next to one would end the declaration. Quote a url that needs such
+  characters: `url("...")`. Outside its brackets a class may hold only plain
+  token characters, a custom property in parentheses, and a modifier.
+- A class whose variant `dynamic()` has no selector for (`group-hover:`, or text
+  a value carries before a `:`) writes no rule, so a value cannot bring in a
+  utility after a `:`. A `css:` declaration writes no rule either: `css:` is
+  build-time only, and a runtime value goes through the property's own key or
+  the `style` prop.
 - sz recursion depth is capped (`SzDepthError`) so deeply nested input can't
   overflow the stack at render time.
 
