@@ -852,7 +852,58 @@ function warnDeadSpacingStep(key: string, value: number): void {
         _warnedSpacingSteps.add(token);
         szReport({
             diagnostic: OFF_SCALE_VALUE,
-            args: { key, value: String(value) },
+            args: { form: 'step', key, value: String(value) },
+            at: szWarnLocation,
+        });
+    }
+}
+
+/**
+ * Whether `value` is a fraction on a spacing key that has no fraction
+ * utilities (`p: '1/2'`): it lowers bare, as a Tailwind author would write it,
+ * and is reported. A zero denominator is no share of anything and keeps the
+ * bracket. Mirrors `is_spacing_fraction` in `lower.rs`.
+ *
+ * @param rawKey - The sz key.
+ * @param value - A bare fraction, `\d+/\d+`.
+ * @returns Whether it is one.
+ */
+function isSpacingFraction(rawKey: string, value: string): boolean {
+    return (
+        !FRACTION_SUPPORTED_PROPS.has(rawKey) &&
+        /[1-9]/.test(value.slice(value.indexOf('/') + 1)) &&
+        own(PROPERTY_CATEGORY_MAP, rawKey) === PropertyCategory.SPACING
+    );
+}
+
+/**
+ * A bare fraction as the percent it is, to four places: `1/2` → `50`, `1/3` →
+ * `33.3333`. Mirrors `fraction_percent` in `lower.rs`.
+ *
+ * @param value - A bare fraction with a non-zero denominator.
+ * @returns The percent, as JavaScript prints it.
+ */
+function fractionPercent(value: string): string {
+    const [numerator, denominator] = value.split('/').map(Number);
+    return String(Math.round((numerator / denominator) * 100 * 1e4) / 1e4);
+}
+
+/**
+ * Reports a fraction on a spacing key with no fraction utilities, once per key
+ * and value: the class `p-1/2` produces no CSS, and the bracket csszyx used to
+ * write, `p-[1/2]`, was `padding: 1/2`, which the browser drops.
+ *
+ * @param key - The sz key.
+ * @param value - The fraction, as written.
+ */
+function warnSpacingFraction(key: string, value: string): void {
+    if (process.env.NODE_ENV !== 'production' && szNodeWarningsUnmuted()) {
+        const token = `${key}:${value}`;
+        if (_warnedSpacingSteps.has(token)) return;
+        _warnedSpacingSteps.add(token);
+        szReport({
+            diagnostic: OFF_SCALE_VALUE,
+            args: { form: 'fraction', key, value, percent: fractionPercent(value) },
             at: szWarnLocation,
         });
     }
@@ -3844,7 +3895,14 @@ function isArbitraryFunctionValue(value: string): boolean {
 /** Normalize fraction and aspect-ratio strings without widening other props. */
 function normalizeRatioValue(rawKey: string, key: string, value: string): string | null {
     if (/^\d+\/\d+$/.test(value)) {
-        return FRACTION_SUPPORTED_PROPS.has(rawKey) ? value : `[${value}]`;
+        if (FRACTION_SUPPORTED_PROPS.has(rawKey)) return value;
+        // A spacing key with no fraction utilities writes the class a
+        // Tailwind author would and is reported; any other key brackets it
+        // (`row-[1/3]` is `grid-row: 1/3`). Mirrors the bare-fraction arm of
+        // `format_static_class_value`.
+        if (!isSpacingFraction(rawKey, value)) return `[${value}]`;
+        warnSpacingFraction(rawKey, value);
+        return value;
     }
     // A signed ratio keeps its sign in the bracket, as `is_decimal_ratio` reads it.
     if (key !== 'aspect' || !/^-?\d+(?:\.\d+)?\/\d+(?:\.\d+)?$/.test(value)) return null;
@@ -3866,6 +3924,25 @@ interface LeadingEntry {
 }
 
 const TEXT_SIZE_BASE_RE = /^text-(xs|sm|base|lg|[2-9]?xl|\[[^\]]+\]|\([^)]+\))$/;
+
+/** How a bracket value that is certainly a length starts. */
+const FONT_SIZE_VALUE_START = /^(?:[\d.]|(?:calc|clamp|min|max)\()/;
+
+/**
+ * Whether a `text-` size matched by {@link TEXT_SIZE_BASE_RE} is a font size a
+ * `leading-` class can fold into. A bracket value counts only when it is a
+ * length for certain: a digit or a point first, or a length function. A
+ * `length:` hint never reaches here: the variant prefix is cut at the last
+ * `:`, so `text-[length:var(--s)]` stays apart from its leading class. `text-[#f00]` is a colour to Tailwind, and `text-[#f00]/6`
+ * would be that colour at 6% opacity with no line-height. Mirrors
+ * `is_font_size_value` in `lower.rs`.
+ *
+ * @param size - What follows `text-`.
+ * @returns Whether it is a font size.
+ */
+function isFontSize(size: string): boolean {
+    return !size.startsWith('[') || FONT_SIZE_VALUE_START.test(size.slice(1, -1));
+}
 const LEADING_BASE_RE = /^leading-(.+)$/;
 
 /** Merges compatible text-size and line-height utilities with equal prefixes. */
@@ -3910,7 +3987,8 @@ function collectTextLeadingEntry(
     const prefix = lastColon === -1 ? '' : className.slice(0, lastColon + 1);
     const base = lastColon === -1 ? className : className.slice(lastColon + 1);
     const textMatch = TEXT_SIZE_BASE_RE.exec(base);
-    if (textMatch) textEntries.push({ index, prefix, size: textMatch[1] });
+    if (textMatch && isFontSize(textMatch[1]))
+        textEntries.push({ index, prefix, size: textMatch[1] });
     const leadingMatch = LEADING_BASE_RE.exec(base);
     if (leadingMatch) leadingEntries.push({ index, prefix, value: leadingMatch[1] });
 }

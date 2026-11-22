@@ -5670,18 +5670,7 @@ fn kebab_case(value: &str) -> String {
 
 pub fn dynamic_css_var_category(key: &str) -> DynamicCssVarCategory {
     match key {
-        "p" | "pt" | "pr" | "pb" | "pl" | "px" | "py" | "ps" | "pe" | "pbs" | "pbe" | "m"
-        | "mt" | "mr" | "mb" | "ml" | "mx" | "my" | "ms" | "me" | "mbs" | "mbe" | "spaceX"
-        | "spaceY" | "gap" | "gapX" | "gapY" | "inset" | "insetX" | "insetY" | "top" | "right"
-        | "bottom" | "left" | "start" | "end" | "insetS" | "insetE" | "insetBs" | "insetBe"
-        | "w" | "minW" | "maxW" | "h" | "minH" | "maxH" | "size" | "blockSize" | "minBlockSize"
-        | "maxBlockSize" | "inlineSize" | "minInlineSize" | "maxInlineSize" | "basis"
-        | "indent" | "scrollM" | "scrollMt" | "scrollMr" | "scrollMb" | "scrollMl" | "scrollMs"
-        | "scrollMe" | "scrollMx" | "scrollMy" | "scrollP" | "scrollPt" | "scrollPr"
-        | "scrollPb" | "scrollPl" | "scrollPs" | "scrollPe" | "scrollPx" | "scrollPy"
-        | "scrollPbs" | "scrollPbe" | "scrollMbs" | "scrollMbe" | "translateX" | "translateY"
-        | "borderSpacing" | "borderSpacingX" | "borderSpacingY" | "outlineOffset"
-        | "ringOffset" | "underlineOffset" => DynamicCssVarCategory::Spacing,
+        key if super::lower::is_spacing_scale_key(key) => DynamicCssVarCategory::Spacing,
         "bg" | "color" | "borderColor" | "divideColor" | "outlineColor" | "ringColor"
         | "ringOffsetColor" | "shadowColor" | "textShadowColor" | "decorationColor" | "accent"
         | "caret" | "fill" | "stroke" | "from" | "via" | "to" | "dropShadowColor" => {

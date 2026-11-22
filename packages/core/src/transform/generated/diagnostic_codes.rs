@@ -23,7 +23,7 @@ pub enum DiagnosticCode {
     ClosedEnumValue,
     /// A colour key given its opacity in a string, which emits nothing; the object form takes it.
     SlashOpacityString,
-    /// A spacing value off Tailwind's quarter-step scale.
+    /// A spacing value off Tailwind's quarter-step scale, or a fraction on a key that takes none.
     OffScaleValue,
     /// A numeric string above 1 on a key whose CSS function stops at 1.
     ClampedFactor,
@@ -449,13 +449,39 @@ pub mod issue {
         )
     }
 
-    /// `off-scale-value`: A spacing value off Tailwind's quarter-step scale.
+    /// `off-scale-value` (`step`): A spacing value off Tailwind's quarter-step scale, or a fraction on a key that takes none.
     #[must_use]
     #[inline]
-    pub fn off_scale_value(key: &str, value: &str) -> (DiagnosticCode, Args) {
+    pub fn off_scale_value_step(
+        key: &str,
+        value: &str,
+        percent: Option<&str>,
+    ) -> (DiagnosticCode, Args) {
         (
             DiagnosticCode::OffScaleValue,
-            Args::default().text("key", key).text("value", value),
+            Args::default()
+                .text("form", "step")
+                .text("key", key)
+                .text("value", value)
+                .optional_text("percent", percent),
+        )
+    }
+
+    /// `off-scale-value` (`fraction`): A spacing value off Tailwind's quarter-step scale, or a fraction on a key that takes none.
+    #[must_use]
+    #[inline]
+    pub fn off_scale_value_fraction(
+        key: &str,
+        value: &str,
+        percent: Option<&str>,
+    ) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::OffScaleValue,
+            Args::default()
+                .text("form", "fraction")
+                .text("key", key)
+                .text("value", value)
+                .optional_text("percent", percent),
         )
     }
 
@@ -1287,12 +1313,30 @@ mod tests {
             args.to_json(),
             r#"{"key":"key","color":"color","opacity":"opacity"}"#
         );
-        let (code, args) = issue::off_scale_value("key", "value");
+        let (code, args) = issue::off_scale_value_step("key", "value", Some("percent"));
         assert_eq!(code, DiagnosticCode::OffScaleValue);
-        assert_eq!(args.to_json(), r#"{"key":"key","value":"value"}"#);
-        let (code, args) = issue::off_scale_value("key", "value");
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"step","key":"key","value":"value","percent":"percent"}"#
+        );
+        let (code, args) = issue::off_scale_value_step("key", "value", None);
         assert_eq!(code, DiagnosticCode::OffScaleValue);
-        assert_eq!(args.to_json(), r#"{"key":"key","value":"value"}"#);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"step","key":"key","value":"value"}"#
+        );
+        let (code, args) = issue::off_scale_value_fraction("key", "value", Some("percent"));
+        assert_eq!(code, DiagnosticCode::OffScaleValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"fraction","key":"key","value":"value","percent":"percent"}"#
+        );
+        let (code, args) = issue::off_scale_value_fraction("key", "value", None);
+        assert_eq!(code, DiagnosticCode::OffScaleValue);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"fraction","key":"key","value":"value"}"#
+        );
         let (code, args) = issue::clamped_factor("key", "value");
         assert_eq!(code, DiagnosticCode::ClampedFactor);
         assert_eq!(args.to_json(), r#"{"key":"key","value":"value"}"#);

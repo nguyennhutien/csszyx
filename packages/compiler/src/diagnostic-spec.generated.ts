@@ -300,7 +300,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
     },
     {
         "id": "off-scale-value",
-        "summary": "A spacing value off Tailwind's quarter-step scale.",
+        "summary": "A spacing value off Tailwind's quarter-step scale, or a fraction on a key that takes none.",
         "surfaces": {
             "engine": {},
             "runtime": {
@@ -309,16 +309,37 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "position": "site",
+        "forms": [
+            "step",
+            "fraction"
+        ],
         "args": {
+            "form": {
+                "type": [
+                    "enum",
+                    "step",
+                    "fraction"
+                ]
+            },
             "key": {
                 "type": "string"
             },
             "value": {
                 "type": "string"
+            },
+            "percent": {
+                "type": "string",
+                "optional": true
             }
         },
-        "text": "`{key}: {value}` is not on Tailwind's spacing scale, so the class produces no CSS.",
-        "help": "use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'{value}rem'`."
+        "text": {
+            "step": "`{key}: {value}` is not on Tailwind's spacing scale, so the class produces no CSS.",
+            "fraction": "`{key}: '{value}'` is a fraction, and `{key}` has no fraction utilities, so the class produces no CSS."
+        },
+        "help": {
+            "step": "use a quarter step such as `1.25`, `1.5` or `1.75`, or a unit value such as `'{value}rem'`.",
+            "fraction": "write it with a unit: `{key}: '{percent}%'` where `{key}` takes a percentage, or a length such as `{key}: '0.5rem'`."
+        }
     },
     {
         "id": "clamped-factor",

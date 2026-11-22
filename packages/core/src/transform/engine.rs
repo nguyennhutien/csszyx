@@ -829,7 +829,22 @@ fn retain_first_occurrence<T>(
 /// A spacing value Tailwind's scale has no step for.
 fn push_dead_spacing_step_diagnostics(found: &[(String, f64, u32)], out: &mut Diagnostics) {
     for (key, value, offset) in found {
-        out.push_issue(issue::off_scale_value(key, &value.to_string()), *offset);
+        out.push_issue(
+            issue::off_scale_value_step(key, &value.to_string(), None),
+            *offset,
+        );
+    }
+}
+
+/// A fraction on a spacing key with no fraction utilities (`p: '1/2'`), with
+/// the percent to write instead.
+fn push_spacing_fraction_diagnostics(found: &[(String, String, u32)], out: &mut Diagnostics) {
+    for (key, value, offset) in found {
+        let percent = super::lower::fraction_percent(value);
+        out.push_issue(
+            issue::off_scale_value_fraction(key, value, Some(&percent)),
+            *offset,
+        );
     }
 }
 
@@ -866,6 +881,7 @@ fn push_mask_member_diagnostics(
 struct KeyValueFindings {
     unknown: Vec<(String, u32)>,
     dead_steps: Vec<(String, f64, u32)>,
+    spacing_fractions: Vec<(String, String, u32)>,
     clamped_factors: Vec<(String, String, u32)>,
     removed_sugar: Vec<(String, &'static str, &'static str, u32)>,
     border_side_styles: Vec<(String, String, u32)>,
@@ -889,6 +905,7 @@ impl KeyValueFindings {
     fn clear(&mut self) {
         self.unknown.clear();
         self.dead_steps.clear();
+        self.spacing_fractions.clear();
         self.clamped_factors.clear();
         self.removed_sugar.clear();
         self.border_side_styles.clear();
@@ -911,6 +928,7 @@ impl KeyValueFindings {
     fn collect(&mut self, object: &super::StaticSzObject) {
         collect_unknown_sz_keys(object, &mut self.unknown);
         super::lower::collect_dead_spacing_steps(object, &mut self.dead_steps);
+        super::lower::collect_spacing_fractions(object, &mut self.spacing_fractions);
         super::lower::collect_clamped_factors(object, &mut self.clamped_factors);
         super::lower::collect_removed_boolean_sugar(object, &mut self.removed_sugar);
         super::lower::collect_border_side_styles(object, &mut self.border_side_styles);
@@ -972,6 +990,7 @@ fn push_group_key_value_diagnostics<'a>(
         retain_first_occurrence(&mut found.invalid_opacities, 14, seen, |(.., at)| *at);
         retain_first_occurrence(&mut found.bracketed_values, 15, seen, |found| found.at);
         retain_first_occurrence(&mut found.underscore_values, 16, seen, |found| found.at);
+        retain_first_occurrence(&mut found.spacing_fractions, 17, seen, |(.., at)| *at);
     }
     // Only the removed-key drops belong in this pass. A key dropped for having
     // no var form is still a supported key, and reporting it as unknown would
@@ -996,6 +1015,7 @@ fn push_group_key_value_diagnostics<'a>(
     );
     push_unknown_key_diagnostics(&found.unknown, out);
     push_dead_spacing_step_diagnostics(&found.dead_steps, out);
+    push_spacing_fraction_diagnostics(&found.spacing_fractions, out);
     for (key, value, offset) in &found.clamped_factors {
         out.push_issue(issue::clamped_factor(key, value), *offset);
     }
@@ -1890,6 +1910,29 @@ mod tests {
         assert!(failures.is_empty(), "{}", failures.join("\n"));
     }
 
+    /// A spacing fraction is reported once per site with its percent, under a
+    /// variant too, beside the step form of the same id.
+    #[test]
+    fn reports_a_spacing_fraction_with_the_percent_to_write() {
+        let result = transform_file(&TransformFile {
+            filename: "/repo/App.tsx".to_string(),
+            source: "export const A = () => <div sz={{ p: '1/2', hover: { mx: '2/3' }, w: '1/2', m: 1.4 }} />;"
+                .to_string(),
+        });
+        let found: Vec<String> = lines(&result)
+            .into_iter()
+            .filter(|line| line.starts_with("off-scale-value "))
+            .collect();
+        assert_eq!(
+            found,
+            [
+                r#"off-scale-value {"form":"step","key":"m","value":"1.4"}"#,
+                r#"off-scale-value {"form":"fraction","key":"p","value":"1/2","percent":"50"}"#,
+                r#"off-scale-value {"form":"fraction","key":"mx","value":"2/3","percent":"66.6667"}"#,
+            ]
+        );
+    }
+
     /// The factor helper is imported exactly when a runtime value on a factor
     /// key calls it: not for a passthrough or spacing value in a transformed
     /// file, and not when nothing was transformed.
@@ -2115,7 +2158,8 @@ mod tests {
         assert_eq!(numeric[0].1, 1, "{}", numeric[0].0);
         assert!(lines(&result)
             .iter()
-            .any(|diagnostic| diagnostic == r#"off-scale-value {"key":"p","value":"1.4"}"#));
+            .any(|diagnostic| diagnostic
+                == r#"off-scale-value {"form":"step","key":"p","value":"1.4"}"#));
         assert!(lines(&result)
             .iter()
             .any(|diagnostic| diagnostic == r#"fallback-nudge {"site":"sz-array-element"}"#));
@@ -4441,7 +4485,7 @@ mod tests {
             "the typo must still be reported: {diagnostics}"
         );
         assert!(
-            diagnostics.contains(r#"off-scale-value {"key":"p","value":"1.4"}"#),
+            diagnostics.contains(r#"off-scale-value {"form":"step","key":"p","value":"1.4"}"#),
             "the dead step must still be reported: {diagnostics}"
         );
 

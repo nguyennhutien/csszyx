@@ -374,7 +374,7 @@ describe('transform cache', () => {
         expect(readdirSync(cacheRoot).sort()).toEqual(['.gitignore', `${key}.json`]);
         const content = readFileSync(entryFile(cacheRoot, key), 'utf8');
 
-        expect(content).toContain('"version":26');
+        expect(content).toContain('"version":27');
         expect(readTransformCache(cacheRoot, input())).not.toBeNull();
     });
 
@@ -457,12 +457,15 @@ describe('transform cache', () => {
         expect(readTransformCache(cacheRoot, input())).toBeNull();
     });
 
-    it('rejects a schema-25 entry, which predates `usesFactorVar` and the numeric cells', () => {
+    it.each([
+        [25, 'predates `usesFactorVar` and the numeric cells'],
+        [26, 'predates the bare spacing fraction and the `off-scale-value` form'],
+    ])('rejects a schema-%i entry, which %s', version => {
         const cacheRoot = resolveTransformCacheDir(tempRoot());
         writeTransformCache(cacheRoot, input(), result());
         const file = entryFile(cacheRoot, createTransformCacheKey(input()).key);
         const entry = JSON.parse(readFileSync(file, 'utf8')) as { version: number };
-        entry.version = 25;
+        entry.version = version;
         writeFileSync(file, JSON.stringify(entry), 'utf8');
 
         expect(readTransformCache(cacheRoot, input())).toBeNull();

@@ -1073,9 +1073,10 @@ mod tests {
         ] {
             assert_eq!(prop_value(class), "null", "{class}");
         }
-        // A bracketed fraction on a key with no fraction utility is its value;
-        // on one with a fraction utility the class stays in `className`.
-        assert_eq!(prop_value("m-[1/2]"), r#"m="1/2""#);
+        // A bracketed fraction stays in `className` on a spacing key with no
+        // fraction utility (`m: '1/2'` lowers to `m-1/2`, not back to this
+        // class) and on one with a fraction utility alike.
+        assert_eq!(prop_value("m-[1/2]"), "null");
         // A colour keeps its modifier, a fraction utility its fraction, and
         // the size-and-line-height and shadow modifiers are their own forms.
         for (class, expected) in [
@@ -1413,6 +1414,29 @@ mod tests {
         (read, questions)
     }
 
+    /// A fraction in the bracket of a spacing key stays in `className`: its sz
+    /// value would lower to `p-1/2`, not back to `p-[1/2]`. Other bracketed
+    /// values on the same key, and a fraction on a grid key, still migrate.
+    #[test]
+    fn a_spacing_fraction_bracket_stays_in_the_class_name() {
+        assert_eq!(parse_class("p-[1/2]"), None);
+        assert_eq!(parse_class("gap-[1/2]"), None);
+        // A kebab prefix is read as its sz key first (`scroll-mt` → `scrollMt`).
+        assert_eq!(parse_class("scroll-mt-[1/2]"), None);
+        assert_eq!(parse_class("space-x-[1/2]"), None);
+        assert_eq!(parse_class("border-spacing-[1/2]"), None);
+        let row = parse_class("row-[1/3]").expect("a grid line pair migrates");
+        assert_eq!(
+            (row.prop.as_str(), row.value),
+            ("row", SzValue::from("1/3"))
+        );
+        let padding = parse_class("p-[10px]").expect("a length migrates");
+        assert_eq!(
+            (padding.prop.as_str(), padding.value),
+            ("p", SzValue::from("10px"))
+        );
+    }
+
     #[test]
     fn an_underscore_is_a_space_only_where_the_project_reads_one() {
         // Unasked: each bare `_` reads as a space, and the value is asked about.
@@ -1524,13 +1548,14 @@ mod tests {
             ("-m-auto", r#"m="-auto""#),
             ("-order-first", r#"order="-first""#),
             ("-m-1/2", r#"m="-1/2""#),
+            // `m: '1/2'` lowers to `m-1/2`, so a project that defines it gets it.
+            ("m-1/2", r#"m="1/2""#),
         ] {
             assert_eq!(judged(class, &[(class, true)]).0, expected, "{class}");
         }
         // Served, but no sz value lowers back to it: stays in `className`.
-        // `scale: '-none'` lowers to `scale-[-none]`, `m: '1/2'` to `m-[1/2]`.
+        // `scale: '-none'` lowers to `scale-[-none]`.
         assert_eq!(judged("-scale-none", &[("-scale-none", true)]).0, "null");
-        assert_eq!(judged("m-1/2", &[("m-1/2", true)]).0, "null");
         assert_eq!(judged("m-2/[50]", &[("m-2/[50]", true)]).0, "null");
         // Not served, and the table refused it too.
         assert_eq!(judged("-m-1/2", &[("-m-1/2", false)]).0, "null");

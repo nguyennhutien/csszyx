@@ -51,7 +51,7 @@ export interface SzDiagnosticArgs {
     'numeric-key': { readonly key: string };
     'closed-enum-value': { readonly form: 'sibling-group' | 'dead' | 'css-value' | 'font-style' | 'font-smoothing' | 'flag'; readonly key: string; readonly value: string; readonly suggestion?: string; readonly groupKey?: string; readonly groupValue?: string };
     'slash-opacity-string': { readonly key: string; readonly color: string; readonly opacity: string };
-    'off-scale-value': { readonly key: string; readonly value: string };
+    'off-scale-value': { readonly form: 'step' | 'fraction'; readonly key: string; readonly value: string; readonly percent?: string };
     'clamped-factor': { readonly key: string; readonly value: string };
     'per-side-border-style': { readonly key: string; readonly value: string };
     'property-object': { readonly key: string; readonly nestedKeys: readonly string[] };

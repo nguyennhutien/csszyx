@@ -635,7 +635,14 @@ export const SIZE_BUDGETS = [
         // class on every lane. +383 gzip -9 bytes, read from `Display`, which
         // the wasm already links (`{:e}` cost +2,453). CI read 601,420.
         // ~300 bytes of headroom.
-        maxGzipBytes: 601_700,
+        //
+        // Raised from 601,700 on 2026-11-22: CI read 602,249 (601,420 on
+        // `main`, +829). A spacing fraction (`p: '1/2'`) lowers bare and is
+        // reported, which adds a collector, a findings family and the percent
+        // formatting; the spacing key list moves into the lowering so every
+        // build reads it; and `leading` checks that `text` is a font size
+        // before it folds. ~300 bytes of headroom.
+        maxGzipBytes: 602_550,
     },
     // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
     // bundles from the compiler's source, unminified, and that every editor
@@ -767,12 +774,18 @@ export const SIZE_BUDGETS = [
     // number or a string on a key typed `boolean` (`truncate: 2`) is
     // reported in development (`closed-enum-value`, form `flag`), which
     // ships the list of those keys and the form's words. Production is
-    // unchanged. Budget 260 above, on the user's call.
+    // unchanged. Budget 260 above, on the user's call. Raised from 24,200 to
+    // 24,600 on 2026-11-22, measured 24,333 (24,121 on `main`): the words of
+    // `off-scale-value`'s new `fraction` form, which development prints
+    // (`p: '1/2'`), and the font-size check before `leading` folds into
+    // `text`. Production carries the checks but not the words: the production
+    // bundle measured 16,748 (16,654 on `main`), under its budget. Budget 267
+    // above.
     {
         name: 'csszyx CDN development bundle',
         kind: 'file',
         target: 'packages/csszyx/dist/browser.dev.iife.js',
-        maxGzipBytes: 24_200,
+        maxGzipBytes: 24_600,
         build: cdnBuildOptions('development'),
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
@@ -1130,8 +1143,11 @@ export const SIZE_BUDGETS = [
         // the grid track keywords are exported, so the parity test walks the
         // set the engine's table is generated from. 61,150 on 2026-11-21,
         // measured 60,889 (60,478 at the branch base): the numeric lowering
-        // (see `./engine`). ~300 bytes of headroom.
-        maxGzipBytes: 61_150,
+        // (see `./engine`). ~300 bytes of headroom. 61,550 on 2026-11-22,
+        // measured 61,257 (60,935 on `main`): `off-scale-value` gains its
+        // `fraction` form, reported where `p: '1/2'` is written, and `leading`
+        // folds only into a `text` class that is a font size.
+        maxGzipBytes: 61_550,
     },
     {
         name: '@csszyx/compiler `./migrate`, loaded by Node',
