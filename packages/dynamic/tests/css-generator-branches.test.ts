@@ -99,9 +99,27 @@ describe('generateDeclarations — resolveColorValue edge cases', () => {
         expect(result).toBe('background-color: color-mix(in srgb, white 50%, transparent)');
     });
 
-    it('converts a decimal opacity modifier to a percentage', () => {
+    it('reads a bare decimal modifier as a percent, as Tailwind does', () => {
         const result = generateDeclarations('bg-blue-500/0.5');
-        expect(result).toContain('50%');
+        expect(result).toBe(
+            'background-color: color-mix(in srgb, var(--color-blue-500) 0.5%, transparent)',
+        );
+    });
+
+    // A slash opacity in a colour string reaches dynamic() with the class as
+    // written (ADR 0036), so every modifier Tailwind reads is read here too:
+    // `[x%]` as given, `[x]` as a fraction of one, `(--v)` as a variable.
+    it.each([
+        ['bg-red-500/[50%]', 'color-mix(in srgb, var(--color-red-500) 50%, transparent)'],
+        ['bg-red-500/[0.3]', 'color-mix(in srgb, var(--color-red-500) 30%, transparent)'],
+        ['bg-red-500/(--o)', 'color-mix(in srgb, var(--color-red-500) var(--o), transparent)'],
+        ['bg-[#f00]/50', 'color-mix(in srgb, #f00 50%, transparent)'],
+        ['bg-(--c)/50', 'color-mix(in srgb, var(--c) 50%, transparent)'],
+        ['bg-(--c)/(--o)', 'color-mix(in srgb, var(--c) var(--o), transparent)'],
+        // `[2]` is 200%, past what `color-mix()` takes: the colour alone.
+        ['bg-red-500/[2]', 'var(--color-red-500)'],
+    ])('reads the opacity modifier of %s', (className, value) => {
+        expect(generateDeclarations(className)).toBe(`background-color: ${value}`);
     });
 });
 
