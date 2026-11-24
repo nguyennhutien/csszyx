@@ -15,3 +15,20 @@ export const SHADOW_SIZE_KEYWORDS: ReadonlySet<string> = new Set([
     'inner',
     'none',
 ]);
+
+/**
+ * Whether the value before a shadow key's slash is the shadow itself rather
+ * than its colour: a named size, a variable, or a bracket of several tokens
+ * (`[0_1px_2px_black]`; `[red]` is a colour).
+ *
+ * @param value - The value before the slash.
+ * @returns Whether it is a shadow.
+ */
+export function isShadowValue(value: string): boolean {
+    return (
+        SHADOW_SIZE_KEYWORDS.has(value) ||
+        value.startsWith('--') ||
+        value.startsWith('(') ||
+        (value.startsWith('[') && value.includes('_'))
+    );
+}

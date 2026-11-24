@@ -7,6 +7,8 @@
  * @module
  */
 
+export { isShadowValue, SHADOW_SIZE_KEYWORDS } from './shadow-size-keywords.js';
+
 /**
  * Whether a background value, its `-` taken off, names a Tailwind gradient
  * utility: `linear-to-r`, `radial`, `conic-180`, `gradient-to-b`. Mirrors

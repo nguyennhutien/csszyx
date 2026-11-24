@@ -207,10 +207,12 @@ export const SIZE_BUDGETS = [
         // token or a custom property, so an escape cannot carry a `;` out of a
         // value (`x\(;position:fixed;--z:\)`). About 200 bytes of headroom.
         maxGzipBytes: 11_450,
-        // Measured 2026-10-08: 10,358 / 7,897.
-        entryBudgets: { '.': 11_150, './react': 8_650 },
+        // Measured 2026-10-08: 10,358 / 7,897. `./react` raised to 8,950 on
+        // 2026-11-25, measured 8,666: the shadow-value test (see `.` below).
+        entryBudgets: { '.': 11_150, './react': 8_950 },
         // Built by Vite, measured 2026-10-19: 10,659, then 10,373 / 7,800.
-        vite: { maxGzipBytes: 11_400, entryBudgets: { '.': 11_100, './react': 8_500 } },
+        // `./react` raised to 8,800 on 2026-11-25, measured 8,538.
+        vite: { maxGzipBytes: 11_400, entryBudgets: { '.': 11_100, './react': 8_800 } },
         // None today: its one production failure, an unreachable manifest, is
         // a rejected fetch it catches. Read from the registry all the same, so
         // a production line added to its sources has to be registered.
@@ -311,7 +313,11 @@ export const SIZE_BUDGETS = [
         // which takes a trial lowering in production too (ADR 0037 §2).
         // Raised to 18,900 on 2026-11-24, measured 18,753: `./color-modifier`, the
         // slash-opacity reader `dynamic()` shares; `./browser` itself did not grow.
-        maxGzipBytes: 18_900,
+        // Raised to 19,250 on 2026-11-25, measured 18,952: the shadow size object
+        // (`./browser` +125 over `main`), and `./color-modifier` +110 for the
+        // shadow-value test `dynamic()` reads so it writes no colour for
+        // `shadow-sm/50`.
+        maxGzipBytes: 19_250,
         // Measured 2026-10-08: 15,104 / 346 / 675 / 366 / 257 / 691.
         // `./browser` raised from 15,250 the same day: the special-key box
         // roles took it to 15,104, 146 under, so it went back to the usual
@@ -380,7 +386,9 @@ export const SIZE_BUDGETS = [
             // which takes a trial lowering in production too (ADR 0037 §2).
             // Raised to 18,750 on 2026-11-24, measured 18,628: `./color-modifier`, the
             // slash-opacity reader `dynamic()` shares; `./browser` itself did not grow.
-            maxGzipBytes: 18_750,
+            // Raised to 19,100 on 2026-11-25, measured 18,828: the shadow size
+            // object and the shadow-value test (see the esbuild budget).
+            maxGzipBytes: 19_100,
             entryBudgets: {
                 // 16,589 on 2026-11-07 with grid line names lowering (see the
                 // esbuild union), so raised from 16,650. 17,021 on 2026-11-21
@@ -461,7 +469,9 @@ export const SIZE_BUDGETS = [
         // which takes a trial lowering in production too (ADR 0037 §2).
         // Raised to 42,100 on 2026-11-24, measured 41,954: `dynamic()` reads a
         // colour class's modifier through `./color-modifier`, as Tailwind reads it.
-        maxGzipBytes: 42_100,
+        // Raised to 42,450 on 2026-11-25, measured 42,141: the shadow size object
+        // and `dynamic()` telling a shadow from its colour.
+        maxGzipBytes: 42_450,
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
     // The wasm build of the parser is the fourth surface: not browser code,

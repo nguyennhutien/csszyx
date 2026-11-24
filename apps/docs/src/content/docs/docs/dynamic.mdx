@@ -164,6 +164,15 @@ On each `dynamic()` call:
 This means a `<div className={sz({ p: 4 })} />` inside a form renderer widget that is
 also using `p-4` in the main app will reuse the existing CSS — no duplicate rule injected.
 
+A shadow's own opacity is the one class `dynamic()` does not generate:
+`{ shadow: { size: 'sm', op: 50 } }` writes `shadow-sm/50`, and Tailwind serves it
+by rewriting every colour inside the theme's shadow at build time, which a rule
+written in the browser cannot do from `var(--shadow-sm)`. The class works when the
+build's Tailwind generated it — the manifest, or the same class used statically
+anywhere in the app — and otherwise no rule is injected for it. A shadow without
+an opacity (`shadow: 'sm'`) and a shadow colour with one
+(`shadowColor: { color: 'black', op: 50 }`) are generated as usual.
+
 ## Build-time extraction (Layer-1 prescan)
 
 When `dynamic()` receives a **static literal** or a **module-level `const` reference**,

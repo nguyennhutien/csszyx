@@ -1013,14 +1013,18 @@ pub(crate) fn op_literal(opacity: &str) -> String {
 pub(crate) type SlashOpacityString = (String, &'static str, String, String, bool, u32);
 
 /// The member of the object that replaces `value/op` on `key`: `size` for a
-/// shadow on a shadow key (a size keyword, a bracket, a variable, which
-/// Tailwind reads as the shadow itself), `color` for anything else.
+/// shadow on a shadow key (a size keyword, a bracket of several tokens, a
+/// variable, which Tailwind reads as the shadow itself), `color` for anything
+/// else.
 #[cfg(feature = "native-engine")]
 fn slash_member(shadow_key: bool, value: &str) -> &'static str {
+    // A bracket of several tokens is a shadow; `[red]` is a colour, as
+    // Tailwind reads `shadow-[red]`. Mirrors `isShadowValue`.
     if shadow_key
         && (super::generated::migrate_tables::shadow_size_keywords(value)
-            || value.starts_with(['[', '('])
-            || value.starts_with("--"))
+            || value.starts_with('(')
+            || value.starts_with("--")
+            || (value.starts_with('[') && value.contains('_')))
     {
         "size"
     } else {
@@ -4905,6 +4909,7 @@ mod tests {
         assert_eq!(members("dropShadow", "(--d)/50"), ["size"]);
         assert_eq!(members("insetShadow", "--s/50"), ["size"]);
         assert_eq!(members("shadow", "red-500/50"), ["color"]);
+        assert_eq!(members("shadow", "[#f00]/50"), ["color"]);
         // A bracket or a variable on a colour key is a colour.
         assert_eq!(members("bg", "[#f00]/50"), ["color"]);
         assert_eq!(members("bg", "--c/50"), ["color"]);

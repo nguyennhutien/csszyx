@@ -13,7 +13,12 @@
  * Returns empty string for unknown classes — graceful no-op, not a crash.
  */
 
-import { modifierOp, slashOpacitySplit } from '@csszyx/compiler/color-modifier';
+import {
+    isShadowValue,
+    modifierOp,
+    SHADOW_SIZE_KEYWORDS,
+    slashOpacitySplit,
+} from '@csszyx/compiler/color-modifier';
 import { DYNAMIC_UNSAFE_ARBITRARY, DYNAMIC_UNSUPPORTED, szReport } from '@csszyx/compiler/report';
 import { classify } from '@csszyx/runtime/split';
 import { isUtilityArbitrarySafe, isUtilityStructureSafe } from './css-sanitize.js';
@@ -356,6 +361,9 @@ const COLOR_PROPS: Record<string, string> = {
     'ring-offset': '--tw-ring-offset-color',
     'drop-shadow': '--tw-drop-shadow-color',
 };
+
+/** The colour prefixes whose utility can also be the shadow itself. */
+const SHADOW_PREFIXES: ReadonlySet<string> = new Set(['shadow', 'inset-shadow', 'drop-shadow']);
 
 /** Colors that don't use CSS custom properties in Tailwind v4. */
 const DIRECT_COLOR_KEYWORDS = new Set([
@@ -1078,8 +1086,7 @@ function resolveShadowDeclaration(utility: string): string | null {
     if (value.startsWith('[') && value.endsWith(']')) {
         return `box-shadow: ${expandArbitrarySpaces(value.slice(1, -1))}`;
     }
-    const sizes = new Set(['xs', 'sm', 'md', 'lg', 'xl', '2xl', 'none', 'inner']);
-    if (!sizes.has(value)) return null;
+    if (!SHADOW_SIZE_KEYWORDS.has(value)) return null;
     return value === 'none' ? 'box-shadow: none' : `box-shadow: var(--shadow-${value})`;
 }
 
@@ -1252,6 +1259,13 @@ function resolveColorDeclaration(utility: string): string | null {
         // A prefix in this table is not enough: `bg-cover`, `bg-center` and
         // `border-[3px]` all live under one, and none of them is a colour.
         if (classifiedAsOther(utility, 'color')) return null;
+        // A shadow with its own opacity (`shadow-sm/50`), or a drop or inset
+        // shadow's size, is the shadow, not its colour: Tailwind rewrites the
+        // colours inside the theme's shadow at build time, which a rule here
+        // cannot do from a variable, so it writes none (`dynamic.mdx`).
+        if (SHADOW_PREFIXES.has(prefix) && isShadowValue(slashOpacitySplit(value)?.[0] ?? value)) {
+            return '';
+        }
         return `${COLOR_PROPS[prefix]}: ${resolveColorValue(value)}`;
     }
     return null;

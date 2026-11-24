@@ -297,3 +297,31 @@ describe('border side grammar', () => {
         expect(generateDeclarations(utility)).toBe(declaration);
     });
 });
+
+describe('generateDeclarations — a shadow with its own opacity', () => {
+    // Tailwind serves `shadow-sm/50` by rewriting each colour inside the
+    // theme's shadow at build time; a rule written here has only
+    // `var(--shadow-sm)`, so it writes none rather than a shadow with the
+    // wrong alpha (the gap `dynamic.mdx` documents).
+    it.each([
+        'shadow-sm/50',
+        'shadow-2xl/[50%]',
+        'shadow-(--s)/50',
+        'shadow-[0_1px_red]/50',
+        'drop-shadow-md',
+        'drop-shadow-md/50',
+        'inset-shadow-xs/25',
+    ])('%s gets no rule', utility => {
+        expect(generateDeclarations(utility)).toBe('');
+    });
+
+    it('still writes a shadow and a shadow colour with an opacity', () => {
+        expect(generateDeclarations('shadow-sm')).toBe('box-shadow: var(--shadow-sm)');
+        expect(generateDeclarations('shadow-black/50')).toBe(
+            '--tw-shadow-color: color-mix(in srgb, black 50%, transparent)',
+        );
+        expect(generateDeclarations('drop-shadow-[#f00]/50')).toBe(
+            '--tw-drop-shadow-color: color-mix(in srgb, #f00 50%, transparent)',
+        );
+    });
+});

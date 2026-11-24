@@ -147,6 +147,9 @@ describe.each(LANES)('a shadow size object — %s', (_name, lower) => {
         [{ textShadow: 'lg/25!' }, 'text-shadow-lg/25!'],
         // A colour with one: the colour object, as on any colour key.
         [{ shadow: 'red-500/50' }, 'shadow-red-500/50'],
+        // One token in brackets is a colour, as Tailwind reads `shadow-[#f00]`.
+        [{ shadow: '[#f00]/50' }, 'shadow-[#f00]/50'],
+        [{ shadow: '[0_1px_red]/50' }, 'shadow-[0_1px_red]/50'],
     ])('%j keeps %s, reports the slash, and its help lowers clean', (sz, className) => {
         const run = lower(sz);
         expect(run).toMatchObject({ className, ids: ['slash-opacity-string'] });

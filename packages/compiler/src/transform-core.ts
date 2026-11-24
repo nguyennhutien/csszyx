@@ -142,7 +142,7 @@ import {
     UNSERVED_VARIANT,
     VARIABLE_SHADOW_OPACITY,
 } from './report.js';
-import { SHADOW_SIZE_KEYWORDS } from './shadow-size-keywords.js';
+import { isShadowValue } from './shadow-size-keywords.js';
 import { unservedStateVariantForm } from './state-variants.js';
 
 /** A value in the sz object that is not a nested object. */
@@ -992,7 +992,11 @@ function warnBorderSideStyle(key: string, value: string): void {
         const token = `${key}:${value}`;
         if (_warnedBorderSideStyles.has(token)) return;
         _warnedBorderSideStyles.add(token);
-        szReport({ diagnostic: PER_SIDE_BORDER_STYLE, args: { key, value }, at: szWarnLocation });
+        szReport({
+            diagnostic: PER_SIDE_BORDER_STYLE,
+            args: { key, value },
+            at: szWarnLocation,
+        });
     }
 }
 
@@ -1214,7 +1218,11 @@ function keepsTypeHint(className: string, hint: string): boolean {
  */
 type BracketSpelling =
     | { readonly emit: string; readonly inner: string }
-    | { readonly form: 'unwrap' | 'escape'; readonly inner: string; readonly hint?: string };
+    | {
+          readonly form: 'unwrap' | 'escape';
+          readonly inner: string;
+          readonly hint?: string;
+      };
 
 /** A second spelling of an arbitrary class ({@link BracketSpelling}). */
 type BracketEmit = Extract<BracketSpelling, { readonly emit: string }>;
@@ -2780,7 +2788,7 @@ function warnSlashOpacityString(key: string, value: string): void {
 
 /**
  * The member of the object that replaces `value/op` on `key`: `size` for a
- * shadow on a shadow key (a size keyword, a bracket, a variable, which
+ * shadow on a shadow key (a size keyword, a bracket of several tokens, a variable, which
  * Tailwind reads as the shadow itself), `color` for anything else. Mirrors
  * `slash_member` in `lower.rs`.
  *
@@ -2789,8 +2797,7 @@ function warnSlashOpacityString(key: string, value: string): void {
  * @returns The member.
  */
 function slashMember(key: string, value: string): ValueMember {
-    const shadow = SHADOW_SIZE_KEYWORDS.has(value) || /^[[(]/.test(value) || value.startsWith('--');
-    return shadow && SHADOW_SIZE_KEYS.includes(key) ? 'size' : 'color';
+    return SHADOW_SIZE_KEYS.includes(key) && isShadowValue(value) ? 'size' : 'color';
 }
 
 /**
@@ -2871,7 +2878,9 @@ function resolvedThemeTokenValue(token: string): string | null {
     try {
         const globals = globalThis as {
             document?: { documentElement?: unknown };
-            getComputedStyle?: (element: unknown) => { getPropertyValue(name: string): string };
+            getComputedStyle?: (element: unknown) => {
+                getPropertyValue(name: string): string;
+            };
         };
         const root = globals.document?.documentElement;
         if (root === undefined || typeof globals.getComputedStyle !== 'function') {
@@ -4590,7 +4599,11 @@ function warnOwnedKeyVariantObject(key: string): void {
         !_warnedOwnedKeyVariants.has(key)
     ) {
         _warnedOwnedKeyVariants.add(key);
-        szReport({ diagnostic: NON_VARIANT_OBJECT, args: { key }, at: szWarnLocation });
+        szReport({
+            diagnostic: NON_VARIANT_OBJECT,
+            args: { key },
+            at: szWarnLocation,
+        });
     }
 }
 
