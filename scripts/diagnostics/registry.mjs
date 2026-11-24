@@ -421,7 +421,7 @@ export const DIAGNOSTICS = [
     {
         id: 'slash-opacity-string',
         summary:
-            'A colour key given its opacity in a string; the object form is the one spelling of it.',
+            'A colour or shadow key given its opacity in a string; the object form is the one spelling of it.',
         surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
         position: 'site',
         // The class is written as given (ADR 0036) and the slash reported: a
@@ -430,16 +430,20 @@ export const DIAGNOSTICS = [
         // The value as written is `{color}/{opacity}{important}`, split on
         // its first `/` outside brackets and parentheses; `op` is the `op`
         // the opacity names (`modifierOp`), a number bare and a string quoted,
-        // so following the help writes the same opacity.
+        // so following the help writes the same opacity. `member` is the
+        // object's member for the value: `size` on a shadow key whose value
+        // is a shadow (a size keyword, a bracket, a variable), `color`
+        // otherwise. `color` is the value before the slash, either way.
         args: {
             key: STRING,
+            member: { type: ['enum', 'color', 'size'] },
             color: STRING,
             opacity: STRING,
             op: STRING,
             important: { type: ['enum', '!'], optional: true },
         },
-        text: "`{key}: '{color}/{opacity}{important}'` puts the opacity in a string; a colour takes its opacity in the object form.",
-        help: "write `{ color: '{color}{important}', op: {op} }`.",
+        text: "`{key}: '{color}/{opacity}{important}'` puts the opacity in a string; the object form takes it in `op`.",
+        help: "write `{ {member}: '{color}{important}', op: {op} }`.",
         note: SLASH_KEPT_NOTE,
         sources: [ENGINE, CORE_TS],
     },
@@ -536,7 +540,7 @@ export const DIAGNOSTICS = [
         position: 'site',
         args: { key: STRING, nestedKeys: { type: 'string[]', joiner: ', ' } },
         text: '`{key}` sets a property and is not a variant, so its object `{ {nestedKeys} }` emits `{key}:*` classes that produce no CSS.',
-        help: "move the nested keys up a level; for colour opacity, write `{ color: '…', op: … }`.",
+        help: "move the nested keys up a level; for an opacity, write `{ color: '…', op: … }`, or `{ size: '…', op: … }` on a shadow key.",
         sources: [ENGINE, CORE_TS],
     },
     {
@@ -977,6 +981,21 @@ export const DIAGNOSTICS = [
             'type-hint':
                 "write the declaration in `css: { … }`, or the class in `className`; `{key}: '{inner}'` writes another type.",
         },
+        sources: [ENGINE, CORE_TS],
+    },
+    {
+        id: 'variable-shadow-opacity',
+        summary: 'A shadow size held in a variable, which `op` may not reach.',
+        surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
+        // `shadow-(--s)/50` sets `--tw-shadow-alpha`, and the shadow is the
+        // variable as written: the opacity changes nothing unless the
+        // variable's own value reads it. The class is written (user decision
+        // 2026-11-25); a note, raised to warn under atomic.
+        defaults: { recommended: 'info', atomic: 'warn' },
+        position: 'site',
+        args: { key: STRING, size: STRING },
+        text: "`{key}: { size: '{size}', op }` sets the shadow's alpha, which `{size}` uses only if it reads `--tw-shadow-alpha`.",
+        help: 'use a theme size or a `[…]` shadow.',
         sources: [ENGINE, CORE_TS],
     },
     {

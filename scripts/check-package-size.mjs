@@ -734,7 +734,15 @@ export const SIZE_BUDGETS = [
         // merging each family's findings back in keeps a new family free; the
         // merge cost +18,862 as a sort per family, +7,771 as a rotation.
         // ~300 bytes of headroom.
-        maxGzipBytes: 608_000,
+        //
+        // Raised to 609,100 on 2026-11-25: +895 over `main` with the same
+        // toolchain (604,431 -> 605,326): a shadow's `{ size, op }` goes
+        // through the colour object's formatter (`value_member`,
+        // `format_value_object`), a shadow key's slash string is reported with
+        // the member to write (`slash_member`), and a size held in a variable
+        // is noted from the invalid-opacity walk, not a family of its own
+        // (+1,263 as one). CI reads `main` at 607,897.
+        maxGzipBytes: 609_100,
     },
     // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
     // bundles from the compiler's source, unminified, and that every editor
@@ -825,7 +833,10 @@ export const SIZE_BUDGETS = [
         // Raised to 17,300 on 2026-11-23, measured 17,035: a bracketed value
         // writes the class its key writes for the value without brackets,
         // which takes a trial lowering in production too (ADR 0037 §2).
-        maxGzipBytes: 17_300,
+        // Raised to 17,600 on 2026-11-25, measured 17,305 (17,197 on `main`): a
+        // shadow's `{ size, op }` lowers through the colour object's builder,
+        // the size through the key's own string lane.
+        maxGzipBytes: 17_600,
         // A `<script>` tag loads it as built, so the leak gate reads its bytes.
         templateFree: {},
         build: cdnBuildOptions('production'),
@@ -906,7 +917,10 @@ export const SIZE_BUDGETS = [
         // Raised to 25,500 on 2026-11-24, measured 25,202: a slash opacity on a
         // colour key is reported again (`slash-opacity-string`,
         // `color-slash-opacity`), whose words only a development build prints.
-        maxGzipBytes: 25_500,
+        // Raised to 26,050 on 2026-11-25, measured 25,756 (25,481 on `main`):
+        // the shadow size object, a shadow key's slash string reported with the
+        // member to write, and `variable-shadow-opacity`'s words.
+        maxGzipBytes: 26_050,
         build: cdnBuildOptions('development'),
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
@@ -1021,7 +1035,9 @@ export const SIZE_BUDGETS = [
         // value on a factor key).
         // Raised to 32,000 on 2026-11-24, measured 31,960: the two slash-opacity
         // reports carry a note.
-        maxGzipBytes: 32_000,
+        // Raised to 32,350 on 2026-11-25, measured 32,062 (31,960 on `main`):
+        // `{ size, op }` on the shadow keys and `variable-shadow-opacity`.
+        maxGzipBytes: 32_350,
         excludedModules: [
             'src/state-variants.generated.ts',
             'src/template-sz.ts',
@@ -1048,7 +1064,9 @@ export const SIZE_BUDGETS = [
         // (see `./engine`).
         // 32,400 on 2026-11-21, measured 32,105 (31,829 at the branch base):
         // the numeric lowering (see `./engine`).
-        maxGzipBytes: 32_400,
+        // 32,750 on 2026-11-25, measured 32,471 (32,366 on `main`): the shadow
+        // size object (see `./engine`).
+        maxGzipBytes: 32_750,
         excludedModules: [
             'src/state-variants.generated.ts',
             'src/template-sz.ts',
@@ -1068,7 +1086,9 @@ export const SIZE_BUDGETS = [
         // (see `./engine`).
         // 34,050 on 2026-11-21, measured 33,769 (33,497 at the branch base):
         // the numeric lowering (see `./engine`).
-        maxGzipBytes: 34_050,
+        // 34,400 on 2026-11-25, measured 34,139 (34,034 on `main`): the shadow
+        // size object (see `./engine`).
+        maxGzipBytes: 34_400,
         excludedModules: ['src/state-variants.generated.ts'],
     },
     // The plugin and the CLI run in Node at the start of every build, dev
@@ -1285,7 +1305,10 @@ export const SIZE_BUDGETS = [
         // Raised to 63,100 on 2026-11-24, measured 63,018: the slash-opacity
         // reader is the `./color-modifier` chunk `dynamic()` shares, a file of its
         // own, and the two reports carry a note.
-        maxGzipBytes: 63_100,
+        // Raised to 63,800 on 2026-11-25, measured 63,513 (63,019 on `main`):
+        // the shadow size object on the TypeScript lane and its two reports'
+        // words (see `./engine`).
+        maxGzipBytes: 63_800,
     },
     {
         name: '@csszyx/compiler `./migrate`, loaded by Node',
@@ -1301,7 +1324,9 @@ export const SIZE_BUDGETS = [
         // the numeric lowering (see `./engine`).
         // Raised to 29,250 on 2026-11-24, measured 29,207: the two slash-opacity
         // reports carry a note, which the migrate entry's words ship.
-        maxGzipBytes: 29_250,
+        // Raised to 29,600 on 2026-11-25, measured 29,316 (29,206 on `main`):
+        // the shadow size object's words (see `./engine`).
+        maxGzipBytes: 29_600,
     },
     {
         name: '@csszyx/compiler `./report`, loaded by Node',

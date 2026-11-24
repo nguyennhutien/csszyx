@@ -275,7 +275,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
     },
     {
         "id": "slash-opacity-string",
-        "summary": "A colour key given its opacity in a string; the object form is the one spelling of it.",
+        "summary": "A colour or shadow key given its opacity in a string; the object form is the one spelling of it.",
         "surfaces": {
             "engine": {},
             "runtime": {
@@ -287,6 +287,13 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "args": {
             "key": {
                 "type": "string"
+            },
+            "member": {
+                "type": [
+                    "enum",
+                    "color",
+                    "size"
+                ]
             },
             "color": {
                 "type": "string"
@@ -305,8 +312,8 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "optional": true
             }
         },
-        "text": "`{key}: '{color}/{opacity}{important}'` puts the opacity in a string; a colour takes its opacity in the object form.",
-        "help": "write `{ color: '{color}{important}', op: {op} }`.",
+        "text": "`{key}: '{color}/{opacity}{important}'` puts the opacity in a string; the object form takes it in `op`.",
+        "help": "write `{ {member}: '{color}{important}', op: {op} }`.",
         "note": "the class is still emitted as written; a theme colour serves it, and a hex, a colour function or a variable before the slash writes a value no browser takes."
     },
     {
@@ -470,7 +477,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "text": "`{key}` sets a property and is not a variant, so its object `{ {nestedKeys} }` emits `{key}:*` classes that produce no CSS.",
-        "help": "move the nested keys up a level; for colour opacity, write `{ color: '…', op: … }`."
+        "help": "move the nested keys up a level; for an opacity, write `{ color: '…', op: … }`, or `{ size: '…', op: … }` on a shadow key."
     },
     {
         "id": "non-variant-object",
@@ -1180,6 +1187,32 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "escape": "write the declaration in `css: { … }`, or the class in `className`, with every bracket in a pair; the brackets inside are part of the value.",
             "type-hint": "write the declaration in `css: { … }`, or the class in `className`; `{key}: '{inner}'` writes another type."
         }
+    },
+    {
+        "id": "variable-shadow-opacity",
+        "summary": "A shadow size held in a variable, which `op` may not reach.",
+        "surfaces": {
+            "engine": {},
+            "runtime": {
+                "production": false,
+                "host": "browser"
+            }
+        },
+        "defaults": {
+            "recommended": "info",
+            "atomic": "warn"
+        },
+        "position": "site",
+        "args": {
+            "key": {
+                "type": "string"
+            },
+            "size": {
+                "type": "string"
+            }
+        },
+        "text": "`{key}: { size: '{size}', op }` sets the shadow's alpha, which `{size}` uses only if it reads `--tw-shadow-alpha`.",
+        "help": "use a theme size or a `[…]` shadow."
     },
     {
         "id": "redundant-bracket",

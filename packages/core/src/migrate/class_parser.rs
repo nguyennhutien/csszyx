@@ -8,13 +8,13 @@
 
 use super::class_rules::{
     self, is_fraction, is_valid_spacing_value, prefix_takes_fractions, signed_string, wrapped,
-    Shape, SHADOW_SIZE_PROPS,
+    Shape,
 };
 use super::value::{js_number, js_number_to_string, Extra, ParsedClass, SzObject, SzValue};
 use super::verdict::{lowered_class, lowers_back_to, Judge};
 use crate::transform::generated::migrate_tables as tables;
 use crate::transform::generated::reverse_tables::reverse_property_key;
-use crate::transform::lower::{modifier_op, ModifierOp};
+use crate::transform::lower::{modifier_op, ModifierOp, SHADOW_SIZE_KEYS};
 
 /// Parse a single Tailwind utility, without variants, into an sz prop and
 /// value. `None` when the class is not one migrate recognises.
@@ -840,7 +840,7 @@ enum Unread {
 
 /// Split off a `/modifier`, read the value by the prefix's rules, then put
 /// the modifier back as the form the key takes: a line-height companion for
-/// `text`, the verbatim class for a shadow size, `{ color, op }` otherwise.
+/// `text`, `{ size, op }` for a shadow size, `{ color, op }` otherwise.
 fn disambiguate_and_parse(
     prefix: &str,
     raw_value: &str,
@@ -870,12 +870,17 @@ fn disambiguate_and_parse(
             }),
         });
     }
-    if SHADOW_SIZE_PROPS.contains(&result.prop.as_str()) {
-        return Ok(ParsedClass::new(&result.prop, raw_value));
-    }
     // No `op` writes this modifier's opacity, so the class stays as written.
     if opacity == SzValue::Null {
         return Err(Unread::NoRule);
+    }
+    // A shadow's own opacity is the size object: `shadow-sm/50` is
+    // `{ size: 'sm', op: 50 }`, which scales the theme shadow's alpha.
+    if SHADOW_SIZE_KEYS.contains(&result.prop.as_str()) {
+        let mut size = SzObject::new();
+        size.insert("size".to_string(), SzValue::from(text.as_str()));
+        size.insert("op".to_string(), opacity);
+        return Ok(ParsedClass::new(&result.prop, SzValue::Object(size)));
     }
     // A modifier is an opacity only on a key that takes a colour, by the
     // lowering's own list: `m-auto/50` is no colour, and no Tailwind class.
@@ -1505,7 +1510,16 @@ mod tests {
             ("w-1/2", r#"w="1/2""#),
             ("aspect-3/2", r#"aspect="3/2""#),
             ("flex-1/2", r#"flex="1/2""#),
-            ("shadow-lg/50", r#"shadow="lg/50""#),
+            ("shadow-lg/50", r#"shadow={"size":"lg","op":50}"#),
+            (
+                "text-shadow-sm/[25%]",
+                r#"textShadow={"size":"sm","op":"25%"}"#,
+            ),
+            ("shadow-sm/50!", r#"shadow={"size":"sm!","op":50}"#),
+            (
+                "shadow-[0_1px_2px_black]/50",
+                r#"shadow={"size":"0 1px 2px black","op":50}"#,
+            ),
         ] {
             assert_eq!(prop_value(class), expected, "{class}");
         }

@@ -21042,17 +21042,23 @@
    "c": "drop-shadow-sm/12.5",
    "p": {
     "prop": "dropShadow",
-    "value": "sm/12.5"
+    "value": {
+     "op": 12.5,
+     "size": "sm"
+    }
    },
    "o": {
     "sz": {
-     "dropShadow": "sm/12.5"
+     "dropShadow": {
+      "size": "sm",
+      "op": 12.5
+     }
     },
-    "szText": "{\"dropShadow\":\"sm/12.5\"}",
+    "szText": "{\"dropShadow\":{\"size\":\"sm\",\"op\":12.5}}",
     "u": [],
     "k": [],
-    "g": "{ dropShadow: 'sm/12.5' }",
-    "h": "dropShadow: 'sm/12.5'"
+    "g": "{\n  dropShadow: { size: 'sm', op: 12.5 },\n}",
+    "h": "dropShadow: { size: 'sm', op: 12.5 },"
    }
   },
   {
@@ -23843,17 +23849,23 @@
    "c": "inset-shadow-sm/12.5",
    "p": {
     "prop": "insetShadow",
-    "value": "sm/12.5"
+    "value": {
+     "op": 12.5,
+     "size": "sm"
+    }
    },
    "o": {
     "sz": {
-     "insetShadow": "sm/12.5"
+     "insetShadow": {
+      "size": "sm",
+      "op": 12.5
+     }
     },
-    "szText": "{\"insetShadow\":\"sm/12.5\"}",
+    "szText": "{\"insetShadow\":{\"size\":\"sm\",\"op\":12.5}}",
     "u": [],
     "k": [],
-    "g": "{ insetShadow: 'sm/12.5' }",
-    "h": "insetShadow: 'sm/12.5'"
+    "g": "{\n  insetShadow: { size: 'sm', op: 12.5 },\n}",
+    "h": "insetShadow: { size: 'sm', op: 12.5 },"
    }
   },
   {
@@ -33724,17 +33736,23 @@
    "c": "shadow-2xl/50",
    "p": {
     "prop": "shadow",
-    "value": "2xl/50"
+    "value": {
+     "op": 50,
+     "size": "2xl"
+    }
    },
    "o": {
     "sz": {
-     "shadow": "2xl/50"
+     "shadow": {
+      "size": "2xl",
+      "op": 50
+     }
     },
-    "szText": "{\"shadow\":\"2xl/50\"}",
+    "szText": "{\"shadow\":{\"size\":\"2xl\",\"op\":50}}",
     "u": [],
     "k": [],
-    "g": "{ shadow: '2xl/50' }",
-    "h": "shadow: '2xl/50'"
+    "g": "{\n  shadow: { size: '2xl', op: 50 },\n}",
+    "h": "shadow: { size: '2xl', op: 50 },"
    }
   },
   {
@@ -33826,17 +33844,23 @@
    "c": "shadow-sm/12.5",
    "p": {
     "prop": "shadow",
-    "value": "sm/12.5"
+    "value": {
+     "op": 12.5,
+     "size": "sm"
+    }
    },
    "o": {
     "sz": {
-     "shadow": "sm/12.5"
+     "shadow": {
+      "size": "sm",
+      "op": 12.5
+     }
     },
-    "szText": "{\"shadow\":\"sm/12.5\"}",
+    "szText": "{\"shadow\":{\"size\":\"sm\",\"op\":12.5}}",
     "u": [],
     "k": [],
-    "g": "{ shadow: 'sm/12.5' }",
-    "h": "shadow: 'sm/12.5'"
+    "g": "{\n  shadow: { size: 'sm', op: 12.5 },\n}",
+    "h": "shadow: { size: 'sm', op: 12.5 },"
    }
   },
   {
@@ -35447,17 +35471,23 @@
    "c": "text-shadow-sm/12.5",
    "p": {
     "prop": "textShadow",
-    "value": "sm/12.5"
+    "value": {
+     "op": 12.5,
+     "size": "sm"
+    }
    },
    "o": {
     "sz": {
-     "textShadow": "sm/12.5"
+     "textShadow": {
+      "size": "sm",
+      "op": 12.5
+     }
     },
-    "szText": "{\"textShadow\":\"sm/12.5\"}",
+    "szText": "{\"textShadow\":{\"size\":\"sm\",\"op\":12.5}}",
     "u": [],
     "k": [],
-    "g": "{ textShadow: 'sm/12.5' }",
-    "h": "textShadow: 'sm/12.5'"
+    "g": "{\n  textShadow: { size: 'sm', op: 12.5 },\n}",
+    "h": "textShadow: { size: 'sm', op: 12.5 },"
    }
   },
   {
@@ -63685,17 +63715,23 @@
    "c": "shadow-(--s)/50",
    "p": {
     "prop": "shadow",
-    "value": "(--s)/50"
+    "value": {
+     "op": 50,
+     "size": "--s"
+    }
    },
    "o": {
     "sz": {
-     "shadow": "(--s)/50"
+     "shadow": {
+      "size": "--s",
+      "op": 50
+     }
     },
-    "szText": "{\"shadow\":\"(--s)/50\"}",
+    "szText": "{\"shadow\":{\"size\":\"--s\",\"op\":50}}",
     "u": [],
     "k": [],
-    "g": "{ shadow: '(--s)/50' }",
-    "h": "shadow: '(--s)/50'"
+    "g": "{\n  shadow: { size: '--s', op: 50 },\n}",
+    "h": "shadow: { size: '--s', op: 50 },"
    }
   },
   {
@@ -63718,18 +63754,18 @@
   {
    "c": "shadow-[0_1px_2px_red]",
    "p": {
-    "prop": "shadowColor",
+    "prop": "shadow",
     "value": "0 1px 2px red"
    },
    "o": {
     "sz": {
-     "shadowColor": "0 1px 2px red"
+     "shadow": "0 1px 2px red"
     },
-    "szText": "{\"shadowColor\":\"0 1px 2px red\"}",
+    "szText": "{\"shadow\":\"0 1px 2px red\"}",
     "u": [],
     "k": [],
-    "g": "{ shadowColor: '0 1px 2px red' }",
-    "h": "shadowColor: '0 1px 2px red'"
+    "g": "{ shadow: '0 1px 2px red' }",
+    "h": "shadow: '0 1px 2px red'"
    }
   },
   {
@@ -65521,17 +65557,23 @@
    "c": "shadow-sm/50!",
    "p": {
     "prop": "shadow",
-    "value": "sm/50!"
+    "value": {
+     "op": 50,
+     "size": "sm!"
+    }
    },
    "o": {
     "sz": {
-     "shadow": "sm/50!"
+     "shadow": {
+      "size": "sm!",
+      "op": 50
+     }
     },
-    "szText": "{\"shadow\":\"sm/50!\"}",
+    "szText": "{\"shadow\":{\"size\":\"sm!\",\"op\":50}}",
     "u": [],
     "k": [],
-    "g": "{ shadow: 'sm/50!' }",
-    "h": "shadow: 'sm/50!'"
+    "g": "{\n  shadow: { size: 'sm!', op: 50 },\n}",
+    "h": "shadow: { size: 'sm!', op: 50 },"
    }
   },
   {

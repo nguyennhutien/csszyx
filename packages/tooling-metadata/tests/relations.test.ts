@@ -112,6 +112,11 @@ describe('objectValueForm', () => {
 
     it('returns null for a plain utility property', () => {
         expect(objectValueForm('p')).toBeNull();
+        for (const key of ['shadow', 'insetShadow', 'textShadow', 'dropShadow']) {
+            expect(objectValueForm(key)?.members.map(m => m.name)).toEqual(['size', 'op']);
+        }
+        // A shadow colour takes the colour object, as any colour key does.
+        expect(objectValueForm('shadowColor')?.members.map(m => m.name)).toEqual(['color', 'op']);
     });
 
     it('descends through structured members and stops at scalar leaves', () => {

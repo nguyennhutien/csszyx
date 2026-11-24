@@ -21,7 +21,7 @@ pub enum DiagnosticCode {
     NumericKey,
     /// A value a closed-enum key does not take.
     ClosedEnumValue,
-    /// A colour key given its opacity in a string; the object form is the one spelling of it.
+    /// A colour or shadow key given its opacity in a string; the object form is the one spelling of it.
     SlashOpacityString,
     /// A colour object with a slash opacity in `color`; the object takes it in `op`.
     ColorSlashOpacity,
@@ -77,6 +77,8 @@ pub enum DiagnosticCode {
     MangleVarsHoistSkipped,
     /// A value wrapped in the brackets or parentheses csszyx writes itself.
     BracketedValue,
+    /// A shadow size held in a variable, which `op` may not reach.
+    VariableShadowOpacity,
     /// A value in brackets that writes the class its value without them writes.
     RedundantBracket,
     /// An `op` that is not a number from 0 to 100, or one below 1 that reads as a fraction.
@@ -123,6 +125,7 @@ impl DiagnosticCode {
             Self::AstBudget => "ast-budget",
             Self::MangleVarsHoistSkipped => "mangle-vars-hoist-skipped",
             Self::BracketedValue => "bracketed-value",
+            Self::VariableShadowOpacity => "variable-shadow-opacity",
             Self::RedundantBracket => "redundant-bracket",
             Self::OpacityValue => "opacity-value",
             Self::UnderscoreSpace => "underscore-space",
@@ -131,7 +134,7 @@ impl DiagnosticCode {
 }
 
 /// Every code, in registry order.
-pub const DIAGNOSTIC_CODES: [DiagnosticCode; 36] = [
+pub const DIAGNOSTIC_CODES: [DiagnosticCode; 37] = [
     DiagnosticCode::UnknownKey,
     DiagnosticCode::CanonicalKey,
     DiagnosticCode::RemovedKey,
@@ -165,6 +168,7 @@ pub const DIAGNOSTIC_CODES: [DiagnosticCode; 36] = [
     DiagnosticCode::AstBudget,
     DiagnosticCode::MangleVarsHoistSkipped,
     DiagnosticCode::BracketedValue,
+    DiagnosticCode::VariableShadowOpacity,
     DiagnosticCode::RedundantBracket,
     DiagnosticCode::OpacityValue,
     DiagnosticCode::UnderscoreSpace,
@@ -440,21 +444,24 @@ pub mod issue {
         )
     }
 
-    /// `slash-opacity-string`: A colour key given its opacity in a string; the object form is the one spelling of it.
+    /// `slash-opacity-string`: A colour or shadow key given its opacity in a string; the object form is the one spelling of it.
     #[must_use]
     #[inline]
     pub fn slash_opacity_string(
         key: &str,
+        member: &'static str,
         color: &str,
         opacity: &str,
         op: &str,
         important: Option<&'static str>,
     ) -> (DiagnosticCode, Args) {
+        debug_assert!(["color", "size"].contains(&member));
         debug_assert!(important.is_none_or(|v| ["!"].contains(&v)));
         (
             DiagnosticCode::SlashOpacityString,
             Args::default()
                 .text("key", key)
+                .text("member", member)
                 .text("color", color)
                 .text("opacity", opacity)
                 .text("op", op)
@@ -1080,6 +1087,16 @@ pub mod issue {
         )
     }
 
+    /// `variable-shadow-opacity`: A shadow size held in a variable, which `op` may not reach.
+    #[must_use]
+    #[inline]
+    pub fn variable_shadow_opacity(key: &str, size: &str) -> (DiagnosticCode, Args) {
+        (
+            DiagnosticCode::VariableShadowOpacity,
+            Args::default().text("key", key).text("size", size),
+        )
+    }
+
     /// `redundant-bracket`: A value in brackets that writes the class its value without them writes.
     #[must_use]
     #[inline]
@@ -1345,17 +1362,19 @@ mod tests {
             args.to_json(),
             r#"{"form":"flag","key":"key","value":"value"}"#
         );
-        let (code, args) = issue::slash_opacity_string("key", "color", "opacity", "op", Some("!"));
+        let (code, args) =
+            issue::slash_opacity_string("key", "color", "color", "opacity", "op", Some("!"));
         assert_eq!(code, DiagnosticCode::SlashOpacityString);
         assert_eq!(
             args.to_json(),
-            r#"{"key":"key","color":"color","opacity":"opacity","op":"op","important":"!"}"#
+            r#"{"key":"key","member":"color","color":"color","opacity":"opacity","op":"op","important":"!"}"#
         );
-        let (code, args) = issue::slash_opacity_string("key", "color", "opacity", "op", None);
+        let (code, args) =
+            issue::slash_opacity_string("key", "color", "color", "opacity", "op", None);
         assert_eq!(code, DiagnosticCode::SlashOpacityString);
         assert_eq!(
             args.to_json(),
-            r#"{"key":"key","color":"color","opacity":"opacity","op":"op"}"#
+            r#"{"key":"key","member":"color","color":"color","opacity":"opacity","op":"op"}"#
         );
         let (code, args) =
             issue::color_slash_opacity_op_given("key", "base", "opacity", Some("!"), "op");
@@ -1751,6 +1770,12 @@ mod tests {
             args.to_json(),
             r#"{"form":"type-hint","key":"key","value":"value","inner":"inner"}"#
         );
+        let (code, args) = issue::variable_shadow_opacity("key", "size");
+        assert_eq!(code, DiagnosticCode::VariableShadowOpacity);
+        assert_eq!(args.to_json(), r#"{"key":"key","size":"size"}"#);
+        let (code, args) = issue::variable_shadow_opacity("key", "size");
+        assert_eq!(code, DiagnosticCode::VariableShadowOpacity);
+        assert_eq!(args.to_json(), r#"{"key":"key","size":"size"}"#);
         let (code, args) = issue::redundant_bracket("key", "value", "inner");
         assert_eq!(code, DiagnosticCode::RedundantBracket);
         assert_eq!(

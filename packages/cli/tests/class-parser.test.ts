@@ -1075,21 +1075,23 @@ describe('class-parser', () => {
     // SIZE-UTILITY SLASH MODIFIERS (not color opacity)
     // ========================================================================
     describe('size-utility slash modifiers', () => {
-        it('named shadow sizes keep the verbatim string form', () => {
-            expect(parseClass('shadow-sm/12.5')).toEqual({ prop: 'shadow', value: 'sm/12.5' });
-            expect(parseClass('text-shadow-sm/12.5')).toEqual({
-                prop: 'textShadow',
-                value: 'sm/12.5',
+        it('a shadow size with an opacity is the size object', () => {
+            // `shadow-sm/50` scales the theme shadow's alpha: `{ size, op }`.
+            expect(parseClass('shadow-sm/12.5')).toEqual({
+                prop: 'shadow',
+                value: { size: 'sm', op: 12.5 },
             });
-            expect(parseClass('drop-shadow-sm/12.5')).toEqual({
-                prop: 'dropShadow',
-                value: 'sm/12.5',
+            for (const [className, prop] of [
+                ['text-shadow-sm/12.5', 'textShadow'],
+                ['drop-shadow-sm/12.5', 'dropShadow'],
+                ['inset-shadow-sm/12.5', 'insetShadow'],
+            ] as const) {
+                expect(parseClass(className)).toEqual({ prop, value: { size: 'sm', op: 12.5 } });
+            }
+            expect(parseClass('shadow-(--s)/50')).toEqual({
+                prop: 'shadow',
+                value: { size: '--s', op: 50 },
             });
-            expect(parseClass('inset-shadow-sm/12.5')).toEqual({
-                prop: 'insetShadow',
-                value: 'sm/12.5',
-            });
-            expect(parseClass('shadow-(--s)/50')).toEqual({ prop: 'shadow', value: '(--s)/50' });
         });
 
         it('font-size with line-height modifier splits into the documented two-token form', () => {

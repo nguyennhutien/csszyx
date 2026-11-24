@@ -1127,11 +1127,16 @@ fn push_group_key_value_diagnostics<'a>(
     push_dead_enum_diagnostics(&found.dead_enums, out);
     push_slash_opacity_diagnostics(&found.slash_opacities, out);
     push_color_slash_opacity_diagnostics(&found.color_slash_opacities, out);
-    for (key, op, percent, offset) in &found.invalid_opacities {
-        let issue = percent.as_ref().map_or_else(
-            || issue::opacity_value_range(key, op, None),
-            |percent| issue::opacity_value_fraction(key, op, Some(percent)),
-        );
+    for (key, text, finding, offset) in &found.invalid_opacities {
+        let issue = match finding {
+            super::lower::OpacityFinding::Range => issue::opacity_value_range(key, text, None),
+            super::lower::OpacityFinding::Fraction(percent) => {
+                issue::opacity_value_fraction(key, text, Some(percent))
+            }
+            super::lower::OpacityFinding::VariableShadow => {
+                issue::variable_shadow_opacity(key, text)
+            }
+        };
         out.push_issue(issue, *offset);
     }
     for found in &found.bracketed_values {
@@ -1480,11 +1485,11 @@ fn push_slash_opacity_diagnostics(
     found: &[super::lower::SlashOpacityString],
     out: &mut Diagnostics,
 ) {
-    for (key, color, opacity, important, offset) in found {
+    for (key, member, color, opacity, important, offset) in found {
         let op = super::lower::op_literal(opacity);
         let important = important.then_some("!");
         out.push_issue(
-            issue::slash_opacity_string(key, color, opacity, &op, important),
+            issue::slash_opacity_string(key, member, color, opacity, &op, important),
             *offset,
         );
     }
@@ -2841,12 +2846,12 @@ mod tests {
         assert_eq!(
             lines(&result),
             [
-                r#"slash-opacity-string {"key":"bg","color":"red-500","opacity":"50","op":"50","important":"!"}"#,
-                r#"slash-opacity-string {"key":"from","color":"blue-500","opacity":"20","op":"20"}"#,
-                r#"slash-opacity-string {"key":"bg","color":"red-500","opacity":"5","op":"5"}"#,
-                r##"slash-opacity-string {"key":"fill","color":"#f00","opacity":"[0.3]","op":"30"}"##,
-                r#"slash-opacity-string {"key":"outlineColor","color":"red-500","opacity":"[50%]","op":"'50%'"}"#,
-                r#"slash-opacity-string {"key":"color","color":"red-500","opacity":"40","op":"40"}"#,
+                r#"slash-opacity-string {"key":"bg","member":"color","color":"red-500","opacity":"50","op":"50","important":"!"}"#,
+                r#"slash-opacity-string {"key":"from","member":"color","color":"blue-500","opacity":"20","op":"20"}"#,
+                r#"slash-opacity-string {"key":"bg","member":"color","color":"red-500","opacity":"5","op":"5"}"#,
+                r##"slash-opacity-string {"key":"fill","member":"color","color":"#f00","opacity":"[0.3]","op":"30"}"##,
+                r#"slash-opacity-string {"key":"outlineColor","member":"color","color":"red-500","opacity":"[50%]","op":"'50%'"}"#,
+                r#"slash-opacity-string {"key":"color","member":"color","color":"red-500","opacity":"40","op":"40"}"#,
                 r##"bracketed-value {"form":"escape","key":"caret","value":"[#f00]/[50%]","inner":"#f00]/[50%"}"##,
                 // A fact for the build's oracle, not a finding.
                 r#"underscore-space {"key":"color","value":"rgb(255_0_0/50%)","className":"text-[rgb(255_0_0/50%)]"}"#,
@@ -5707,7 +5712,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     fn every_diagnostic_carries_its_code_at_its_offset() {
         use super::super::generated::diagnostic_codes::{DiagnosticCode, DIAGNOSTIC_CODES};
-        let cases: [(DiagnosticCode, String, TransformOptions); 36] = [
+        let cases: [(DiagnosticCode, String, TransformOptions); 37] = [
             (
                 DiagnosticCode::UnknownKey,
                 "<div sz={{ xyzzy: 4 }} />".into(),
@@ -5881,6 +5886,11 @@ mod tests {
             (
                 DiagnosticCode::BracketedValue,
                 "<div sz={{ w: '[1/2]' }} />".into(),
+                TransformOptions::default(),
+            ),
+            (
+                DiagnosticCode::VariableShadowOpacity,
+                "<div sz={{ shadow: { size: '--s', op: 50 } }} />".into(),
                 TransformOptions::default(),
             ),
             (

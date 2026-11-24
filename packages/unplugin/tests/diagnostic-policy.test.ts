@@ -36,6 +36,7 @@ describe('the recommended preset', () => {
             ['mangle-vars-hoist-skipped', 'info'],
             // The brackets spell the class the value without them writes.
             ['redundant-bracket', 'info'],
+            ['variable-shadow-opacity', 'info'],
         ]);
         for (const code of SZ_DIAGNOSTIC_CODES) {
             expect([code, policy.levelOf({ rule: 'sz-diagnostic', kind: code })]).toEqual([

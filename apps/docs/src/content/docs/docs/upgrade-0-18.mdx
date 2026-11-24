@@ -1554,7 +1554,7 @@ not see because Tailwind still writes the rule.
 
 ```text
 [csszyx] slash-opacity-string: src/Card.tsx:3:16
-  `bg: '#f00/50'` puts the opacity in a string; a colour takes its opacity in the object form.
+  `bg: '#f00/50'` puts the opacity in a string; the object form takes it in `op`.
   help: write `{ color: '#f00', op: 50 }`.
 ```
 
@@ -1575,15 +1575,29 @@ A slash inside a colour function is its own (`rgb(255_0_0/50%)`), a fraction
 is a size (`1/2`), and a gradient's slash names its interpolation
 (`bg: 'linear-to-r/oklch'`); none is reported.
 
+A shadow's own opacity has an object form too, since 0.18.1: `shadow`,
+`insetShadow`, `textShadow` and `dropShadow` take `{ size, op }`, so
+`{ shadow: { size: 'sm', op: 50 } }` writes `shadow-sm/50`, which scales the
+theme shadow's alpha. `shadowColor: { color, op }` is not the same thing: it
+replaces the shadow's colour. The string `shadow: 'sm/50'` still writes its
+class and is now reported as `slash-opacity-string` with `{ size, op }` in the
+help, and so is a colour slash on a shadow key (`shadow: 'red-500/50'`, help
+`{ color, op }`), which 0.18.0 did not report. `{ size: '--s', op: 50 }` writes
+`shadow-(--s)/50` and adds the note `variable-shadow-opacity`: the opacity
+reaches a shadow held in a variable only if its value reads
+`--tw-shadow-alpha`. `csszyx migrate` writes `shadow-sm/50` as the object.
+
 **The edit.** Write the opacity in `op`:
 
 ```tsx
 // before
 <div sz={{ bg: "#f00/50" }} />
 <div sz={{ bg: { color: "red-500/50", op: 20 } }} />
+<div sz={{ shadow: "sm/50" }} />
 // after
 <div sz={{ bg: { color: "#f00", op: 50 } }} />
 <div sz={{ bg: { color: "red-500", op: 20 } }} />
+<div sz={{ shadow: { size: "sm", op: 50 } }} />
 ```
 
 **Tooling.** `csszyx check` lists every site under the two kinds and exits 1.

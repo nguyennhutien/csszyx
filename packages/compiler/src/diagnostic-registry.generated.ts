@@ -120,9 +120,9 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
     {
         "id": "slash-opacity-string",
         "position": "site",
-        "args": "key color opacity op important?",
-        "text": "`{key}: '{color}/{opacity}{important}'` puts the opacity in a string; a colour takes its opacity in the object form.",
-        "help": "write `{ color: '{color}{important}', op: {op} }`.",
+        "args": "key member color opacity op important?",
+        "text": "`{key}: '{color}/{opacity}{important}'` puts the opacity in a string; the object form takes it in `op`.",
+        "help": "write `{ {member}: '{color}{important}', op: {op} }`.",
         "note": "the class is still emitted as written; a theme colour serves it, and a hex, a colour function or a variable before the slash writes a value no browser takes."
     },
     {
@@ -174,7 +174,7 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
             "nestedKeys": ", "
         },
         "text": "`{key}` sets a property and is not a variant, so its object `{ {nestedKeys} }` emits `{key}:*` classes that produce no CSS.",
-        "help": "move the nested keys up a level; for colour opacity, write `{ color: '…', op: … }`."
+        "help": "move the nested keys up a level; for an opacity, write `{ color: '…', op: … }`, or `{ size: '…', op: … }` on a shadow key."
     },
     {
         "id": "non-variant-object",
@@ -438,6 +438,13 @@ export const SZ_DIAGNOSTIC_RENDER_SPECS: readonly SzDiagnosticRenderSpec[] = [
             "escape": "write the declaration in `css: { … }`, or the class in `className`, with every bracket in a pair; the brackets inside are part of the value.",
             "type-hint": "write the declaration in `css: { … }`, or the class in `className`; `{key}: '{inner}'` writes another type."
         }
+    },
+    {
+        "id": "variable-shadow-opacity",
+        "position": "site",
+        "args": "key size",
+        "text": "`{key}: { size: '{size}', op }` sets the shadow's alpha, which `{size}` uses only if it reads `--tw-shadow-alpha`.",
+        "help": "use a theme size or a `[…]` shadow."
     },
     {
         "id": "redundant-bracket",

@@ -3623,7 +3623,10 @@
                 },
                 {
                     "sz": {
-                        "dropShadow": "sm/12.5"
+                        "dropShadow": {
+                            "size": "sm",
+                            "op": 12.5
+                        }
                     },
                     "class": "drop-shadow-sm/12.5"
                 },
@@ -4949,7 +4952,10 @@
                 },
                 {
                     "sz": {
-                        "insetShadow": "sm/12.5"
+                        "insetShadow": {
+                            "size": "sm",
+                            "op": 12.5
+                        }
                     },
                     "class": "inset-shadow-sm/12.5"
                 }
@@ -9661,7 +9667,10 @@
                 },
                 {
                     "sz": {
-                        "shadow": "2xl/50"
+                        "shadow": {
+                            "size": "2xl",
+                            "op": 50
+                        }
                     },
                     "class": "shadow-2xl/50"
                 },
@@ -9685,7 +9694,10 @@
                 },
                 {
                     "sz": {
-                        "shadow": "sm/12.5"
+                        "shadow": {
+                            "size": "sm",
+                            "op": 12.5
+                        }
                     },
                     "class": "shadow-sm/12.5"
                 },
@@ -10429,7 +10441,10 @@
                 },
                 {
                     "sz": {
-                        "textShadow": "sm/12.5"
+                        "textShadow": {
+                            "size": "sm",
+                            "op": 12.5
+                        }
                     },
                     "class": "text-shadow-sm/12.5"
                 }

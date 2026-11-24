@@ -84,6 +84,8 @@ pub enum Test {
     Hinted(&'static str),
     /// A bracket holding a number alone: `[700]`.
     BracketNumber,
+    /// A bracket holding several tokens: `[0_1px_2px_black]`.
+    BracketTokens,
 }
 
 /// How the matched rule spells the value.
@@ -145,12 +147,9 @@ use Emit::{
 };
 use Prop::{Key, Prefix, PrefixPos, Reverse};
 use Test::{
-    Always, ArbitraryDimension, Bracket, BracketNumber, BracketPositionList, Hinted, Integer, Is,
-    Keyword, OneOf, Paren, ParenColor, Percent, StartsWith, ThreeDigits,
+    Always, ArbitraryDimension, Bracket, BracketNumber, BracketPositionList, BracketTokens, Hinted,
+    Integer, Is, Keyword, OneOf, Paren, ParenColor, Percent, StartsWith, ThreeDigits,
 };
-
-/// Prefixes where the `/` modifier is the utility's own opacity, not a colour.
-pub const SHADOW_SIZE_PROPS: &[&str] = &["shadow", "insetShadow", "textShadow", "dropShadow"];
 
 /// The rules for a prefix with no entry below: the reverse map's key, the
 /// general value reading.
@@ -332,6 +331,9 @@ pub const RULE_TABLES: &[(&str, &[Rule])] = &[
             rule!(Paren, Key("shadow"), ParenInner),
             // `shadow-[var(--v)]` is the shadow itself, like `shadow-(--v)`.
             rule!(StartsWith("[var("), Key("shadow"), Unwrapped),
+            // Tailwind reads several tokens as the shadow (`--tw-shadow`) and
+            // one as its colour: `shadow-[0_1px_2px_black]`, `shadow-[red]`.
+            rule!(BracketTokens, Key("shadow"), Unwrapped),
             rule!(Always, Key("shadowColor"), Unwrapped),
         ],
     ),
@@ -560,6 +562,9 @@ fn matches(test: &Test, shape: &Shape<'_>) -> bool {
         }),
         Hinted(hint) => after_hint(shape, hint, Judge::default()).is_some(),
         BracketNumber => shape.bracket.and_then(js_number).is_some(),
+        BracketTokens => shape
+            .bracket
+            .is_some_and(|inner| spaced_underscores(inner).contains(' ')),
     }
 }
 

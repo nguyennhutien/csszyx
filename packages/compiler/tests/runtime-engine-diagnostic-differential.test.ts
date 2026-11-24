@@ -128,7 +128,16 @@ const CASES: Readonly<Record<string, readonly SzObject[]>> = {
         { hover: { srOnly: 'yes' } },
         { not: { supports: { 'display:grid': { numOrdinal: 0.5 } } } },
     ],
-    'slash-opacity-string': [{ bg: 'red-500/50' }, { hover: { bg: '#f00/50!' } }],
+    'slash-opacity-string': [
+        { bg: 'red-500/50' },
+        { hover: { bg: '#f00/50!' } },
+        { shadow: 'sm/50' },
+        { md: { textShadow: 'red-500/25' } },
+    ],
+    'variable-shadow-opacity': [
+        { shadow: { size: '--s', op: 50 } },
+        { hover: { dropShadow: { size: '--d!', op: '50%' } } },
+    ],
     'off-scale-value/fraction': [{ p: '1/2' }, { hover: { mx: '2/3' } }],
     'off-scale-value/step': [
         { p: 1.4 },
@@ -270,7 +279,7 @@ describe('runtime and engine diagnostics', () => {
     });
 
     it('has a case for every (id, form) both lanes report', () => {
-        expect(SHARED.map(spec => spec.id)).toHaveLength(18);
+        expect(SHARED.map(spec => spec.id)).toHaveLength(19);
         expect([...Object.keys(CASES), ...Object.keys(ONE_LANE_FORMS)].sort()).toEqual(
             [...SHARED_FORMS].sort(),
         );

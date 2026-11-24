@@ -417,7 +417,7 @@ pub(crate) fn collect_unknown_sz_keys(object: &StaticSzObject, out: &mut Vec<(St
             // A mask slot's members are geometry with their own closed
             // check (`collect_unknown_mask_slot_members`); walking them
             // here read `angle` / `at` / `shape` as unknown sz keys.
-            if mask_slot_members(&property.key).is_some() || is_color_object(&property.key, nested)
+            if mask_slot_members(&property.key).is_some() || is_value_object(&property.key, nested)
             {
                 continue;
             }
@@ -488,7 +488,7 @@ pub(crate) fn collect_dead_spacing_steps(
                     out.push((property.key.clone(), parsed, property.span.start));
                 }
             }
-            StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
+            StaticSzValue::Object(nested) if !is_value_object(&property.key, nested) => {
                 for_each_sz_object_in(&property.key, nested, &mut |object| {
                     collect_dead_spacing_steps(object, out);
                 });
@@ -705,11 +705,32 @@ fn for_each_group_peer_body(object: &StaticSzObject, visit: &mut dyn FnMut(&Stat
     }
 }
 
-/// Whether `key: nested` is a colour written as an object (`{ color, op }`),
-/// one value whose members are not sz keys.
+/// The keys whose `{ size, op }` object writes a shadow with its opacity
+/// (`shadow-sm/50`, which scales the theme shadow's alpha). Migrate reads the
+/// same list.
+pub(crate) const SHADOW_SIZE_KEYS: [&str; 4] =
+    ["shadow", "insetShadow", "textShadow", "dropShadow"];
+
+/// The member a value object writes its class from, and its text: `color` on
+/// any key with a utility prefix (`{ color, op }`), or `size` on a shadow key
+/// (`{ size, op }`). `None` for any other object, which is sz nesting.
+#[inline(never)]
+fn value_member<'a>(key: &str, nested: &'a StaticSzObject) -> Option<(&'static str, &'a str)> {
+    property_prefix(key)?;
+    if let Some(colour) = object_string_property(nested, "color") {
+        return Some(("color", colour));
+    }
+    if !SHADOW_SIZE_KEYS.contains(&key) {
+        return None;
+    }
+    object_string_property(nested, "size").map(|size| ("size", size))
+}
+
+/// Whether `key: nested` is one value written as an object (`{ color, op }`,
+/// `{ size, op }`), whose members are not sz keys.
 #[cfg(any(feature = "native-engine", test))]
-fn is_color_object(key: &str, nested: &StaticSzObject) -> bool {
-    property_prefix(key).is_some() && object_string_property(nested, "color").is_some()
+fn is_value_object(key: &str, nested: &StaticSzObject) -> bool {
+    value_member(key, nested).is_some()
 }
 
 /// A moved value: key, value, offset.
@@ -867,7 +888,7 @@ pub(crate) fn collect_dead_enum_values(
                     property.span.start,
                 ));
             }
-            StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
+            StaticSzValue::Object(nested) if !is_value_object(&property.key, nested) => {
                 for_each_sz_object_in(&property.key, nested, &mut |object| {
                     collect_dead_enum_values(object, out);
                 });
@@ -985,10 +1006,27 @@ pub(crate) fn op_literal(opacity: &str) -> String {
     }
 }
 
-/// A colour key holding a slash opacity in a string: key, colour, opacity,
+/// A colour or shadow key holding a slash opacity in a string: key, the
+/// object member the value goes in, the value before the slash, opacity,
 /// whether the important modifier ends it, offset.
 #[cfg(feature = "native-engine")]
-pub(crate) type SlashOpacityString = (String, String, String, bool, u32);
+pub(crate) type SlashOpacityString = (String, &'static str, String, String, bool, u32);
+
+/// The member of the object that replaces `value/op` on `key`: `size` for a
+/// shadow on a shadow key (a size keyword, a bracket, a variable, which
+/// Tailwind reads as the shadow itself), `color` for anything else.
+#[cfg(feature = "native-engine")]
+fn slash_member(shadow_key: bool, value: &str) -> &'static str {
+    if shadow_key
+        && (super::generated::migrate_tables::shadow_size_keywords(value)
+            || value.starts_with(['[', '('])
+            || value.starts_with("--"))
+    {
+        "size"
+    } else {
+        "color"
+    }
+}
 
 /// Collect each colour key whose string carries a slash opacity. The class
 /// is written as given (ADR 0036); the object form is the one spelling of an
@@ -1003,14 +1041,18 @@ pub(crate) fn collect_slash_opacity_strings(
     for property in &object.properties {
         match &property.value {
             // A value the bracket lane claims is that lane's to report.
-            StaticSzValue::String(value)
-                if super::generated::tables::is_color_property(&property.key)
-                    && bracket_spelling(&property.key, value).is_none() =>
-            {
+            StaticSzValue::String(value) => {
+                let shadow_key = SHADOW_SIZE_KEYS.contains(&property.key.as_str());
+                if !(shadow_key || super::generated::tables::is_color_property(&property.key))
+                    || bracket_spelling(&property.key, value).is_some()
+                {
+                    continue;
+                }
                 let base = value.strip_suffix('!');
                 if let Some((color, opacity)) = slash_opacity_split(base.unwrap_or(value)) {
                     out.push((
                         property.key.clone(),
+                        slash_member(shadow_key, color),
                         color.to_owned(),
                         opacity.to_owned(),
                         base.is_some(),
@@ -1018,7 +1060,7 @@ pub(crate) fn collect_slash_opacity_strings(
                     ));
                 }
             }
-            StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
+            StaticSzValue::Object(nested) if !is_value_object(&property.key, nested) => {
                 for_each_sz_object_in(&property.key, nested, &mut |object| {
                     collect_slash_opacity_strings(object, out);
                 });
@@ -1164,11 +1206,6 @@ pub(crate) fn collect_unknown_mask_slot_members(
     }
 }
 
-/// The members a colour object reads. Mirrors `COLOR_OBJECT_MEMBERS` in
-/// `transform-core.ts`.
-#[cfg(feature = "native-engine")]
-const COLOR_OBJECT_MEMBERS: [&str; 2] = ["color", "op"];
-
 /// Collect colour-object members the lowering does not read.
 ///
 /// A colour object (`{ color, op }`) writes one class from those two; any other
@@ -1192,21 +1229,20 @@ pub(crate) fn collect_unknown_color_object_members(
         {
             continue;
         }
-        if !is_color_object(&property.key, nested) {
+        // A value object reads its value member and `op`. Mirrors
+        // `valueObjectClass` in `transform-core.ts`.
+        let Some((member, _)) = value_member(&property.key, nested) else {
             for_each_sz_object_in(&property.key, nested, &mut |object| {
                 collect_unknown_color_object_members(object, out);
             });
             continue;
-        }
+        };
         for entry in &nested.properties {
-            if !COLOR_OBJECT_MEMBERS.contains(&entry.key.as_str()) {
+            if entry.key != member && entry.key != "op" {
                 out.push((
                     property.key.clone(),
                     entry.key.clone(),
-                    COLOR_OBJECT_MEMBERS
-                        .iter()
-                        .map(|member| (*member).to_string())
-                        .collect(),
+                    vec![member.to_string(), "op".to_string()],
                     entry.span.start,
                 ));
             }
@@ -1229,7 +1265,7 @@ pub(crate) fn collect_property_object_values(
         };
         // The `{ color, op }` object form on a property key is the documented
         // color-opacity spelling.
-        if is_color_object(&property.key, nested) {
+        if is_value_object(&property.key, nested) {
             continue;
         }
         // Parametric/scope variants and object-shaped value keys take nested
@@ -1303,7 +1339,7 @@ pub(crate) fn collect_border_side_styles(
                     out.push((property.key.clone(), value.clone(), property.span.start));
                 }
             }
-            StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
+            StaticSzValue::Object(nested) if !is_value_object(&property.key, nested) => {
                 for_each_sz_object_in(&property.key, nested, &mut |object| {
                     collect_border_side_styles(object, out);
                 });
@@ -1572,12 +1608,8 @@ fn lower_object_into_marked(
                 // `color` member on a key that maps to a color utility, matching
                 // the JavaScript transform it replaced; without this it lowered as a nested
                 // variant into broken classes like `bg:text-white` / `bg:op-20`.
-                if property_prefix(&property.key).is_some()
-                    && object_string_property(nested, "color").is_some()
-                {
-                    if let Some(class_name) =
-                        format_color_opacity_object(&property.key, nested, prefix)
-                    {
+                if value_member(&property.key, nested).is_some() {
+                    if let Some(class_name) = format_value_object(&property.key, nested, prefix) {
                         classes.push(class_name);
                     }
                     continue;
@@ -2982,13 +3014,55 @@ fn split_important(color: &str) -> (&str, &'static str) {
         .map_or((color, ""), |color| (color, "!"))
 }
 
-fn format_color_opacity_object(key: &str, object: &StaticSzObject, prefix: &str) -> Option<String> {
+/// The class of a value object: its `color` or `size`, then the opacity
+/// `op` names and `!`. One formatter for both, so a size takes `op` exactly
+/// as a colour does. Mirrors `buildValueObjectClass` in `transform-core.ts`.
+fn format_value_object(key: &str, object: &StaticSzObject, prefix: &str) -> Option<String> {
     let tw_prefix = property_prefix(key)?;
-    // `color` is written as given, a slash opacity included; `op` adds its
-    // own. Mirrors `buildColorObjectClass` in `transform-core.ts`.
-    let (raw_color, important) = split_important(object_string_property(object, "color")?);
+    let (member, written) = value_member(key, object)?;
+    let (raw, important) = split_important(written);
+    let head = if member == "size" {
+        size_class(key, raw, prefix)?
+    } else {
+        format!("{prefix}{tw_prefix}-{}", color_base(tw_prefix, raw))
+    };
 
-    let color_base = if is_tailwind_build_function(raw_color)
+    let op_value = object
+        .properties
+        .iter()
+        .find(|prop| prop.key == "op")
+        .map(|prop| &prop.value);
+
+    // An `op` that is not an opacity writes the value alone; the engine
+    // reports it (`collect_invalid_opacities`).
+    Some(op_value.and_then(format_opacity_value).map_or_else(
+        || format!("{head}{important}"),
+        |op| format!("{head}/{op}{important}"),
+    ))
+}
+
+/// The one class a shadow key writes for `size` as its string value, the
+/// lane a size takes when it is not in an object.
+fn size_class(key: &str, size: &str, prefix: &str) -> Option<String> {
+    let mut classes = Vec::new();
+    lower_object_into(
+        &StaticSzObject {
+            properties: vec![StaticSzProperty {
+                key: key.to_owned(),
+                span: super::TextSpan { start: 0, end: 0 },
+                value: StaticSzValue::String(size.to_owned()),
+            }],
+        },
+        prefix,
+        &mut classes,
+    );
+    (classes.len() == 1).then(|| classes.remove(0))
+}
+
+/// A colour as the utility after the prefix spells it. `color` is written as
+/// given, a slash opacity included.
+fn color_base(tw_prefix: &str, raw_color: &str) -> String {
+    if is_tailwind_build_function(raw_color)
         || (raw_color.starts_with("--") && raw_color.contains('('))
     {
         format!("[{}]", normalize_arbitrary_value(raw_color))
@@ -3008,20 +3082,7 @@ fn format_color_opacity_object(key: &str, object: &StaticSzObject, prefix: &str)
         format!("[{}]", normalize_arbitrary_value(raw_color))
     } else {
         normalize_arbitrary_value(raw_color)
-    };
-
-    let op_value = object
-        .properties
-        .iter()
-        .find(|prop| prop.key == "op")
-        .map(|prop| &prop.value);
-
-    // An `op` that is not an opacity writes the colour alone; the engine
-    // reports it (`collect_invalid_opacities`).
-    Some(op_value.and_then(format_opacity_value).map_or_else(
-        || format!("{prefix}{tw_prefix}-{color_base}{important}"),
-        |op| format!("{prefix}{tw_prefix}-{color_base}/{op}{important}"),
-    ))
+    }
 }
 
 /// The modifier `op` writes, or `None` when it is not an opacity.
@@ -3064,11 +3125,22 @@ pub(crate) fn collect_invalid_opacities(object: &StaticSzObject, out: &mut Vec<I
         let StaticSzValue::Object(nested) = &property.value else {
             continue;
         };
-        if property_prefix(&property.key).is_some()
-            && object_string_property(nested, "color").is_some()
-        {
+        if let Some((member, value)) = value_member(&property.key, nested) {
             for op in nested.properties.iter().filter(|prop| prop.key == "op") {
                 push_invalid_opacity(&property.key, op, out);
+                // `shadow-(--s)/50` sets the shadow's alpha, which the
+                // variable's shadow uses only if it reads it.
+                if member == "size"
+                    && split_important(value).0.starts_with("--")
+                    && format_opacity_value(&op.value).is_some()
+                {
+                    out.push((
+                        property.key.clone(),
+                        value.to_string(),
+                        OpacityFinding::VariableShadow,
+                        property.span.start,
+                    ));
+                }
             }
         } else if mask_slot_members(&property.key).is_some() {
             collect_invalid_mask_stop_opacities(nested, out);
@@ -3102,17 +3174,30 @@ fn collect_invalid_mask_stop_opacities(slot: &StaticSzObject, out: &mut Vec<Inva
 /// write when it reads as a fraction of 1 (none when it is no opacity), and
 /// where it is written.
 #[cfg(feature = "native-engine")]
-pub(crate) type InvalidOpacity = (String, String, Option<String>, u32);
+pub(crate) type InvalidOpacity = (String, String, OpacityFinding, u32);
+
+/// What a finding on an `op` reports.
+#[cfg(feature = "native-engine")]
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum OpacityFinding {
+    /// No opacity (`opacity-value`, form `range`).
+    Range,
+    /// A number between 0 and 1, written as this percent (form `fraction`).
+    Fraction(String),
+    /// A size held in a custom property, which the opacity may not reach
+    /// (`variable-shadow-opacity`); the text is the size as written.
+    VariableShadow,
+}
 
 /// Record `op` under `key` when it is no opacity, or a number between 0 and 1,
 /// which 0.17 wrote as a fraction of 1 and which is now the percent it is.
 #[cfg(feature = "native-engine")]
 fn push_invalid_opacity(key: &str, op: &StaticSzProperty, out: &mut Vec<InvalidOpacity>) {
     let percent = match (&op.value, format_opacity_value(&op.value)) {
-        (_, None) => None,
+        (_, None) => OpacityFinding::Range,
         (StaticSzValue::Number(number), Some(_)) if *number > 0.0 && *number < 1.0 => {
             // `Display`, never an exponent, as `plainDecimal` writes it.
-            Some(((number * 100.0 * 1e9).round() / 1e9).to_string())
+            OpacityFinding::Fraction(((number * 100.0 * 1e9).round() / 1e9).to_string())
         }
         (_, Some(_)) => return,
     };
@@ -3372,7 +3457,7 @@ pub(crate) fn collect_clamped_factors(
                     ));
                 }
             }
-            StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
+            StaticSzValue::Object(nested) if !is_value_object(&property.key, nested) => {
                 for_each_sz_object_in(&property.key, nested, &mut |object| {
                     collect_clamped_factors(object, out);
                 });
@@ -3577,7 +3662,7 @@ pub(crate) fn collect_spacing_fractions(
                     ));
                 }
             }
-            StaticSzValue::Object(nested) if !is_color_object(&property.key, nested) => {
+            StaticSzValue::Object(nested) if !is_value_object(&property.key, nested) => {
                 for_each_sz_object_in(&property.key, nested, &mut |object| {
                     collect_spacing_fractions(object, out);
                 });
@@ -4111,7 +4196,7 @@ pub(crate) fn collect_underscore_values(object: &StaticSzObject, out: &mut Vec<U
                 }
             }
             StaticSzValue::Object(nested) => {
-                if is_color_object(&property.key, nested) {
+                if is_value_object(&property.key, nested) {
                     collect_color_underscore(&property.key, nested, out);
                 } else {
                     for_each_sz_object_in(&property.key, nested, &mut |object| {
@@ -4129,7 +4214,7 @@ pub(crate) fn collect_underscore_values(object: &StaticSzObject, out: &mut Vec<U
 /// are not sz keys, so it is not walked as an object.
 #[cfg(feature = "native-engine")]
 fn collect_color_underscore(key: &str, nested: &StaticSzObject, out: &mut Vec<UnderscoreValue>) {
-    // `is_color_object` held, so `key` has a prefix and the object a string
+    // `is_value_object` held, so `key` has a prefix and the object a string
     // `color`: the class is always written, and only a bracketed one is asked.
     let found = nested
         .properties
@@ -4141,7 +4226,7 @@ fn collect_color_underscore(key: &str, nested: &StaticSzObject, out: &mut Vec<Un
             _ => None,
         })
         .and_then(|(member, value)| {
-            let class_name = format_color_opacity_object(key, nested, "")?;
+            let class_name = format_value_object(key, nested, "")?;
             class_name.contains('[').then(|| UnderscoreValue {
                 key: member.key.clone(),
                 value: value.clone(),
@@ -4246,7 +4331,7 @@ pub(crate) fn collect_bracketed_values(object: &StaticSzObject, out: &mut Vec<Br
                 }
             }
             StaticSzValue::Object(nested)
-                if property.key != "css" && !is_color_object(&property.key, nested) =>
+                if property.key != "css" && !is_value_object(&property.key, nested) =>
             {
                 for_each_sz_object_in(&property.key, nested, &mut |object| {
                     collect_bracketed_values(object, out);
@@ -4305,8 +4390,8 @@ mod tests {
     use super::{breakpoint_segment, format_static_class, is_dashed_function_call};
     use super::{
         build_mask_radial_classes, build_mask_slot_classes, build_mask_stop_classes,
-        collect_unknown_sz_keys, format_color_opacity_object, format_mask_position,
-        format_mask_size, is_known_sz_key, is_mask_layer_value, is_percent, is_removed_sz_key,
+        collect_unknown_sz_keys, format_mask_position, format_mask_size, format_value_object,
+        is_known_sz_key, is_mask_layer_value, is_percent, is_removed_sz_key,
         is_tailwind_build_function, is_unsigned_decimal, lower_source_ir_classes,
         lower_static_sz_object, needs_brackets, variant_string_prefix,
     };
@@ -4751,7 +4836,7 @@ mod tests {
         collect_invalid_opacities(&object, &mut found);
         let named: Vec<_> = found
             .into_iter()
-            .map(|(key, op, percent, _)| (key, op, percent))
+            .map(|(key, op, finding, _)| (key, op, fraction_percent(finding)))
             .collect();
         assert_eq!(
             named,
@@ -4767,6 +4852,100 @@ mod tests {
                 ),
                 ("bg".to_string(), "-5".to_string(), None),
             ]
+        );
+    }
+
+    /// A value object's class: `size` lowers as the key's own string, `color`
+    /// as a colour, then the shared opacity tail.
+    #[test]
+    fn a_value_object_writes_its_member_then_the_opacity() {
+        let lowered = |key: &str, member: &str, value: &str| {
+            lower_static_sz_object(&StaticSzObject {
+                properties: vec![property(
+                    key,
+                    object(vec![
+                        property(member, StaticSzValue::String(value.to_string())),
+                        property("op", StaticSzValue::Number(50.0)),
+                    ]),
+                )],
+            })
+        };
+        // A variable size is the shadow itself; a variable colour on a shadow
+        // key takes the `color:` hint.
+        assert_eq!(lowered("shadow", "size", "--s"), ["shadow-(--s)/50"]);
+        assert_eq!(lowered("shadow", "color", "--s"), ["shadow-(color:--s)/50"]);
+        // A variable with a call in it is bracketed, a bare one is a reference.
+        assert_eq!(lowered("bg", "color", "--a(b)"), ["bg-[--a(b)]/50"]);
+        assert_eq!(
+            lowered("bg", "color", "--a,var(--b)"),
+            ["bg-[--a,var(--b)]/50"]
+        );
+        assert_eq!(lowered("bg", "color", "--a"), ["bg-(--a)/50"]);
+        // `size` is a value only on a shadow key.
+        assert_eq!(lowered("bg", "size", "sm"), ["bg:size-sm", "bg:op-50"]);
+    }
+
+    /// The member a slash string's help writes: `size` for a shadow on a
+    /// shadow key, `color` for anything else.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn a_slash_string_names_the_member_that_replaces_it() {
+        let members = |key: &str, value: &str| {
+            let mut out = Vec::new();
+            super::collect_slash_opacity_strings(
+                &StaticSzObject {
+                    properties: vec![property(key, StaticSzValue::String(value.to_string()))],
+                },
+                &mut out,
+            );
+            out.into_iter().map(|found| found.1).collect::<Vec<_>>()
+        };
+        assert_eq!(members("shadow", "sm/50"), ["size"]);
+        assert_eq!(members("textShadow", "[0_1px_red]/50"), ["size"]);
+        assert_eq!(members("dropShadow", "(--d)/50"), ["size"]);
+        assert_eq!(members("insetShadow", "--s/50"), ["size"]);
+        assert_eq!(members("shadow", "red-500/50"), ["color"]);
+        // A bracket or a variable on a colour key is a colour.
+        assert_eq!(members("bg", "[#f00]/50"), ["color"]);
+        assert_eq!(members("bg", "--c/50"), ["color"]);
+        // No slash on a size key, no report.
+        assert!(members("p", "4/50").is_empty());
+    }
+
+    /// Only a size held in a variable, with an opacity, is noted.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn only_a_variable_shadow_size_with_an_opacity_is_noted() {
+        let findings = |key: &str, member: &str, value: &str, op: StaticSzValue| {
+            let mut out = Vec::new();
+            collect_invalid_opacities(
+                &StaticSzObject {
+                    properties: vec![property(
+                        key,
+                        object(vec![
+                            property(member, StaticSzValue::String(value.to_string())),
+                            property("op", op),
+                        ]),
+                    )],
+                },
+                &mut out,
+            );
+            out.into_iter()
+                .map(|(.., finding, _)| finding)
+                .collect::<Vec<_>>()
+        };
+        let fifty = || StaticSzValue::Number(50.0);
+        assert_eq!(
+            findings("shadow", "size", "--s!", fifty()),
+            [super::OpacityFinding::VariableShadow]
+        );
+        assert!(findings("shadow", "size", "sm", fifty()).is_empty());
+        assert!(findings("shadow", "color", "--s", fifty()).is_empty());
+        assert!(findings("bg", "color", "--c", fifty()).is_empty());
+        // An `op` that is no opacity is that finding alone.
+        assert_eq!(
+            findings("shadow", "size", "--s", StaticSzValue::Number(150.0)),
+            [super::OpacityFinding::Range]
         );
     }
 
@@ -4799,7 +4978,7 @@ mod tests {
         collect_invalid_opacities(&object, &mut found);
         let named: Vec<_> = found
             .into_iter()
-            .map(|(key, op, percent, _)| (key, op, percent))
+            .map(|(key, op, finding, _)| (key, op, fraction_percent(finding)))
             .collect();
         assert_eq!(
             named,
@@ -4808,6 +4987,15 @@ mod tests {
                 ("from".to_string(), "true".to_string(), None),
             ]
         );
+    }
+
+    /// The percent a `fraction` finding names; none for any other finding.
+    #[cfg(feature = "native-engine")]
+    fn fraction_percent(finding: super::OpacityFinding) -> Option<String> {
+        match finding {
+            super::OpacityFinding::Fraction(percent) => Some(percent),
+            super::OpacityFinding::Range | super::OpacityFinding::VariableShadow => None,
+        }
     }
 
     /// A breakpoint is bracketed unless it is a name or already wrapped at both
@@ -6633,8 +6821,8 @@ mod tests {
             ]
         );
 
-        assert!(format_color_opacity_object("unknown", &StaticSzObject::empty(), "").is_none());
-        assert!(format_color_opacity_object("bg", &StaticSzObject::empty(), "").is_none());
+        assert!(format_value_object("unknown", &StaticSzObject::empty(), "").is_none());
+        assert!(format_value_object("bg", &StaticSzObject::empty(), "").is_none());
         assert!(!is_percent("1.2.3%"));
         assert!(!is_unsigned_decimal("1.2.3"));
     }
