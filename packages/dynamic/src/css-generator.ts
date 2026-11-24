@@ -360,10 +360,16 @@ const COLOR_PROPS: Record<string, string> = {
     ring: '--tw-ring-color',
     'ring-offset': '--tw-ring-offset-color',
     'drop-shadow': '--tw-drop-shadow-color',
+    'text-shadow': '--tw-text-shadow-color',
 };
 
 /** The colour prefixes whose utility can also be the shadow itself. */
-const SHADOW_PREFIXES: ReadonlySet<string> = new Set(['shadow', 'inset-shadow', 'drop-shadow']);
+const SHADOW_PREFIXES: ReadonlySet<string> = new Set([
+    'shadow',
+    'inset-shadow',
+    'drop-shadow',
+    'text-shadow',
+]);
 
 /** Colors that don't use CSS custom properties in Tailwind v4. */
 const DIRECT_COLOR_KEYWORDS = new Set([
@@ -1256,16 +1262,16 @@ function resolveColorDeclaration(utility: string): string | null {
         if (utility !== prefix && !utility.startsWith(`${prefix}-`)) continue;
         const value = utility.slice(prefix.length + 1);
         if (!value) continue;
-        // A prefix in this table is not enough: `bg-cover`, `bg-center` and
-        // `border-[3px]` all live under one, and none of them is a colour.
-        if (classifiedAsOther(utility, 'color')) return null;
-        // A shadow with its own opacity (`shadow-sm/50`), or a drop or inset
-        // shadow's size, is the shadow, not its colour: Tailwind rewrites the
+        // A shadow's size, with an opacity or not (`shadow-sm/50`,
+        // `inset-shadow-xs`), is the shadow, not its colour: Tailwind rewrites the
         // colours inside the theme's shadow at build time, which a rule here
         // cannot do from a variable, so it writes none (`dynamic.mdx`).
         if (SHADOW_PREFIXES.has(prefix) && isShadowValue(slashOpacitySplit(value)?.[0] ?? value)) {
             return '';
         }
+        // A prefix in this table is not enough: `bg-cover`, `bg-center` and
+        // `border-[3px]` all live under one, and none of them is a colour.
+        if (classifiedAsOther(utility, 'color')) return null;
         return `${COLOR_PROPS[prefix]}: ${resolveColorValue(value)}`;
     }
     return null;

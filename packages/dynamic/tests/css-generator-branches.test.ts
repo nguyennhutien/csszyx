@@ -311,6 +311,11 @@ describe('generateDeclarations — a shadow with its own opacity', () => {
         'drop-shadow-md',
         'drop-shadow-md/50',
         'inset-shadow-xs/25',
+        // A size with no opacity on the inset and text shadows: no rule
+        // rather than a spacing or text-colour declaration.
+        'inset-shadow-xs',
+        'text-shadow-sm',
+        'text-shadow-lg/50',
     ])('%s gets no rule', utility => {
         expect(generateDeclarations(utility)).toBe('');
     });
@@ -322,6 +327,9 @@ describe('generateDeclarations — a shadow with its own opacity', () => {
         );
         expect(generateDeclarations('drop-shadow-[#f00]/50')).toBe(
             '--tw-drop-shadow-color: color-mix(in srgb, #f00 50%, transparent)',
+        );
+        expect(generateDeclarations('text-shadow-red-500/50')).toBe(
+            '--tw-text-shadow-color: color-mix(in srgb, var(--color-red-500) 50%, transparent)',
         );
     });
 });
