@@ -1,4 +1,5 @@
 #!/usr/bin/env tsx
+
 /**
  * Emitted-class oracle: does every class csszyx emits actually produce CSS?
  *
@@ -25,9 +26,18 @@
  * theme and no plugins, so anything theme- or plugin-dependent is baselined
  * below rather than checked. A user project gets the project-aware version
  * through the CLI, which must resolve Tailwind from the user's own cwd.
+ *
+ * A class that produces CSS can still produce a declaration the browser
+ * drops: Tailwind serves `col-span-[50px]` as `grid-column: span 50px`, which
+ * no `grid-column` takes. So the declarations of every live class are matched
+ * against the property's grammar with css-tree, the CSS syntax database
+ * stylelint and csso read. A value the lexer cannot judge — `var()`, `calc()`,
+ * `env()` — is left alone, a custom property is any value, and an `@property`
+ * descriptor is no property.
  */
 
 import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -127,6 +137,117 @@ const BASELINE: ReadonlyMap<string, Baseline> = new Map([
         },
     ],
 ]);
+
+/**
+ * Live classes whose declaration CSS rejects, each a tracked defect. Anything
+ * not listed fails the check, and a listed class whose declarations now match
+ * fails it too, so the list only shrinks.
+ */
+const INVALID_BASELINE: ReadonlyMap<string, string> = new Map([
+    ['col-span-[50px]', 'TASK-13.54: `span` takes an integer, not a length'],
+    ['row-span-[50px]', 'TASK-13.54: `span` takes an integer, not a length'],
+    ['justify-baseline', 'TASK-13.54: `justify-content` takes no `baseline`'],
+    ['mask-position-[center_top_1rem]', 'TASK-13.54: `<position>` has no three-value form'],
+    ['text-[--9(4)]', 'TASK-13.55: a dashed function CSS does not define'],
+    ['text-[---x(4)]', 'TASK-13.55: a dashed function CSS does not define'],
+    ['text-[--_x(4)]', 'TASK-13.55: a dashed function CSS does not define'],
+]);
+
+/** The css-tree API this check reads; the package ships no types. */
+interface CssTree {
+    parse(css: string, options: { parseCustomProperty: boolean }): unknown;
+    walk(
+        ast: unknown,
+        options: {
+            visit: 'Declaration';
+            enter(this: { atrule: { name: string } | null }, node: CssDeclaration): void;
+        },
+    ): void;
+    generate(node: unknown): string;
+    lexer: { matchProperty(property: string, value: unknown): { error: unknown } };
+}
+
+/** A css-tree declaration node. */
+interface CssDeclaration {
+    property: string;
+    value: unknown;
+}
+
+const csstree = createRequire(import.meta.url)('css-tree') as CssTree;
+
+/** A value css-tree cannot judge: it resolves only in the browser. */
+const UNJUDGED_VALUE = /\b(?:var|calc|env)\(/;
+
+/**
+ * The declarations in one class's CSS that its property's grammar rejects.
+ *
+ * Cost: linear in the CSS; one lexer match per declaration checked.
+ *
+ * @param css - The CSS Tailwind emits for the class.
+ * @returns `property: value` for each rejected declaration.
+ */
+function invalidDeclarations(css: string): string[] {
+    const invalid: string[] = [];
+    csstree.walk(csstree.parse(css, { parseCustomProperty: false }), {
+        visit: 'Declaration',
+        enter(node) {
+            if (this.atrule?.name === 'property' || node.property.startsWith('--')) return;
+            const value = csstree.generate(node.value);
+            if (UNJUDGED_VALUE.test(value)) return;
+            if (csstree.lexer.matchProperty(node.property, node.value).error) {
+                invalid.push(`${node.property}: ${value}`);
+            }
+        },
+    });
+    return invalid;
+}
+
+/**
+ * Check the declarations of every live class, and report.
+ *
+ * @param oracle - The open design system.
+ * @param oracle.cssFor - CSS per class, null when it emits none.
+ * @param live - The classes that produce CSS.
+ * @param origins - Class → the sz input that produced it.
+ */
+function checkDeclarations(
+    oracle: { cssFor(classes: readonly string[]): Array<string | null> },
+    live: readonly string[],
+    origins: ReadonlyMap<string, string>,
+): void {
+    const found = new Map<string, string[]>();
+    oracle.cssFor(live).forEach((css, index) => {
+        const invalid = css === null ? [] : invalidDeclarations(css);
+        if (invalid.length > 0) found.set(live[index] as string, invalid);
+    });
+    const unbaselined = [...found.keys()].filter(token => !INVALID_BASELINE.has(token));
+    const stale = [...INVALID_BASELINE.keys()].filter(
+        token => live.includes(token) && !found.has(token),
+    );
+    console.log(
+        `\nchecked the declarations of ${live.length} live classes — ${found.size} rejected by CSS, ${unbaselined.length} new`,
+    );
+    if (stale.length > 0) {
+        console.log('\nSTALE invalid-declaration entries — these match their grammar now:');
+        for (const token of stale)
+            console.log(`  ${token.padEnd(32)} ${INVALID_BASELINE.get(token)}`);
+        console.log('\nRemove them from INVALID_BASELINE in scripts/check-emitted-classes.ts.');
+        process.exitCode = 1;
+    }
+    if (unbaselined.length > 0) {
+        console.log('\nNEW declarations CSS rejects — the class is served, the browser drops it:');
+        for (const token of unbaselined) {
+            console.log(
+                `  ${token.padEnd(32)} ${found.get(token)?.join('; ')} <- sz ${origins.get(token)}`,
+            );
+        }
+        console.log(
+            '\nFix the mapping so the class writes a value its property takes, or add it to\n' +
+                'INVALID_BASELINE in scripts/check-emitted-classes.ts with its task.',
+        );
+        process.exitCode = 1;
+    }
+}
 
 /** One corpus record: an sz input and the class string every engine emits. */
 interface CorpusRecord {
@@ -250,6 +371,11 @@ async function main(): Promise<void> {
         process.exitCode = 1;
     }
     reportRefusedVocabulary(oracle.findDead(REFUSED_VOCABULARY));
+    checkDeclarations(
+        oracle,
+        tokens.filter(token => !deadSet.has(token)),
+        origins,
+    );
 
     if (process.exitCode === 1) {
         return;
