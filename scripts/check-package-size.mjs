@@ -343,7 +343,11 @@ export const SIZE_BUDGETS = [
             // Raised to 17,800 on 2026-11-23, measured 17,499: a bracketed value
             // writes the class its key writes for the value without brackets,
             // which takes a trial lowering in production too (ADR 0037 §2).
-            './browser': 17_800,
+            // Raised to 18,150 on 2026-11-25, measured 17,859 (17,657 on `main`):
+            // the shadow size object, and every CSS Values 4 unit bracketed
+            // (`ARBITRARY_LENGTH_UNITS`, which the engine's list is generated
+            // from) where `w: '2lh'` wrote the dead `w-2lh`.
+            './browser': 18_150,
             // `./sz-limits` measured 501 on 2026-10-20 (346 before):
             // `SzDepthError` extends the error class of `./errors`, measured
             // 357 alone, which ships to the browser because the runtime
@@ -401,7 +405,8 @@ export const SIZE_BUDGETS = [
                 // Raised to 17,650 on 2026-11-23, measured 17,343: a bracketed value
                 // writes the class its key writes for the value without brackets,
                 // which takes a trial lowering in production too (ADR 0037 §2).
-                './browser': 17_650,
+                // Raised to 18,000 on 2026-11-25, measured 17,717 (see esbuild).
+                './browser': 18_000,
                 // Measured 2026-10-20: 527 and 393.
                 './sz-limits': 700,
                 './errors': 700,

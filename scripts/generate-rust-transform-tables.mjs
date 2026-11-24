@@ -121,6 +121,7 @@ function readTables() {
             splitShorthandKeys: keyTables.stringObject('SPLIT_SHORTHAND_KEYS'),
             cssVarTypeHints: core.stringObject('CSS_VAR_TYPE_HINTS'),
             alignmentKeys: core.stringSet('ALIGNMENT_KEYS'),
+            arbitraryLengthUnits: core.stringSet('ARBITRARY_LENGTH_UNITS'),
             alignmentCssValueHints: core.stringObject('ALIGNMENT_CSS_VALUE_HINT'),
             migrationNotes: keyTables.stringObject('MIGRATION_NOTES'),
             closedEnumClasses: closedEnums.objectOfStringObjects('CLOSED_ENUM_CLASSES'),
@@ -202,6 +203,7 @@ function renderRust({
     splitShorthandKeys,
     cssVarTypeHints,
     alignmentKeys,
+    arbitraryLengthUnits,
     alignmentCssValueHints,
     migrationNotes,
     closedEnumClasses,
@@ -258,6 +260,10 @@ ${renderMatchArms(cssVarTypeHints)}
         _ => None,
     }
 }
+
+/// The units a numeric value carries in brackets, never as a bare class.
+/// Mirrors \`ARBITRARY_LENGTH_UNITS\`.
+pub(crate) const ARBITRARY_LENGTH_UNITS: &[&str] = &[${arbitraryLengthUnits.map(rustString).join(', ')}];
 
 /// Returns true when a key takes csszyx's short alignment values
 /// (\`start\`, \`between\`), not the CSS longhand. Mirrors \`ALIGNMENT_KEYS\`.

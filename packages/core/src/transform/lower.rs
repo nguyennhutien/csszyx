@@ -3396,11 +3396,6 @@ fn format_abs_number(value: f64) -> String {
     format_number_literal(value.abs())
 }
 
-const CSS_UNITS: &[&str] = &[
-    "px", "rem", "em", "%", "vh", "vw", "ch", "dvh", "dvw", "svh", "svw", "lvh", "lvw", "cqw",
-    "cqh", "deg", "rad", "turn", "grad", "ms", "s", "fr",
-];
-
 /// Matches a numeric ratio with optional decimals and an optional leading sign,
 /// such as `4/2.5`, `16/9`, or `-1/2`.
 pub(crate) fn is_decimal_ratio(value: &str) -> bool {
@@ -3699,13 +3694,15 @@ fn needs_brackets(value: &str) -> bool {
         return true;
     }
 
-    CSS_UNITS.iter().any(|unit| {
-        value.strip_suffix(unit).is_some_and(|prefix| {
-            // Tolerate a leading sign so a negative length (-1px) brackets too.
-            let prefix = prefix.strip_prefix('-').unwrap_or(prefix);
-            !prefix.is_empty() && prefix.chars().all(|c| c.is_ascii_digit() || c == '.')
+    super::generated::tables::ARBITRARY_LENGTH_UNITS
+        .iter()
+        .any(|unit| {
+            value.strip_suffix(unit).is_some_and(|prefix| {
+                // Tolerate a leading sign so a negative length (-1px) brackets too.
+                let prefix = prefix.strip_prefix('-').unwrap_or(prefix);
+                !prefix.is_empty() && prefix.chars().all(|c| c.is_ascii_digit() || c == '.')
+            })
         })
-    })
 }
 
 #[inline]

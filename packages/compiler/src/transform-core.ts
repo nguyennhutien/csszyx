@@ -1642,22 +1642,61 @@ const FRACTION_SUPPORTED_PROPS = new Set([
     'aspect',
 ]);
 
+/**
+ * Every unit a numeric value can carry, which no bare class does: CSS Values 4
+ * lengths (font-relative, viewport, container query, absolute), angles, times
+ * and `fr`. The engine's `needs_brackets` reads this set, generated.
+ */
 const ARBITRARY_LENGTH_UNITS = new Set([
     'px',
     'rem',
     'em',
     '%',
-    'vh',
-    'vw',
+    'ex',
+    'rex',
+    'cap',
+    'rcap',
     'ch',
-    'dvh',
-    'dvw',
-    'svh',
+    'rch',
+    'ic',
+    'ric',
+    'lh',
+    'rlh',
+    'vw',
+    'vh',
+    'vi',
+    'vb',
+    'vmin',
+    'vmax',
     'svw',
-    'lvh',
+    'svh',
+    'svi',
+    'svb',
+    'svmin',
+    'svmax',
     'lvw',
+    'lvh',
+    'lvi',
+    'lvb',
+    'lvmin',
+    'lvmax',
+    'dvw',
+    'dvh',
+    'dvi',
+    'dvb',
+    'dvmin',
+    'dvmax',
     'cqw',
     'cqh',
+    'cqi',
+    'cqb',
+    'cqmin',
+    'cqmax',
+    'cm',
+    'mm',
+    'in',
+    'pt',
+    'pc',
     'deg',
     'rad',
     'turn',
@@ -1666,7 +1705,6 @@ const ARBITRARY_LENGTH_UNITS = new Set([
     's',
     'fr',
 ]);
-const LEADING_DECIMAL_UNITS = new Set(['px', 'rem', 'em', '%', 'vh', 'vw', 'ch']);
 
 /**
  * Returns whether a value is a numeric arbitrary value with a supported unit.
@@ -1677,10 +1715,8 @@ const LEADING_DECIMAL_UNITS = new Set(['px', 'rem', 'em', '%', 'vh', 'vw', 'ch']
 function isArbitraryLength(value: string): boolean {
     const match = /^(-?(?:\d+(?:\.\d+)?|\.\d+))([a-z%]+)?$/.exec(value);
     if (!match) return false;
-    const leadingDecimal = match[1].replace(/^-/, '').startsWith('.');
     const unit = match[2];
-    if (!unit) return leadingDecimal;
-    if (leadingDecimal) return LEADING_DECIMAL_UNITS.has(unit);
+    if (!unit) return match[1].replace(/^-/, '').startsWith('.');
     return ARBITRARY_LENGTH_UNITS.has(unit);
 }
 

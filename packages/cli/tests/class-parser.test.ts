@@ -1000,9 +1000,7 @@ describe('class-parser', () => {
             expect(parseClass('text-[0.8rem]')).toEqual({ prop: 'text', value: '0.8rem' });
             expect(parseClass('text-[16px]')).toEqual({ prop: 'text', value: '16px' });
             expect(parseClass('text-[1.5em]')).toEqual({ prop: 'text', value: '1.5em' });
-            // `text: '-.25cqi'` lowers to `-text-.25cqi` (TASK-13.48), so the
-            // bracket lane is the spelling that writes this class back.
-            expect(parseClass('text-[-.25cqi]')).toEqual({ prop: 'text', value: '[-.25cqi]' });
+            expect(parseClass('text-[-.25cqi]')).toEqual({ prop: 'text', value: '-.25cqi' });
             // Tailwind reads it as a colour; `color: '1.5foo'` writes
             // `text-1.5foo`, no class, so the bracket lane writes it back.
             expect(parseClass('text-[1.5foo]')).toEqual({ prop: 'color', value: '[1.5foo]' });

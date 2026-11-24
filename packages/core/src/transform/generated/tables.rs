@@ -512,6 +512,16 @@ pub(crate) fn css_var_type_hint(key: &str) -> Option<&'static str> {
     }
 }
 
+/// The units a numeric value carries in brackets, never as a bare class.
+/// Mirrors `ARBITRARY_LENGTH_UNITS`.
+pub(crate) const ARBITRARY_LENGTH_UNITS: &[&str] = &[
+    "px", "rem", "em", "%", "ex", "rex", "cap", "rcap", "ch", "rch", "ic", "ric", "lh", "rlh",
+    "vw", "vh", "vi", "vb", "vmin", "vmax", "svw", "svh", "svi", "svb", "svmin", "svmax", "lvw",
+    "lvh", "lvi", "lvb", "lvmin", "lvmax", "dvw", "dvh", "dvi", "dvb", "dvmin", "dvmax", "cqw",
+    "cqh", "cqi", "cqb", "cqmin", "cqmax", "cm", "mm", "in", "pt", "pc", "deg", "rad", "turn",
+    "grad", "ms", "s", "fr",
+];
+
 /// Returns true when a key takes csszyx's short alignment values
 /// (`start`, `between`), not the CSS longhand. Mirrors `ALIGNMENT_KEYS`.
 pub(crate) fn is_alignment_key(key: &str) -> bool {
