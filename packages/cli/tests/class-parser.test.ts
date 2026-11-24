@@ -332,8 +332,9 @@ describe('class-parser', () => {
             expect(parseClass('break-normal')).toEqual({ prop: 'break', value: 'normal' });
             expect(parseClass('break-all')).toEqual({ prop: 'break', value: 'all' });
             expect(parseClass('break-keep')).toEqual({ prop: 'break', value: 'keep' });
-            // break-words migrates to wrap (overflow-wrap) in v4.1
-            expect(parseClass('break-words')).toEqual({ prop: 'wrap', value: 'break-word' });
+            // `break-words` is overflow-wrap; `wrap: 'break-word'` would write
+            // `wrap-break-word`, which Tailwind serves from 4.1 only.
+            expect(parseClass('break-words')).toEqual({ prop: 'break', value: 'words' });
         });
 
         it('overflow wrap (wrap-*)', () => {
@@ -359,10 +360,13 @@ describe('class-parser', () => {
         });
 
         it('font weight numeric', () => {
-            expect(parseClass('font-100')).toEqual({ prop: 'weight', value: 100 });
-            expect(parseClass('font-400')).toEqual({ prop: 'weight', value: 400 });
-            expect(parseClass('font-700')).toEqual({ prop: 'weight', value: 700 });
-            expect(parseClass('font-900')).toEqual({ prop: 'weight', value: 900 });
+            // A number in brackets is a weight, as Tailwind reads it.
+            expect(parseClass('font-[100]')).toEqual({ prop: 'weight', value: 100 });
+            expect(parseClass('font-[550]')).toEqual({ prop: 'weight', value: 550 });
+            // Tailwind serves no bare number: `weight: 700` writes `font-[700]`,
+            // not the class written, so it stays in `className`.
+            expect(parseClass('font-100')).toBeNull();
+            expect(parseClass('font-700')).toBeNull();
         });
 
         it('font family', () => {
@@ -996,8 +1000,12 @@ describe('class-parser', () => {
             expect(parseClass('text-[0.8rem]')).toEqual({ prop: 'text', value: '0.8rem' });
             expect(parseClass('text-[16px]')).toEqual({ prop: 'text', value: '16px' });
             expect(parseClass('text-[1.5em]')).toEqual({ prop: 'text', value: '1.5em' });
-            expect(parseClass('text-[-.25cqi]')).toEqual({ prop: 'text', value: '-.25cqi' });
-            expect(parseClass('text-[1.5foo]')).toEqual({ prop: 'color', value: '1.5foo' });
+            // `text: '-.25cqi'` lowers to `-text-.25cqi` (TASK-13.48), so the
+            // bracket lane is the spelling that writes this class back.
+            expect(parseClass('text-[-.25cqi]')).toEqual({ prop: 'text', value: '[-.25cqi]' });
+            // Tailwind reads it as a colour; `color: '1.5foo'` writes
+            // `text-1.5foo`, no class, so the bracket lane writes it back.
+            expect(parseClass('text-[1.5foo]')).toEqual({ prop: 'color', value: '[1.5foo]' });
             // Arbitrary hex color still → color
             expect(parseClass('text-[#50d71e]')).toEqual({ prop: 'color', value: '#50d71e' });
         });

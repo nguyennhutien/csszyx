@@ -2027,6 +2027,17 @@ becomes `{ bgSize: 'auto 100px' }` and `bg-[position:10px_20px]` becomes
 `{ bgPos: '10px 20px' }`, also in the `bg-(length:--x)` form. 0.17 read both as
 the colour key `bg`. The 4.1 spellings `bg-size-[…]` still read as `bgSize`.
 
+Since 0.18.1, migrate converts a class only to an `sz` value that compiles back
+to it, or to a class Tailwind reads as the same utility. `text-[length:13px]`
+becomes `{ text: '13px' }` instead of the colour `length:13px`, `font-[700]`
+becomes `{ weight: 700 }` instead of the family `700`, `bg-[var(--v)]` becomes
+`{ bg: '--v' }`, and a value whose plain spelling compiles to another class
+keeps its brackets: `origin-[0]` becomes `{ origin: '[0]' }`. `!p-4` converts
+like `p-4!`. Classes Tailwind does not serve, such as `font-700` and
+`from-12.5%`, now stay in `className` instead of becoming a class that does.
+`break-words` becomes `{ break: 'words' }`, which compiles to `break-words` on
+every Tailwind v4; `wrap-break-word` is 4.1 only.
+
 **You are affected** when you run `csszyx migrate` over classes like these.
 
 **The edit.** Resolve the listed classes by hand or through

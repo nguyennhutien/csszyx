@@ -649,11 +649,11 @@ Styling for dark color schemes.
 
 Using design tokens.
 
-| Concept              | CSS Rule                       | Tailwind v4 Class   | `sz` Prop (Object Syntax) | Note                                                   |
-| :------------------- | :----------------------------- | :------------------ | :------------------------ | :----------------------------------------------------- |
-| **Using Theme Var**  | `color: var(--color-mint-500)` | `text-mint-500`     | `{ color: 'mint-500' }`   | **Rule**: Use the utility name derived from variable.  |
-| **Arbitrary Var**    | `width: var(--spacing-4)`      | `w-(--spacing-4)`   | `{ w: '--spacing-4' }`    | **Sugar**: Auto-detects `--` prefix and wraps in `()`. |
-| **Var In Arbitrary** | `padding: var(--my-pad)`       | `p-[var(--my-pad)]` | `{ p: 'var(--my-pad)' }`  |                                                        |
+| Concept              | CSS Rule                       | Tailwind v4 Class   | `sz` Prop (Object Syntax) | Note                                                           |
+| :------------------- | :----------------------------- | :------------------ | :------------------------ | :------------------------------------------------------------- |
+| **Using Theme Var**  | `color: var(--color-mint-500)` | `text-mint-500`     | `{ color: 'mint-500' }`   | **Rule**: Use the utility name derived from variable.          |
+| **Arbitrary Var**    | `width: var(--spacing-4)`      | `w-(--spacing-4)`   | `{ w: '--spacing-4' }`    | **Sugar**: Auto-detects `--` prefix and wraps in `()`.         |
+| **Var In Arbitrary** | `padding: var(--my-pad)`       | `p-[var(--my-pad)]` | `{ p: 'var(--my-pad)' }`  | `csszyx migrate` writes `{ p: '--my-pad' }`, the same padding. |
 
 ## Colors
 

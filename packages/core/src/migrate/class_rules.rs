@@ -68,8 +68,6 @@ pub enum Test {
     ThreeDigits,
     /// `Number(value)` is a finite integer.
     Integer,
-    /// ASCII digits only.
-    Digits,
     /// `12%` or `12.5%`.
     Percent,
     /// A bracketed CSS length, such as `[1.5px]`.
@@ -84,16 +82,19 @@ pub enum Test {
     BracketPositionList,
     /// `[length:10px]` or `(length:--v)`: a value led by this type hint.
     Hinted(&'static str),
+    /// A bracket holding a number alone: `[700]`.
+    BracketNumber,
 }
 
 /// How the matched rule spells the value.
 pub enum Emit {
     Verbatim,
-    Literal(&'static str),
     /// Brackets and parens stripped, underscores read as spaces.
     Unwrapped,
     /// The integer the value reads as.
     Number,
+    /// The number inside the value's brackets.
+    BracketedNumber,
     ParenInner,
     ParenColorInner,
     /// The bracket's inside with underscores read as spaces.
@@ -104,9 +105,6 @@ pub enum Emit {
     ParseValueUnsigned,
     /// The value after a fixed marker, unwrapped.
     AfterMarker(&'static str),
-    /// A `(--name)` reference as the `var()` it stands for, for a key whose
-    /// lowering brackets a bare custom property name.
-    VarReference,
     /// The value after a [`Test::Hinted`] hint: the bracket's inside with
     /// underscores read as spaces, or the bare custom property.
     AfterHint(&'static str),
@@ -142,13 +140,13 @@ macro_rules! rule {
 }
 
 use Emit::{
-    AfterHint, AfterMarker, BracketInner, Literal, Number, ParenColorInner, ParenInner, ParseValue,
-    ParseValueUnsigned, Unwrapped, VarReference, Verbatim,
+    AfterHint, AfterMarker, BracketInner, BracketedNumber, Number, ParenColorInner, ParenInner,
+    ParseValue, ParseValueUnsigned, Unwrapped, Verbatim,
 };
 use Prop::{Key, Prefix, PrefixPos, Reverse};
 use Test::{
-    Always, ArbitraryDimension, Bracket, BracketPositionList, Digits, Hinted, Integer, Is, Keyword,
-    OneOf, Paren, ParenColor, Percent, StartsWith, ThreeDigits,
+    Always, ArbitraryDimension, Bracket, BracketNumber, BracketPositionList, Hinted, Integer, Is,
+    Keyword, OneOf, Paren, ParenColor, Percent, StartsWith, ThreeDigits,
 };
 
 /// Prefixes where the `/` modifier is the utility's own opacity, not a colour.
@@ -248,6 +246,9 @@ pub const RULE_TABLES: &[(&str, &[Rule])] = &[
             rule!(StartsWith("(family-name:"), Key("fontFamily"), Unwrapped),
             rule!(Paren, Key("weight"), ParenInner),
             rule!(StartsWith("[var("), Key("weight"), Unwrapped),
+            // Tailwind reads a number in brackets as a weight: `font-[700]`
+            // read as the family `700` lowered to `font-700`.
+            rule!(BracketNumber, Key("weight"), BracketedNumber),
             // `font-condensed` is not a Tailwind class, so a bare keyword is
             // a family like any other word.
             rule!(Always, Key("fontFamily"), Unwrapped),
@@ -454,16 +455,6 @@ pub const RULE_TABLES: &[(&str, &[Rule])] = &[
         ],
     ),
     ("ease", &[rule!(Always, Key("ease"), ParseValue)]),
-    // `perspective-origin-(--v)` is `perspective-origin: var(--v)`, and the
-    // lowering brackets a bare `--v` for this key: the reference goes in as
-    // the `var()` it stands for.
-    (
-        "perspective-origin",
-        &[
-            rule!(Paren, Reverse, VarReference),
-            rule!(Always, Reverse, ParseValue),
-        ],
-    ),
     // `snap-*` classes are all fixed prop-and-value classes and never reach
     // the prefix rules; a value that does is not one Tailwind has.
     ("snap", &[]),
@@ -503,22 +494,17 @@ pub const RULE_TABLES: &[(&str, &[Rule])] = &[
         )],
     ),
     ("divide", &[rule!(Always, Key("divideColor"), Unwrapped)]),
-    (
-        "break",
-        &[
-            // `break-words` is overflow-wrap, not word-break.
-            rule!(Is("words"), Key("wrap"), Literal("break-word")),
-            rule!(Always, Key("break"), Verbatim),
-        ],
-    ),
+    // `break-words` is `break: 'words'`, which writes it back on every v4:
+    // `wrap: 'break-word'` writes `wrap-break-word`, a 4.1 class.
+    ("break", &[rule!(Always, Key("break"), Verbatim)]),
     ("wrap", &[rule!(Always, Key("wrap"), Verbatim)]),
 ];
 
-/// A percentage, a bare number or an arbitrary length is a colour-stop
-/// position; anything else is the stop's colour.
+/// A percentage or an arbitrary length is a colour-stop position; anything
+/// else is the stop's colour. `from-10` is no position: read as one it wrote
+/// `from-10%`.
 const GRADIENT_STOP_RULES: &[Rule] = &[
     rule!(Percent, PrefixPos, Unwrapped),
-    rule!(Digits, PrefixPos, Unwrapped),
     rule!(ArbitraryDimension, PrefixPos, Unwrapped),
     rule!(Always, Prefix, Unwrapped),
 ];
@@ -559,7 +545,6 @@ fn matches(test: &Test, shape: &Shape<'_>) -> bool {
         OneOf(choices) => choices.contains(&value),
         ThreeDigits => value.len() == 3 && all_digits(value),
         Integer => shape.is_integer(),
-        Digits => all_digits(value),
         Percent => value.strip_suffix('%').is_some_and(is_decimal_digits),
         ArbitraryDimension => is_arbitrary_dimension(value),
         Bracket => shape.bracket.is_some(),
@@ -574,6 +559,7 @@ fn matches(test: &Test, shape: &Shape<'_>) -> bool {
                 && tables::bg_position_keywords(inner.split(' ').next().unwrap_or_default())
         }),
         Hinted(hint) => after_hint(shape, hint, Judge::default()).is_some(),
+        BracketNumber => shape.bracket.and_then(js_number).is_some(),
     }
 }
 
@@ -607,9 +593,9 @@ pub fn emit(
     let value = shape.value;
     Some(match &rule.emit {
         Verbatim => SzValue::from(value),
-        Literal(literal) => SzValue::from(*literal),
         Unwrapped => SzValue::from(parse_string_value(value, judge)),
         Number => SzValue::Number(shape.number.unwrap_or(f64::NAN)),
+        BracketedNumber => SzValue::Number(shape.bracket.and_then(js_number).unwrap_or(f64::NAN)),
         ParenInner => SzValue::from(reference_value(shape.paren.unwrap_or_default())),
         ParenColorInner => SzValue::from(
             shape
@@ -621,7 +607,6 @@ pub fn emit(
         ParseValue => return parse_value(prefix, value, negative, judge),
         ParseValueUnsigned => return parse_value(prefix, value, false, judge),
         AfterMarker(marker) => SzValue::from(parse_string_value(&value[marker.len()..], judge)),
-        VarReference => SzValue::from(var_reference(shape.paren.unwrap_or_default())),
         AfterHint(hint) => SzValue::from(after_hint(shape, hint, judge).unwrap_or_default()),
     })
 }
@@ -678,16 +663,6 @@ fn reference_value(inner: &str) -> String {
         format!("({inner})")
     } else {
         inner.to_string()
-    }
-}
-
-/// [`reference_value`] for a key whose lowering brackets a bare name: the
-/// bare name goes in as the `var()` it stands for.
-fn var_reference(inner: &str) -> String {
-    if is_hinted(inner) {
-        format!("({inner})")
-    } else {
-        format!("var({inner})")
     }
 }
 

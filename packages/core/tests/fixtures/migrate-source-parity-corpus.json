@@ -962,6 +962,10 @@
   {
    "file": "apps/docs/src/components/landing/SearchModal.tsx",
    "source": "import { useState, useEffect, useRef, useCallback } from 'react';\n\ninterface SearchResult {\n    url: string;\n    meta: { title: string };\n    excerpt: string;\n}\n\n// Pagefind is a build-time artifact served at /pagefind/pagefind.js.\n// It is not available in dev mode — we handle that gracefully.\n// eslint-disable-next-line @typescript-eslint/no-explicit-any\nlet pagefindApi: any = null;\n\n// Runtime URL kept in a variable (not an import() literal) so neither Vite's\n// import-analysis nor TypeScript tries to resolve it at build time. The\n// previous `new Function('return import(...)')` trick did the same job but\n// counts as eval under the site's CSP — it threw at module scope and took\n// the whole landing-header island (and this modal) down with it.\nconst PAGEFIND_URL = '/pagefind/pagefind.js';\n\nasync function loadPagefind() {\n    if (pagefindApi) return pagefindApi;\n    try {\n        pagefindApi = await import(/* @vite-ignore */ PAGEFIND_URL);\n        await pagefindApi.init();\n    } catch {\n        pagefindApi = null;\n    }\n    return pagefindApi;\n}\n\nfunction sanitizeExcerpt(html: string): string {\n    const re = /<\\/?(?!mark\\b)[a-z][^>]*>/gi;\n    let s = html;\n    let prev: string;\n    do {\n        prev = s;\n        s = s.replace(re, '');\n    } while (s !== prev);\n    return s;\n}\n\ninterface Props {\n    isOpen: boolean;\n    onClose: () => void;\n}\n\nexport default function SearchModal({ isOpen, onClose }: Props) {\n    const [query, setQuery] = useState('');\n    const [results, setResults] = useState<SearchResult[]>([]);\n    const [loading, setLoading] = useState(false);\n    const [unavailable, setUnavailable] = useState(false);\n    const inputRef = useRef<HTMLInputElement>(null);\n    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);\n\n    useEffect(() => {\n        if (isOpen) {\n            requestAnimationFrame(() => inputRef.current?.focus());\n        } else {\n            setQuery('');\n            setResults([]);\n            setLoading(false);\n            setUnavailable(false);\n        }\n    }, [isOpen]);\n\n    // Close on Escape\n    useEffect(() => {\n        if (!isOpen) return;\n        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };\n        window.addEventListener('keydown', onKey);\n        return () => window.removeEventListener('keydown', onKey);\n    }, [isOpen, onClose]);\n\n    // Lock body scroll while open — prevents the page behind the backdrop from\n    // scrolling on wheel/touch. Preserves the caller's original overflow value.\n    useEffect(() => {\n        if (!isOpen) return;\n        const { body } = document;\n        const prevOverflow = body.style.overflow;\n        body.style.overflow = 'hidden';\n        return () => { body.style.overflow = prevOverflow; };\n    }, [isOpen]);\n\n    const doSearch = useCallback(async (q: string) => {\n        if (!q.trim()) {\n            setResults([]);\n            setLoading(false);\n            return;\n        }\n        setLoading(true);\n        setUnavailable(false);\n        const api = await loadPagefind();\n        if (!api) {\n            setUnavailable(true);\n            setLoading(false);\n            return;\n        }\n        try {\n            const search = await api.search(q);\n            // eslint-disable-next-line @typescript-eslint/no-explicit-any\n            const data: SearchResult[] = await Promise.all(search.results.slice(0, 5).map((r: any) => r.data()));\n            setResults(data);\n        } catch {\n            setResults([]);\n        } finally {\n            setLoading(false);\n        }\n    }, []);\n\n    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {\n        const q = e.target.value;\n        setQuery(q);\n        if (debounceRef.current) clearTimeout(debounceRef.current);\n        debounceRef.current = setTimeout(() => doSearch(q), 220);\n    };\n\n    if (!isOpen) return null;\n\n    return (\n        <div\n            className=\"search-overlay\"\n            sz={{ position: 'fixed', inset: 0, z: 100, display: 'flex', items: 'start', justify: 'center', pt: 24, px: 4 }}\n            onClick={onClose}\n        >\n            <div\n                className=\"search-modal\"\n                sz={{ w: 'full', maxW: '2xl', rounded: '2xl', overflow: 'hidden', shadow: '2xl' }}\n                onClick={(e) => e.stopPropagation()}\n            >\n                {/* Input row */}\n                <div className=\"search-input-row\" sz={{ display: 'flex', items: 'center', px: 4, gap: 3 }}>\n                    <span\n                        className=\"material-symbols-outlined search-icon\"\n                        sz={{ shrink: 0 }}\n                    >search</span>\n                    <input\n                        ref={inputRef}\n                        type=\"text\"\n                        value={query}\n                        onChange={handleChange}\n                        placeholder=\"Search docs...\"\n                        className=\"search-input\"\n                    />\n                    <kbd className=\"search-esc-key\" onClick={onClose}>Esc</kbd>\n                </div>\n\n                {/* Results list */}\n                {results.length > 0 && (\n                    <ul className=\"search-results-list\" sz={{ py: 1 }}>\n                        {results.map((result, i) => (\n                            <li key={i}>\n                                <a\n                                    href={result.url}\n                                    className=\"search-result\"\n                                    sz={{ display: 'block', px: 4, py: 3 }}\n                                    onClick={onClose}\n                                >\n                                    <div className=\"search-result-title\">{result.meta.title}</div>\n                                    <div\n                                        className=\"search-result-excerpt\"\n                                        dangerouslySetInnerHTML={{ __html: sanitizeExcerpt(result.excerpt) }}\n                                    />\n                                </a>\n                            </li>\n                        ))}\n                    </ul>\n                )}\n\n                {/* Loading */}\n                {loading && (\n                    <p className=\"search-state\">Searching…</p>\n                )}\n\n                {/* No results */}\n                {!loading && query.trim() && results.length === 0 && !unavailable && (\n                    <p className=\"search-state\">No results for &ldquo;{query}&rdquo;</p>\n                )}\n\n                {/* Pagefind not available (dev mode) */}\n                {unavailable && (\n                    <p className=\"search-state\">Search is only available in the production build.</p>\n                )}\n            </div>\n        </div>\n    );\n}\n"
+  },
+  {
+   "file": "font-legacy/Snippet.tsx",
+   "source": "<div sz={{ font: '700' }} />"
   }
  ],
  "cases": [
@@ -1270,7 +1274,7 @@
     "code": "<div className=\"\" /><span className=\"   \" />",
     "changed": false,
     "warnings": [
-     "Parse error in static-empty/Snippet.tsx: Adjacent JSX elements must be wrapped in an enclosing tag. Did you want a JSX fragment <>...</>? (1:20)"
+     "Parse error in static-empty/Snippet.tsx: Adjacent JSX elements must be wrapped in an enclosing tag."
     ],
     "stats": {
      "classNamesTransformed": 0,
@@ -1355,7 +1359,7 @@
    "src": 10,
    "options": {},
    "result": {
-    "code": "<div sz={{ p: 4, color: '😀' }}>😀</div>",
+    "code": "<div sz={{ p: 4, color: '[😀]' }}>😀</div>",
     "changed": true,
     "warnings": [],
     "stats": {
@@ -1374,7 +1378,7 @@
     "injectTodos": true
    },
    "result": {
-    "code": "<div sz={{ p: 4, color: '😀' }}>😀</div>",
+    "code": "<div sz={{ p: 4, color: '[😀]' }}>😀</div>",
     "changed": true,
     "warnings": [],
     "stats": {
@@ -1456,16 +1460,14 @@
    "src": 13,
    "options": {},
    "result": {
-    "code": "<div className=\"!p-4\" sz={{ m: '2!' }} />",
+    "code": "<div sz={{ p: '4!', m: '2!' }} />",
     "changed": true,
     "warnings": [],
     "stats": {
      "classNamesTransformed": 1,
      "classNamesSkipped": 0,
      "classNamesSkippedComponent": 0,
-     "classesUnrecognized": [
-      "!p-4"
-     ],
+     "classesUnrecognized": [],
      "szKeysNormalized": 0
     },
     "potentiallyUnusedImports": []
@@ -2086,7 +2088,7 @@
     "code": "<div className={} />",
     "changed": false,
     "warnings": [
-     "Parse error in expr-empty/Snippet.tsx: JSX attributes must only be assigned a non-empty expression. (1:15)"
+     "Parse error in expr-empty/Snippet.tsx: JSX attributes must only be assigned a non-empty 'expression'."
     ],
     "stats": {
      "classNamesTransformed": 0,
@@ -2927,7 +2929,7 @@
     "code": "<div className={cn(\"p-4\")} /><div className={cx(\"p-4\")} /><div className={twMerge(\"p-4\")} /><div className={classNames(\"p-4\")} /><div className={classnames(\"p-4\")} />",
     "changed": false,
     "warnings": [
-     "Parse error in clsx-names/Snippet.tsx: Adjacent JSX elements must be wrapped in an enclosing tag. Did you want a JSX fragment <>...</>? (1:29)"
+     "Parse error in clsx-names/Snippet.tsx: Adjacent JSX elements must be wrapped in an enclosing tag."
     ],
     "stats": {
      "classNamesTransformed": 0,
@@ -4787,7 +4789,7 @@
     "code": "<div className=\"p-4\"",
     "changed": false,
     "warnings": [
-     "Parse error in parse-error-unclosed/Snippet.tsx: Unexpected token (1:20)"
+     "Parse error in parse-error-unclosed/Snippet.tsx: Unexpected token"
     ],
     "stats": {
      "classNamesTransformed": 0,
@@ -4805,7 +4807,7 @@
     "code": "<div className=\"p-4\"",
     "changed": false,
     "warnings": [
-     "Parse error in parse-error-unclosed/snippet.jsx: Unexpected token (1:20)"
+     "Parse error in parse-error-unclosed/snippet.jsx: Unexpected token"
     ],
     "stats": {
      "classNamesTransformed": 0,
@@ -4823,7 +4825,7 @@
     "code": "<div className=\"p-4\"",
     "changed": false,
     "warnings": [
-     "Parse error in parse-error-unclosed/snippet.js: Unexpected token (1:20)"
+     "Parse error in parse-error-unclosed/snippet.js: Unexpected token"
     ],
     "stats": {
      "classNamesTransformed": 0,
@@ -4841,7 +4843,7 @@
     "code": "const = ; className",
     "changed": false,
     "warnings": [
-     "Parse error in parse-error-garbage/Snippet.tsx: Unexpected token (1:6)"
+     "Parse error in parse-error-garbage/Snippet.tsx: Unexpected token"
     ],
     "stats": {
      "classNamesTransformed": 0,
@@ -4859,7 +4861,7 @@
     "code": "<div className=\"p-4\"></span>",
     "changed": false,
     "warnings": [
-     "Parse error in parse-error-bad-jsx/Snippet.tsx: Expected corresponding JSX closing tag for <div>. (1:21)"
+     "Parse error in parse-error-bad-jsx/Snippet.tsx: Expected corresponding JSX closing tag for 'div'."
     ],
     "stats": {
      "classNamesTransformed": 0,
@@ -7002,6 +7004,23 @@
      "classNamesSkippedComponent": 0,
      "classesUnrecognized": [],
      "szKeysNormalized": 0
+    },
+    "potentiallyUnusedImports": []
+   }
+  },
+  {
+   "src": 236,
+   "options": {},
+   "result": {
+    "code": "<div sz={{ weight: '700' }} />",
+    "changed": true,
+    "warnings": [],
+    "stats": {
+     "classNamesTransformed": 0,
+     "classNamesSkipped": 0,
+     "classNamesSkippedComponent": 0,
+     "classesUnrecognized": [],
+     "szKeysNormalized": 1
     },
     "potentiallyUnusedImports": []
    }
