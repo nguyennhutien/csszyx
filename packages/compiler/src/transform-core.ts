@@ -6,11 +6,7 @@
  * like hover, focus, etc.
  */
 
-import {
-    __resetStringColorOpacityWarnings,
-    isDroppedSlashOpacity,
-    warnStringColorOpacity,
-} from './color-validation.js';
+import { isBackgroundGradientString, modifierOp, slashOpacitySplit } from './color-modifier.js';
 import type {
     SzDiagnosticIssue,
     SzMergeGroup,
@@ -30,7 +26,13 @@ import { own } from './own.js';
 import type { ParserMode } from './parser-mode.js';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
 import { SZ_CAP_CSS_WIDE_BRACKET, SZ_CAPABILITIES } from './sz-capabilities.generated.js';
-import { szNodeWarningsUnmuted, szWarningsQuiet } from './sz-dev-warnings.js';
+import {
+    szNodeWarningsUnmuted,
+    szWarningHeld,
+    szWarningsMuted,
+    szWarningsQuiet,
+    withSzWarningsMuted,
+} from './sz-dev-warnings.js';
 import {
     BOOLEAN_SHORTHANDS,
     CLAMPED_FACTOR_KEYS,
@@ -129,7 +131,9 @@ import {
     OPTIONS_OBJECT_REQUIRED,
     PER_SIDE_BORDER_STYLE,
     PROPERTY_OBJECT,
+    REDUNDANT_BRACKET,
     REMOVED_KEY,
+    SLASH_OPACITY_STRING,
     suggestSzKey,
     szRender,
     szReport,
@@ -646,10 +650,12 @@ const warnedAlignmentValues = new Set<string>();
  * @param written - Its value, as written.
  */
 function warnAlignmentValue(rawKey: string, written: string): void {
-    if (process.env.NODE_ENV !== 'production') {
+    const hint =
+        process.env.NODE_ENV !== 'production' ? own(ALIGNMENT_CSS_VALUE_HINT, written) : undefined;
+    // Asked once there is something to say: a muted trial lowering counts it
+    // as a warning held back. Not the Node gate, so it prints in the browser.
+    if (process.env.NODE_ENV !== 'production' && hint !== undefined && !szWarningHeld()) {
         const value = written;
-        const hint = own(ALIGNMENT_CSS_VALUE_HINT, value);
-        if (hint === undefined) return;
         const sig = `${rawKey}:${value}`;
         if (warnedAlignmentValues.has(sig)) return;
         warnedAlignmentValues.add(sig);
@@ -1133,7 +1139,7 @@ export function normalizeArbitraryVariant(key: string): string {
  */
 export function normalizeArbitraryValue(value: string): string {
     // A value in the brackets csszyx writes itself never gets here: it is
-    // reported at its key (`bracketWrappedInner`).
+    // read at its key (`bracketSpelling`).
     return normalizeDeclarationValue(value);
 }
 
@@ -1143,26 +1149,217 @@ export function normalizeArbitraryValue(value: string): string {
  */
 const PAREN_VARIABLE = /^\(--[^()]*\)$/;
 
+/** A type hint or a property before the value: `[length:13px]`, `[color:red]`. */
+const BRACKET_TYPE_HINT = /^[a-z][a-z-]*:/;
+
+/** A fraction of two integers, which is no CSS value on its own: `[1/2]`. */
+const DIGIT_FRACTION = /^\d+\/\d+$/;
+
+/** A lone variable with no fallback, spelled `--x` on the main lane. */
+const LONE_VARIABLE = /^var\(\s*(--[\w-]+)\s*\)$/;
+
+/** A bracket class with a modifier after it (`[#f00]/50`), written as given. */
+const BRACKET_THEN_MODIFIER = /^\[[^[\]]+\]\/[^[\]/]+$/;
+
 /**
- * The value inside the brackets `value` starts and ends with, its sign kept in
- * front (`-[1px]` is `-1px`) and an important modifier behind (`[1px]!` is
- * `1px!`), or the variable inside the parentheses csszyx writes for one
- * (`(--brand)` is `--brand`), or `undefined` when it is not wrapped. The
- * first and last bracket need not be one pair here (`[a] 1fr [b]`);
- * `dropBracketedValue` tells them apart on the keys whose CSS takes grid line
- * names. Mirrors `bracket_wrapped_inner`.
+ * A value as the main lane spells it: a lone `var(--x)` is `--x`, and a
+ * trailing `!` stays. Mirrors `main_spelling`.
  *
- * @param value - The value as written.
- * @returns What to write instead, or `undefined`.
+ * @param value - The value without its brackets.
+ * @returns The spelling to lower and to name.
  */
-function bracketWrappedInner(value: string): string | undefined {
+function mainSpelling(value: string): string {
+    const bang = value.endsWith('!') ? '!' : '';
+    const variable = LONE_VARIABLE.exec(bang ? value.slice(0, -1) : value);
+    return variable ? `${variable[1]}${bang}` : value;
+}
+
+/**
+ * Whether a class is an arbitrary one, a value in brackets or a variable in
+ * parentheses, which is the class a bracketed spelling stands for.
+ *
+ * @param className - The class, without a variant prefix.
+ * @returns True for `w-[10px]`, `bg-(image:--x)`; false for `p-4`.
+ */
+function isArbitraryClass(className: string): boolean {
+    return /[[(]/.test(className);
+}
+
+/**
+ * Whether the class a key writes for a value keeps the type hint its
+ * bracketed spelling named, or needs none: `text-[13px]` for `length`, but
+ * not `text-(length:--x)` for `color`. Mirrors `keeps_type_hint`.
+ *
+ * @param className - The class the key writes for the value without its hint.
+ * @param hint - The hint, without its `:`.
+ * @returns True when writing the value without its hint sets the same type.
+ */
+function keepsTypeHint(className: string, hint: string): boolean {
+    const open = className.search(/[[(]/);
+    if (open < 0) return false;
+    const written = /^([a-z][a-z-]*):/.exec(className.slice(open + 1));
+    return written === null || written[1] === hint;
+}
+
+/**
+ * What a value in brackets is (ADR 0037 §2). `emit` is the class `key-[…]`
+ * without its variant prefix, written when the key's own lowering of `inner`
+ * writes a class that is not arbitrary. `form` is the `bracketed-value` form
+ * of a value that writes nothing: `unwrap` for a shape the brackets cannot
+ * carry, `escape` for brackets that do not wrap the value as one pair. `inner`
+ * is what to write on the main lane, or the value without its outer pair on
+ * `escape`; `hint` is the type hint `unwrap` took off it.
+ */
+type BracketSpelling =
+    | { readonly emit: string; readonly inner: string }
+    | { readonly form: 'unwrap' | 'escape'; readonly inner: string; readonly hint?: string };
+
+/** A second spelling of an arbitrary class ({@link BracketSpelling}). */
+type BracketEmit = Extract<BracketSpelling, { readonly emit: string }>;
+
+/** A value in brackets that writes nothing ({@link BracketSpelling}). */
+type BracketDrop = Exclude<BracketSpelling, BracketEmit>;
+
+/**
+ * Read a value in the brackets (or the parentheses of a variable) csszyx
+ * writes itself, or `undefined` when the value has none at either end and is
+ * lowered as written. A custom property's value is a declaration value, where
+ * `[a]` is a grid line name, so it never is one. On a key whose CSS takes grid
+ * line names, a value whose first bracket closes before its end
+ * (`[a] 1fr [b]`) names lines and lowers. Mirrors `bracket_spelling`.
+ *
+ * @param key - The sz key.
+ * @param value - The value as written.
+ * @returns How the value is written, or `undefined`.
+ */
+function bracketSpelling(key: string, value: string): BracketSpelling | undefined {
+    if (key.startsWith('--')) return undefined;
     const bang = value.endsWith('!') ? '!' : '';
     const body = bang ? value.slice(0, -1) : value;
-    if (PAREN_VARIABLE.test(body)) return `${body.slice(1, -1)}${bang}`;
-    const sign = body.startsWith('-') ? '-' : '';
-    return body.startsWith('[', sign.length) && body.endsWith(']')
-        ? `${sign}${body.slice(sign.length + 1, -1)}${bang}`
-        : undefined;
+    const grid = GRID_LINE_NAME_KEYS.has(key) && /[[\]]/.test(body);
+    // A sign is no part of a grid template, whatever its brackets.
+    const pair = grid && !body.startsWith('-') ? outerBracketPair(body) : undefined;
+    if (pair === false) return undefined;
+    if (PAREN_VARIABLE.test(body)) return { form: 'unwrap', inner: `${body.slice(1, -1)}${bang}` };
+    const lead = body.startsWith('-[') || body.startsWith('![') ? body[0] : '';
+    return wrappedSpelling(key, value, body.slice(lead.length), lead, bang, grid, pair);
+}
+
+/**
+ * Read what follows a sign or a `!` ({@link bracketSpelling}): the value
+ * written as given when its brackets are no pair around it, a shape that
+ * does not pair, or the value inside one pair.
+ *
+ * @param key - The sz key.
+ * @param value - The value as written.
+ * @param rest - What follows the sign or `!`.
+ * @param lead - The sign or `!` before the brackets, or nothing.
+ * @param bang - The `!` after the value, or nothing.
+ * @param grid - Whether the key takes grid line names and the value has brackets.
+ * @param pair - Whether one pair wraps the whole grid template, if they balance.
+ * @returns How the value is written, or `undefined`.
+ */
+function wrappedSpelling(
+    key: string,
+    value: string,
+    rest: string,
+    lead: string,
+    bang: string,
+    grid: boolean,
+    pair: boolean | undefined,
+): BracketSpelling | undefined {
+    const opens = rest.startsWith('[');
+    const closes = rest.endsWith(']');
+    if (!lead && BRACKET_THEN_MODIFIER.test(rest)) return undefined;
+    // Balanced line names that do not wrap the template (`[a] 1fr`).
+    if (pair === true && !(opens && closes)) return undefined;
+    // A bracket at the end with none before it closes nothing (`10px]`).
+    if (!opens && !(closes && !rest.includes('['))) {
+        return grid ? { form: 'escape', inner: value } : undefined;
+    }
+    if (!opens || !closes || rest.length < 3) return { form: 'escape', inner: value };
+    const inner = peelGridPairs(rest.slice(1, -1), pair);
+    const unpaired = grid ? pair === undefined : /[[\]]/.test(inner);
+    return innerSpelling(key, inner, lead, bang, unpaired);
+}
+
+/**
+ * Take every pair around a whole grid template off at once, so one lowering
+ * of the template stands for the value however deep it is wrapped; a pair
+ * with no bracket inside is a line name (`[a]`) and stays. Mirrors the loop
+ * in `bracket_spelling`.
+ *
+ * @param inner - The value without its outer pair.
+ * @param pair - Whether that pair wrapped a grid template.
+ * @returns The template.
+ */
+function peelGridPairs(inner: string, pair: boolean | undefined): string {
+    let template = inner;
+    while (
+        pair &&
+        template.startsWith('[') &&
+        template.endsWith(']') &&
+        template.slice(1, -1).includes('[') &&
+        outerBracketPair(template) === true
+    ) {
+        template = template.slice(1, -1);
+    }
+    return template;
+}
+
+/**
+ * Read the value inside one pair of brackets ({@link bracketSpelling}): a
+ * shape the brackets cannot carry, a type hint, or a second spelling of the
+ * key's arbitrary class.
+ *
+ * @param key - The sz key.
+ * @param inner - The value inside the pair.
+ * @param lead - The sign or `!` before the brackets, or nothing.
+ * @param bang - The `!` after the value, or nothing.
+ * @param unpaired - Whether brackets inside do not pair: on a grid key, a
+ *   template whose brackets do not balance; elsewhere, any bracket inside.
+ * @returns How the value is written.
+ */
+function innerSpelling(
+    key: string,
+    inner: string,
+    lead: string,
+    bang: string,
+    unpaired: boolean,
+): BracketSpelling {
+    const written = `${lead === '-' ? '-' : ''}${inner}${lead === '!' ? '!' : bang}`;
+    if (unpaired) return { form: 'escape', inner: written };
+    if (lead || inner.startsWith('--') || DIGIT_FRACTION.test(inner)) {
+        return { form: 'unwrap', inner: written };
+    }
+    if (BRACKET_TYPE_HINT.test(inner)) {
+        const colon = inner.indexOf(':');
+        const hinted = mainSpelling(`${inner.slice(colon + 1)}${bang}`);
+        return { form: 'unwrap', inner: hinted, hint: inner.slice(0, colon) };
+    }
+    const utility = arbitraryUtility(key);
+    return utility === undefined
+        ? { form: 'unwrap', inner: written }
+        : {
+              emit: `${utility}-[${normalizeArbitraryValue(inner)}]${bang}`,
+              inner: mainSpelling(written),
+          };
+}
+
+/**
+ * The utility a key writes an arbitrary value with, or `undefined` for a key
+ * that has none: an alias or a removed key, which emits nothing, a key that
+ * takes only a boolean, and a key whose CSS closes its value set. Mirrors
+ * `arbitrary_utility`.
+ *
+ * @param key - The sz key.
+ * @returns The utility, or `undefined`.
+ */
+function arbitraryUtility(key: string): string | undefined {
+    if (ALIAS_OR_REMOVED_KEYS.has(key) || FLAG_ONLY_KEYS.has(key) || CLOSED_ENUM_LOOKUP.has(key)) {
+        return undefined;
+    }
+    return own(PROPERTY_MAP, key);
 }
 
 /**
@@ -1241,57 +1438,129 @@ function outerBracketPair(value: string): boolean | undefined {
 }
 
 /**
- * Whether a key's value is wrapped in the brackets csszyx writes itself, which
- * is reported and emits nothing. A custom property's value is a declaration
- * value, where `[a]` is a grid line name, so it never is. On a key whose CSS
- * takes grid line names, only one pair around the whole value is a wrapping:
- * `[a] 1fr [b]` names two lines and lowers.
- *
- * @param key - The sz key.
- * @param value - Its value.
- * @returns True when the value is dropped.
- */
-function dropBracketedValue(key: string, value: SzValue): boolean {
-    if (typeof value !== 'string' || key.startsWith('--')) return false;
-    let inner = bracketWrappedInner(value);
-    if (GRID_LINE_NAME_KEYS.has(key) && /[[\]]/.test(value)) {
-        // A sign is no part of a grid template, whatever its brackets.
-        const pair = value.startsWith('-') ? undefined : outerBracketPair(value);
-        if (pair === false) return false;
-        if (pair === undefined) inner ??= value;
-    }
-    if (inner === undefined) return false;
-    warnBracketedValue(key, value, inner);
-    return true;
-}
-
-const _warnedBracketedValues = new Set<string>();
-
-/**
- * Name a value in the brackets csszyx writes itself; nothing is emitted for it.
- * What to write is offered unless brackets remain inside on a key whose CSS
- * takes no grid line names (`p: '[a] 1 [b]'`): no `sz` value of that key
- * carries one. Mirrors `collect_bracketed_values`.
+ * Lower a value in the brackets csszyx writes itself ({@link bracketSpelling})
+ * as its key lowers the value without them (ADR 0037 §2). When that writes an
+ * arbitrary class, it is the class, and when it writes nothing, nothing is
+ * written; either way what that lowering reports is the report, and only a
+ * value it says nothing about is named, `redundant-bracket` or
+ * `bracketed-value`. When it writes a bare class (`p: 4` → `p-4`), the
+ * brackets are the only spelling of `key-[…]`, which is written unnamed.
+ * Mirrors `lower_bracketed_value` and `collect_bracketed_values`.
  *
  * @param key - The sz key.
  * @param value - The value as written.
- * @param inner - The value without its outer brackets.
+ * @param szProp - The object it sits in.
+ * @param prefix - The variant prefix in effect.
+ * @param classes - Where the class goes.
+ * @returns True when the value was one and was lowered here.
  */
-function warnBracketedValue(key: string, value: string, inner: string): void {
+function collectBracketedValue(
+    key: string,
+    value: SzValue,
+    szProp: SzObject,
+    prefix: string,
+    classes: string[],
+): boolean {
+    if (typeof value !== 'string') return false;
+    const spelling = bracketSpelling(key, value);
+    if (spelling === undefined) return false;
+    const lowerInner = (): string[] => {
+        const lowered: string[] = [];
+        collectTransformProperty(key, spelling.inner, '', szProp, lowered);
+        return lowered;
+    };
+    if ('emit' in spelling) writeBracketedClass(key, value, spelling, lowerInner, prefix, classes);
+    else nameDroppedBracket(key, value, spelling, lowerInner);
+    return true;
+}
+
+/**
+ * Write the class of a second spelling of an arbitrary class, and say what
+ * its value without brackets says, or name it `redundant-bracket`.
+ *
+ * @param key - The sz key.
+ * @param value - The value as written.
+ * @param spelling - The class `key-[…]` and the value without brackets.
+ * @param lowerInner - Lowers the value without brackets on the same key.
+ * @param prefix - The variant prefix in effect.
+ * @param classes - Where the class goes.
+ */
+function writeBracketedClass(
+    key: string,
+    value: string,
+    spelling: BracketEmit,
+    lowerInner: () => string[],
+    prefix: string,
+    classes: string[],
+): void {
+    const { result: plain, held } = withSzWarningsMuted(lowerInner);
+    const [own] = plain;
+    if (plain.length > 1 || (own !== undefined && !isArbitraryClass(own))) {
+        classes.push(`${prefix}${spelling.emit}`);
+        return;
+    }
+    if (own !== undefined) classes.push(`${prefix}${own}`);
+    const token = `${key}:${value}`;
+    // A trial that reaches a bracketed value again (`gridCols: '[[a]]'`)
+    // asks no gate for it: its record restates the value being tried.
     if (
         process.env.NODE_ENV !== 'production' &&
+        !szWarningsMuted() &&
         szNodeWarningsUnmuted() &&
-        !_warnedBracketedValues.has(`${key}:${value}`)
+        !_warnedBracketedValues.has(token)
     ) {
-        _warnedBracketedValues.add(`${key}:${value}`);
-        const offered =
-            GRID_LINE_NAME_KEYS.has(key) && /[[\]]/.test(value)
-                ? !value.startsWith('-') && outerBracketPair(value) === true
-                : !/[[\]]/.test(inner);
-        const args = { form: offered ? 'unwrap' : 'escape', key, value, inner } as const;
+        _warnedBracketedValues.add(token);
+        // The findings of the value without brackets are the report, as its
+        // own lowering prints them. A class with none is named; a value that
+        // writes nothing says what its value without brackets says.
+        if (held > 0 || own === undefined) lowerInner();
+        else {
+            const args = { key, value, inner: spelling.inner };
+            szReport({ diagnostic: REDUNDANT_BRACKET, args, at: szWarnLocation });
+        }
+    } else if (own === undefined) {
+        // Missing output is said in every mode, as its own lowering says it.
+        lowerInner();
+    }
+}
+
+/**
+ * Name a value in brackets that writes nothing, `bracketed-value`: with the
+ * form its shape takes, and `type-hint` for a hint the key's own lowering of
+ * the value without it does not keep.
+ *
+ * @param key - The sz key.
+ * @param value - The value as written.
+ * @param spelling - Its form, the value to name, and a hint taken off it.
+ * @param lowerInner - Lowers the value without brackets on the same key.
+ */
+function nameDroppedBracket(
+    key: string,
+    value: string,
+    spelling: BracketDrop,
+    lowerInner: () => string[],
+): void {
+    const token = `${key}:${value}`;
+    if (
+        process.env.NODE_ENV !== 'production' &&
+        !szWarningsMuted() &&
+        szNodeWarningsUnmuted() &&
+        !_warnedBracketedValues.has(token)
+    ) {
+        _warnedBracketedValues.add(token);
+        let { form }: { form: 'unwrap' | 'escape' | 'type-hint' } = spelling;
+        if (spelling.hint !== undefined) {
+            const [own, ...more] = withSzWarningsMuted(lowerInner).result;
+            if (own === undefined || more.length > 0 || !keepsTypeHint(own, spelling.hint)) {
+                form = 'type-hint';
+            }
+        }
+        const args = { form, key, value, inner: spelling.inner };
         szReport({ diagnostic: BRACKETED_VALUE, args, at: szWarnLocation });
     }
 }
+
+const _warnedBracketedValues = new Set<string>();
 
 /**
  * Normalizes a declaration value — the right-hand side of `[prop:value]`.
@@ -2357,16 +2626,12 @@ function buildColorObjectClass(
 ): string {
     // The caller admits only keys present in PROPERTY_MAP.
     const utilityPrefix = PROPERTY_MAP[key];
-    // A colour object takes its opacity in `op`; a plain slash opacity in
-    // `color` still writes a served class, with `op` as the opacity when both
-    // are given, and points at `op`. The important modifier ends the class.
-    // Mirrors `format_color_opacity_object`.
+    // `color` is written as given, a slash opacity included; `op` adds its
+    // own. The important modifier ends the class. Mirrors
+    // `format_color_opacity_object`.
     const important = color.color.endsWith('!') ? '!' : '';
-    const unmarked = important ? color.color.slice(0, -1) : color.color;
-    const slash = colorSlashOpacityIndex(key, unmarked);
-    if (slash > 0) warnColorObjectSlashOpacity(key, color.color, color.op);
-    const rawColor = slash > 0 ? unmarked.slice(0, slash) : unmarked;
-    const slashOpacity = slash > 0 ? unmarked.slice(slash + 1) : undefined;
+    const rawColor = important ? color.color.slice(0, -1) : color.color;
+    warnColorObjectSlashOpacity(key, color.color, color.op);
     const colorValue =
         SHADOW_COLOR_HINT_PREFIXES.has(utilityPrefix) &&
         rawColor.startsWith('--') &&
@@ -2374,12 +2639,8 @@ function buildColorObjectClass(
             ? `(color:${rawColor})`
             : formatColorObjectBase(rawColor);
     // A null `op` is no `op`, as any null value.
-    if (color.op === undefined || color.op === null) {
-        return slashOpacity === undefined
-            ? `${prefix}${utilityPrefix}-${colorValue}${important}`
-            : `${prefix}${utilityPrefix}-${colorValue}/${slashOpacity}${important}`;
-    }
-    const opacity = opacityModifier(key, color.op);
+    const opacity =
+        color.op === undefined || color.op === null ? undefined : opacityModifier(key, color.op);
     if (opacity === undefined) {
         return `${prefix}${utilityPrefix}-${colorValue}${important}`;
     }
@@ -2388,29 +2649,76 @@ function buildColorObjectClass(
 }
 
 /**
- * Where a colour object's `color` splits into colour and opacity, or -1. Only
- * a plain opacity (`50`, `7.5`) is one `op` can take; `red-500/` or
- * `red-500/50/30` is written as given. Mirrors `split_color_slash_opacity`.
+ * The `op` literal a slash report's help writes for an opacity: what
+ * {@link modifierOp} reads, a number bare and a string quoted, or the
+ * opacity as written, quoted, when no `op` names it.
  *
- * @param key - Colour property key.
- * @param color - `color` without its trailing `!`.
- * @returns The slash index, or -1.
+ * @param opacity - The opacity after the slash.
+ * @returns The JS literal.
  */
-function colorSlashOpacityIndex(key: string, color: string): number {
-    if (!isDroppedSlashOpacity(key, color)) return -1;
-    const slash = color.indexOf('/');
-    return /^\d+(?:\.\d+)?$/.test(color.slice(slash + 1)) ? slash : -1;
+function opLiteral(opacity: string): string {
+    const op = modifierOp(opacity);
+    return typeof op === 'number' ? `${op}` : `'${op ?? opacity}'`;
 }
 
-const _warnedColorObjectSlashOpacity = new Set<string>();
+const _warnedSlashOpacities = new Set<string>();
+
+/**
+ * Report a slash opacity in a colour-key string (`slash-opacity-string`). The
+ * class is written as given (ADR 0036); the object form is the one spelling
+ * of an opacity (ADR 0037 §8). A development report: the class is not lost.
+ *
+ * @param key - The sz key.
+ * @param value - The value as written.
+ */
+function warnSlashOpacityString(key: string, value: string): void {
+    // The gate is asked only once a slash is found: a muted trial counts
+    // every gate it reaches as a warning held back.
+    const important = process.env.NODE_ENV !== 'production' && value.endsWith('!');
+    const unmarked = important ? value.slice(0, -1) : value;
+    const split =
+        process.env.NODE_ENV !== 'production' &&
+        own(PROPERTY_CATEGORY_MAP, key) === PropertyCategory.COLOR
+            ? slashOpacitySplit(unmarked)
+            : undefined;
+    if (process.env.NODE_ENV !== 'production' && split !== undefined && szNodeWarningsUnmuted()) {
+        const [color, opacity] = split;
+        if (_warnedSlashOpacities.has(`${key}:${color}/${opacity}`)) return;
+        _warnedSlashOpacities.add(`${key}:${color}/${opacity}`);
+        szReport({
+            diagnostic: SLASH_OPACITY_STRING,
+            args: {
+                key,
+                color,
+                opacity,
+                op: opLiteral(opacity),
+                ...(important ? { important: '!' as const } : {}),
+            },
+            at: szWarnLocation,
+        });
+    }
+}
+
+/**
+ * `op` as the author wrote it, quotes included for a string; empty for an
+ * `op` that is neither a number nor a string, which is named as if absent, as
+ * the engines name it.
+ *
+ * @param op - `op` as given.
+ * @returns The JS literal, or `''`.
+ */
+function writtenOp(op: unknown): string {
+    if (typeof op === 'number') return `${op}`;
+    return typeof op === 'string' ? `'${op}'` : '';
+}
 
 /**
  * Point a colour object with a slash opacity in `color` at `op`, the one
- * spelling. The class is written, so this is a development nudge. The engines
- * render the same text with the code `color-slash-opacity`.
+ * spelling (`color-slash-opacity`), on every key a colour object serves.
+ * `color` is written as given.
  *
- * @param key - Colour property key.
- * @param color - `color` as written, slash included.
+ * @param key - The key the colour object is on.
+ * @param color - `color` as written.
  * @param op - `op` as written, when given.
  */
 function warnColorObjectSlashOpacity(
@@ -2418,27 +2726,23 @@ function warnColorObjectSlashOpacity(
     color: string,
     op: number | string | undefined,
 ): void {
-    if (process.env.NODE_ENV !== 'production' && szNodeWarningsUnmuted()) {
-        // An `op` that is neither a number nor a string is named as if absent,
-        // as the engines name it.
-        let shown = '';
-        if (typeof op === 'number') shown = `${op}`;
-        else if (typeof op === 'string') shown = `'${op}'`;
-        const token = `${key}:${color}:${shown}`;
-        if (_warnedColorObjectSlashOpacity.has(token)) return;
-        _warnedColorObjectSlashOpacity.add(token);
-        const important = color.endsWith('!');
-        const unmarked = important ? color.slice(0, -1) : color;
-        const slash = unmarked.indexOf('/');
+    const important = color.endsWith('!');
+    const unmarked = important ? color.slice(0, -1) : color;
+    const split = process.env.NODE_ENV !== 'production' ? slashOpacitySplit(unmarked) : undefined;
+    if (process.env.NODE_ENV !== 'production' && split !== undefined && szNodeWarningsUnmuted()) {
+        const shown = writtenOp(op);
+        const token = `${key}:{${color}:${shown}}`;
+        if (_warnedSlashOpacities.has(token)) return;
+        _warnedSlashOpacities.add(token);
         szReport({
             diagnostic: COLOR_SLASH_OPACITY,
             args: {
                 form: shown ? 'op-given' : 'op-absent',
                 key,
-                base: unmarked.slice(0, slash),
-                opacity: unmarked.slice(slash + 1),
+                base: split[0],
+                opacity: split[1],
+                op: shown || opLiteral(split[1]),
                 ...(important ? { important: '!' as const } : {}),
-                ...(shown ? { op: shown } : {}),
             },
             at: szWarnLocation,
         });
@@ -2582,21 +2886,6 @@ function collectMinMaxVariants(
         if (isInactiveVariantValue(value)) continue;
         appendVariantClasses(value, `${prefix}${kind}-${minMaxSegment(breakpoint)}:`, classes);
     }
-}
-
-/**
- * Drops a colour-key string with slash opacity, the one colour rule the
- * lowering applies, and says so. Any other string is written as the engine
- * writes it: whether its class is served is the build's verdict (ADR 0022).
- *
- * @param key - The sz key.
- * @param value - The value, without a trailing `!`.
- * @returns True when the value was dropped.
- */
-function dropSlashOpacityString(key: string, value: string): boolean {
-    if (!isDroppedSlashOpacity(key, value)) return false;
-    warnStringColorOpacity(key, value, szWarnLocation);
-    return true;
 }
 
 /**
@@ -3170,16 +3459,6 @@ function formatBackgroundImage(rawValue: string): string {
     }
     if (value.startsWith('url(')) return `bg-[${value}]`;
     return `bg-[url(${value})]`;
-}
-
-/** Returns whether a string names a Tailwind background-gradient utility. */
-function isBackgroundGradientString(value: string): boolean {
-    return (
-        value.startsWith('linear-') ||
-        value.startsWith('radial') ||
-        value.startsWith('conic') ||
-        value.startsWith('gradient-to-')
-    );
 }
 
 /**
@@ -4246,10 +4525,9 @@ export function __resetSzWarnDedupForTests(): void {
     _warnedOpacityTokens.clear();
     _warnedOpacityValues.clear();
     _warnedBracketedValues.clear();
-    _warnedColorObjectSlashOpacity.clear();
+    _warnedSlashOpacities.clear();
     _warnedPropertyObjects.clear();
     _warnedClosedEnumValues.clear();
-    __resetStringColorOpacityWarnings();
     _warnedOwnedKeyVariants.clear();
     _warnedUnservedVariants.clear();
     warnedRemovedSugar.clear();
@@ -4471,7 +4749,7 @@ function collectUnresolvedStringProperty(
         classes.push(`${prefix}${rawKey}/${value}`);
         return true;
     }
-    if (dropSlashOpacityString(rawKey, value.replace(/!$/, ''))) return true;
+    warnSlashOpacityString(rawKey, value);
     const snapClass = own(own(SNAP_DIRECT_MAP, rawKey), value);
     if (snapClass) {
         classes.push(`${prefix}${snapClass}`);
@@ -4626,7 +4904,7 @@ function collectTransformProperty(
     splitImportant = true,
 ): void {
     if (value === false || value === null || value === undefined) return;
-    if (dropBracketedValue(rawKey, value)) return;
+    if (collectBracketedValue(rawKey, value, szProp, prefix, classes)) return;
     if (splitImportant && collectImportantProperty(rawKey, value, prefix, szProp, classes)) return;
     collectValueProperty(rawKey, numericStringValue(rawKey, value), prefix, szProp, classes);
 }
@@ -4681,6 +4959,9 @@ function collectImportantProperty(
     classes: string[],
 ): boolean {
     if (typeof value !== 'string' || !value.endsWith('!') || rawKey.startsWith('--')) return false;
+    // Named here, where the `!` is still on the value: the lowering below
+    // sees it without, and finds the slash already reported.
+    warnSlashOpacityString(rawKey, value);
     const start = classes.length;
     collectTransformProperty(rawKey, value.slice(0, -1), prefix, szProp, classes, false);
     for (let index = start; index < classes.length; index++) classes[index] += '!';

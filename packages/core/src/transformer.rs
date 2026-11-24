@@ -154,15 +154,17 @@ mod tests {
     }
 
     #[test]
-    fn slash_opacity_string_on_a_colour_key_is_suppressed() {
-        // A colour key takes its opacity in the object form, as in the
-        // TypeScript core; any other key writes the class as given.
+    fn slash_opacity_string_is_written_as_given() {
+        // A support lane that goes straight through, as in the TypeScript core.
         let classes = lower(vec![
             ("bg", s("red-500/50")),
             ("text", s("blue-600/75")),
             ("bg2", s("brand-500/20")),
         ]);
-        assert_eq!(classes, ["text-blue-600/75", "bg2-brand-500/20"]);
+        assert_eq!(
+            classes,
+            ["bg-red-500/50", "text-blue-600/75", "bg2-brand-500/20"]
+        );
     }
 
     #[test]

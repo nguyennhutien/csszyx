@@ -94,6 +94,10 @@
         "default": "./dist/color-var.cjs"
       }
     },
+    "./color-modifier": {
+      "types": "./dist/color-modifier.d.mts",
+      "default": "./dist/color-modifier.mjs"
+    },
     "./spacing-var": {
       "import": {
         "types": "./dist/spacing-var.d.mts",

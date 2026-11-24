@@ -511,8 +511,8 @@ describe('string property handler chain', () => {
 });
 
 describe('color-string validation and snap/variant shortcuts', () => {
-    it('warns and drops a string slash-opacity color', () => {
-        expect(cls({ color: 'red-500/50' })).toBe('');
+    it('writes a slash-opacity colour string as given', () => {
+        expect(cls({ color: 'red-500/50' })).toBe('text-red-500/50');
     });
     it('writes a colour string it does not recognise, as the engine does', () => {
         // Whether the class is served is the build's verdict (ADR 0022).

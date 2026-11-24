@@ -1,67 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-    __resetStringColorOpacityWarnings,
-    isDroppedSlashOpacity,
-} from '../src/color-validation.js';
 import { transform } from '../src/transform-core.js';
-import { runtimeMessage } from './engine-message.js';
 
 /**
- * The slash-opacity-string line for one key and value.
+ * Colour strings on the runtime lane.
  *
- * @param key - The colour key.
- * @param color - The colour before the slash.
- * @param opacity - The opacity after it.
- * @returns The line.
+ * No colour string is dropped: whether the class is served is the build's
+ * verdict (ADR 0022), so the runtime writes what the engines write and nothing
+ * here judges a colour. A slash opacity in a string goes straight through.
  */
-const slashOpacity = (key: string, color: string, opacity: string) =>
-    runtimeMessage(
-        'slash-opacity-string',
-        `\`${key}: '${color}/${opacity}'\` emits nothing: a string value cannot carry a slash opacity.`,
-        `help: use the object form: \`{ color: '${color}', op: ${opacity} }\`.`,
-    );
-
-/**
- * Tests for the one colour-string rule the lowering applies.
- *
- * A colour key takes its opacity in the object form, so a string with slash
- * opacity emits nothing and is reported. Every other string is written as the
- * engine writes it: whether the class is served is the build's verdict
- * (ADR 0022), so nothing here judges a colour.
- *
- * Covers both code paths:
- *   1. isDroppedSlashOpacity (the rule itself)
- *   2. transform() end-to-end (transform-core.ts drops + warns)
- */
-
-describe('isDroppedSlashOpacity', () => {
-    it.each([
-        ['bg', 'blue-500/20'],
-        ['bg', 'brand-500/02'],
-        ['color', 'red-500/50'],
-        ['borderColor', '-red-500/50'],
-    ])('drops %s: %s', (key, value) => {
-        expect(isDroppedSlashOpacity(key, value)).toBe(true);
-    });
-
-    it.each([
-        // Not a shade before the slash: written as given.
-        ['bg', 'white/50'],
-        ['bg', 'blue-500'],
-        ['bg', '/50'],
-        // A sizing fraction, a numeric ratio, a function value.
-        ['bg', '1/2'],
-        ['bg', '4/2.5'],
-        ['bg', '-1/2'],
-        ['bg', 'calc(100/5)'],
-        // Not a colour key: the slash is Tailwind's on every v4.
-        ['text', 'red-500/50'],
-        ['w', '1/2'],
-    ])('keeps %s: %s', (key, value) => {
-        expect(isDroppedSlashOpacity(key, value)).toBe(false);
-    });
-});
 
 describe('transform() — color string validation (JS path)', () => {
     beforeEach(() => {
@@ -75,39 +22,58 @@ describe('transform() — color string validation (JS path)', () => {
         vi.unstubAllEnvs();
     });
 
-    describe('slash opacity — warn + suppress', () => {
-        it('suppresses bg: "blue-500/20" and warns', () => {
-            const result = transform({ bg: 'blue-500/20' });
-            expect(result.className).toBe('');
-            expect(console.warn).toHaveBeenCalledWith(slashOpacity('bg', 'blue-500', '20'));
+    describe('slash opacity — written as given and reported', () => {
+        // The object form is the one spelling of an opacity (ADR 0037 §8); a
+        // string keeps its class (ADR 0036) and the slash is reported.
+        it.each([
+            ['bg', 'blue-500/20', 'bg-blue-500/20'],
+            ['bg', 'blue-500/02', 'bg-blue-500/02'],
+            ['color', 'blue-600/75', 'text-blue-600/75'],
+            ['borderColor', 'red-500/50', 'border-red-500/50'],
+            ['from', 'red-500/50', 'from-red-500/50'],
+            ['shadowColor', 'red-500/50', 'shadow-red-500/50'],
+            ['ringColor', 'red-500/50', 'ring-red-500/50'],
+        ])('writes %s: %s as %s', (key, value, expectedClass) => {
+            expect(transform({ [key]: value }).className).toBe(expectedClass);
+            expect(console.warn).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('slash opacity — what is and is not one', () => {
+        it('reports nothing for a slash with no colour or no opacity beside it', () => {
+            expect(transform({ bg: 'red-500/' }).className).toBe('bg-red-500/');
+            expect(console.warn).not.toHaveBeenCalled();
         });
 
-        it('suppresses bg: "blue-500/02" (typo) and warns', () => {
-            const result = transform({ bg: 'blue-500/02' });
-            expect(result.className).toBe('');
-            expect(console.warn).toHaveBeenCalledWith(slashOpacity('bg', 'blue-500', '02'));
+        it('reports a value once, however often it is lowered', () => {
+            transform({ bg: 'teal-500/40' });
+            transform({ bg: 'teal-500/40' });
+            transform({ bg: { color: 'teal-600/40' } });
+            transform({ bg: { color: 'teal-600/40' } });
+            expect(console.warn).toHaveBeenCalledTimes(2);
         });
 
-        it('suppresses text: "blue-600/75" and warns', () => {
-            const result = transform({ color: 'blue-600/75' });
-            expect(result.className).toBe('');
-            expect(console.warn).toHaveBeenCalledWith(slashOpacity('color', 'blue-600', '75'));
+        it('names a string op as written, quotes included', () => {
+            transform({ bg: { color: 'sky-500/40', op: '78%' } });
+            expect(console.warn).toHaveBeenCalledWith(
+                expect.stringContaining(
+                    "`bg: { color: 'sky-500/40', op: '78%' }` sets opacity twice",
+                ),
+            );
         });
 
-        it('suppresses other color props with slash opacity', () => {
-            const colorProps = ['borderColor', 'from', 'via', 'to', 'shadowColor', 'ringColor'];
-            for (const prop of colorProps) {
-                vi.clearAllMocks();
-                const result = transform({ [prop]: 'red-500/50' });
-                expect(result.className).toBe('');
-                expect(console.warn).toHaveBeenCalledWith(slashOpacity(prop, 'red-500', '50'));
-            }
+        it('names an op that is neither a number nor a string as if absent', () => {
+            transform({ bg: { color: 'lime-500/40', op: true } } as never);
+            expect(console.warn).toHaveBeenCalledWith(
+                expect.stringContaining(
+                    "`bg: { color: 'lime-500/40' }` puts the opacity in `color`",
+                ),
+            );
         });
     });
 
     describe('strings no rule drops — written as the engine writes them', () => {
         it.each([
-            ['white/50', 'bg-white/50'],
             ['50%', 'bg-[50%]'],
             ['var(--x)', 'bg-[var(--x)]'],
             ['!!!', 'bg-!!!'],
@@ -175,36 +141,5 @@ describe('transform() — color string validation (JS path)', () => {
             expect(result.className).toBe('w-1/2');
             expect(console.warn).not.toHaveBeenCalled();
         });
-    });
-});
-
-describe('CSSZYX_QUIET_SZ_WARNINGS and the slash-opacity warning', () => {
-    let warn: ReturnType<typeof vi.spyOn>;
-    const previous = process.env.CSSZYX_QUIET_SZ_WARNINGS;
-
-    beforeEach(() => {
-        warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-        __resetStringColorOpacityWarnings();
-    });
-
-    afterEach(() => {
-        warn.mockRestore();
-        if (previous === undefined) {
-            delete process.env.CSSZYX_QUIET_SZ_WARNINGS;
-        } else {
-            process.env.CSSZYX_QUIET_SZ_WARNINGS = previous;
-        }
-    });
-
-    it('silences the warning and still drops the value', () => {
-        process.env.CSSZYX_QUIET_SZ_WARNINGS = '1';
-        expect(transform({ color: 'blue-500/50' }).className).toBe('');
-        expect(warn).not.toHaveBeenCalled();
-    });
-
-    it('still warns when the switch is unset', () => {
-        delete process.env.CSSZYX_QUIET_SZ_WARNINGS;
-        transform({ color: 'blue-500/50' });
-        expect(warn).toHaveBeenCalledTimes(1);
     });
 });

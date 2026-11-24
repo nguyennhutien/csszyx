@@ -13,6 +13,7 @@
  * Returns empty string for unknown classes — graceful no-op, not a crash.
  */
 
+import { modifierOp, slashOpacitySplit } from '@csszyx/compiler/color-modifier';
 import { DYNAMIC_UNSAFE_ARBITRARY, DYNAMIC_UNSUPPORTED, szReport } from '@csszyx/compiler/report';
 import { classify } from '@csszyx/runtime/split';
 import { isUtilityArbitrarySafe, isUtilityStructureSafe } from './css-sanitize.js';
@@ -367,6 +368,22 @@ const DIRECT_COLOR_KEYWORDS = new Set([
 ]);
 
 /**
+ * The percentage an opacity modifier names, as Tailwind reads it: the `op`
+ * the modifier names (`modifierOp`, shared with the lowering), a number as a
+ * percent and `--o` as its variable. `undefined` for a modifier no opacity
+ * reads, such as `[2]`, which Tailwind writes as 200%, past what
+ * `color-mix()` takes.
+ *
+ * @param opacity - The modifier after the slash.
+ * @returns The percentage, or the variable that holds it.
+ */
+function opacityPercent(opacity: string): string | undefined {
+    const op = modifierOp(opacity);
+    if (typeof op === 'number') return `${op}%`;
+    return op?.startsWith('--') ? `var(${op})` : op;
+}
+
+/**
  * Resolves a Tailwind color value to a CSS value string.
  * Handles: named scales (blue-500), keywords, arbitrary, opacity modifiers.
  *
@@ -374,6 +391,19 @@ const DIRECT_COLOR_KEYWORDS = new Set([
  * @returns CSS value string (e.g. "var(--color-blue-500)", "white", "color-mix(...)")
  */
 function resolveColorValue(v: string): string {
+    // Opacity modifier: blue-500/50 → color-mix(...), read before the
+    // bracket and variable forms so `[#f00]/[0.3]` and `(--c)/(--o)` split.
+    // The colour before the slash is any colour this resolves. A modifier no
+    // opacity reads leaves the colour alone.
+    const split = slashOpacitySplit(v);
+    if (split !== undefined) {
+        const colorVar = resolveColorValue(split[0]);
+        const opacityPct = opacityPercent(split[1]);
+        return opacityPct === undefined
+            ? colorVar
+            : `color-mix(in srgb, ${colorVar} ${opacityPct}, transparent)`;
+    }
+
     if (DIRECT_COLOR_KEYWORDS.has(v)) {
         if (v === 'current') {
             return 'currentColor';
@@ -393,18 +423,6 @@ function resolveColorValue(v: string): string {
     // CSS variable shorthand: (--my-color) → var(--my-color)
     if (v.startsWith('(') && v.endsWith(')') && v.includes('--')) {
         return `var(${v.slice(1, -1)})`;
-    }
-
-    // Opacity modifier: blue-500/50 → color-mix(...)
-    const slashIdx = v.lastIndexOf('/');
-    if (slashIdx > 0) {
-        const colorPart = v.slice(0, slashIdx);
-        const opacity = v.slice(slashIdx + 1);
-        const colorVar = DIRECT_COLOR_KEYWORDS.has(colorPart)
-            ? colorPart
-            : `var(--color-${colorPart})`;
-        const opacityPct = v.includes('.') ? `${Number.parseFloat(opacity) * 100}%` : `${opacity}%`;
-        return `color-mix(in srgb, ${colorVar} ${opacityPct}, transparent)`;
     }
 
     return `var(--color-${v})`;

@@ -728,9 +728,10 @@
                 "args": {
                     "key": "bg",
                     "color": "red-500",
-                    "opacity": "50"
+                    "opacity": "50",
+                    "op": "50"
                 },
-                "text": "[csszyx] slash-opacity-string: src/freeze.tsx:1:35\n  `bg: 'red-500/50'` emits nothing: a string value cannot carry a slash opacity.\n  help: use the object form: `{ color: 'red-500', op: 50 }`.\n  docs: https://csszyx.com/e/slash-opacity-string"
+                "text": "[csszyx] slash-opacity-string: src/freeze.tsx:1:35\n  `bg: 'red-500/50'` puts the opacity in a string; a colour takes its opacity in the object form.\n  help: write `{ color: 'red-500', op: 50 }`.\n  note: the class is still emitted as written; a theme colour serves it, and a hex, a colour function or a variable before the slash writes a value no browser takes.\n  docs: https://csszyx.com/e/slash-opacity-string"
             }
         ]
     },
@@ -749,7 +750,7 @@
                     "opacity": "50",
                     "op": "20"
                 },
-                "text": "[csszyx] color-slash-opacity: src/freeze.tsx:1:35\n  `bg: { color: 'red-500/50', op: 20 }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.\n  help: write `{ color: 'red-500', op: 20 }`.\n  note: the class uses `op: 20`; the `/50` in `color` is ignored.\n  docs: https://csszyx.com/e/color-slash-opacity"
+                "text": "[csszyx] color-slash-opacity: src/freeze.tsx:1:35\n  `bg: { color: 'red-500/50', op: 20 }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.\n  help: write `{ color: 'red-500', op: 20 }`.\n  note: the class is still emitted as written; a theme colour serves it, and a hex, a colour function or a variable before the slash writes a value no browser takes.\n  docs: https://csszyx.com/e/color-slash-opacity"
             }
         ]
     },

@@ -275,11 +275,11 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
     },
     {
         "id": "slash-opacity-string",
-        "summary": "A colour key given its opacity in a string, which emits nothing; the object form takes it.",
+        "summary": "A colour key given its opacity in a string; the object form is the one spelling of it.",
         "surfaces": {
             "engine": {},
             "runtime": {
-                "production": true,
+                "production": false,
                 "host": "browser"
             }
         },
@@ -293,10 +293,74 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             },
             "opacity": {
                 "type": "string"
+            },
+            "op": {
+                "type": "string"
+            },
+            "important": {
+                "type": [
+                    "enum",
+                    "!"
+                ],
+                "optional": true
             }
         },
-        "text": "`{key}: '{color}/{opacity}'` emits nothing: a string value cannot carry a slash opacity.",
-        "help": "use the object form: `{ color: '{color}', op: {opacity} }`."
+        "text": "`{key}: '{color}/{opacity}{important}'` puts the opacity in a string; a colour takes its opacity in the object form.",
+        "help": "write `{ color: '{color}{important}', op: {op} }`.",
+        "note": "the class is still emitted as written; a theme colour serves it, and a hex, a colour function or a variable before the slash writes a value no browser takes."
+    },
+    {
+        "id": "color-slash-opacity",
+        "summary": "A colour object with a slash opacity in `color`; the object takes it in `op`.",
+        "surfaces": {
+            "engine": {},
+            "runtime": {
+                "production": false,
+                "host": "browser"
+            }
+        },
+        "position": "site",
+        "forms": [
+            "op-given",
+            "op-absent"
+        ],
+        "args": {
+            "form": {
+                "type": [
+                    "enum",
+                    "op-given",
+                    "op-absent"
+                ]
+            },
+            "key": {
+                "type": "string"
+            },
+            "base": {
+                "type": "string"
+            },
+            "opacity": {
+                "type": "string"
+            },
+            "important": {
+                "type": [
+                    "enum",
+                    "!"
+                ],
+                "optional": true
+            },
+            "op": {
+                "type": "string"
+            }
+        },
+        "text": {
+            "op-given": "`{key}: { color: '{base}/{opacity}{important}', op: {op} }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
+            "op-absent": "`{key}: { color: '{base}/{opacity}{important}' }` puts the opacity in `color`; a colour object takes it in `op`."
+        },
+        "help": {
+            "op-given": "write `{ color: '{base}{important}', op: {op} }`.",
+            "op-absent": "write `{ color: '{base}{important}', op: {op} }`."
+        },
+        "note": "the class is still emitted as written; a theme colour serves it, and a hex, a colour function or a variable before the slash writes a value no browser takes."
     },
     {
         "id": "off-scale-value",
@@ -1072,67 +1136,6 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "note": "each element that uses it keeps its own scoped variable, and every class is still emitted."
     },
     {
-        "id": "color-slash-opacity",
-        "summary": "A colour object with a slash opacity in `color`; the object takes it in `op`.",
-        "surfaces": {
-            "engine": {},
-            "runtime": {
-                "production": false,
-                "host": "browser"
-            }
-        },
-        "defaults": {
-            "recommended": "info",
-            "atomic": "warn"
-        },
-        "position": "site",
-        "forms": [
-            "op-given",
-            "op-absent"
-        ],
-        "args": {
-            "form": {
-                "type": [
-                    "enum",
-                    "op-given",
-                    "op-absent"
-                ]
-            },
-            "key": {
-                "type": "string"
-            },
-            "base": {
-                "type": "string"
-            },
-            "opacity": {
-                "type": "string"
-            },
-            "important": {
-                "type": [
-                    "enum",
-                    "!"
-                ],
-                "optional": true
-            },
-            "op": {
-                "type": "string",
-                "optional": true
-            }
-        },
-        "text": {
-            "op-given": "`{key}: { color: '{base}/{opacity}{important}', op: {op} }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
-            "op-absent": "`{key}: { color: '{base}/{opacity}{important}' }` puts the opacity in `color`; a colour object takes it in `op`."
-        },
-        "help": {
-            "op-given": "write `{ color: '{base}{important}', op: {op} }`.",
-            "op-absent": "write `{ color: '{base}{important}', op: {opacity} }`."
-        },
-        "note": {
-            "op-given": "the class uses `op: {op}`; the `/{opacity}` in `color` is ignored.",
-            "op-absent": "the class still applies opacity {opacity}."
-        }
-    },
-    {
         "id": "bracketed-value",
         "summary": "A value wrapped in the brackets or parentheses csszyx writes itself.",
         "surfaces": {
@@ -1145,14 +1148,16 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
         "position": "site",
         "forms": [
             "unwrap",
-            "escape"
+            "escape",
+            "type-hint"
         ],
         "args": {
             "form": {
                 "type": [
                     "enum",
                     "unwrap",
-                    "escape"
+                    "escape",
+                    "type-hint"
                 ]
             },
             "key": {
@@ -1165,11 +1170,45 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "type": "string"
             }
         },
-        "text": "`{key}: '{value}'` wraps its value in brackets or parentheses, which csszyx writes itself, so nothing is emitted for it.",
+        "text": {
+            "unwrap": "`{key}: '{value}'` wraps its value in brackets or parentheses, which csszyx writes itself, so nothing is emitted for it.",
+            "escape": "`{key}: '{value}'` has brackets that do not wrap its value as one pair, so nothing is emitted for it.",
+            "type-hint": "`{key}: '{value}'` names a type in its brackets that `{key}: '{inner}'` does not write, so nothing is emitted for it."
+        },
         "help": {
             "unwrap": "write `{key}: '{inner}'`.",
-            "escape": "write the declaration in `css: { … }`, or the class in `className`, with every bracket in a pair; the brackets inside are part of the value."
+            "escape": "write the declaration in `css: { … }`, or the class in `className`, with every bracket in a pair; the brackets inside are part of the value.",
+            "type-hint": "write the declaration in `css: { … }`, or the class in `className`; `{key}: '{inner}'` writes another type."
         }
+    },
+    {
+        "id": "redundant-bracket",
+        "summary": "A value in brackets that writes the class its value without them writes.",
+        "surfaces": {
+            "engine": {},
+            "runtime": {
+                "production": false,
+                "host": "browser"
+            }
+        },
+        "defaults": {
+            "recommended": "info",
+            "atomic": "warn"
+        },
+        "position": "site",
+        "args": {
+            "key": {
+                "type": "string"
+            },
+            "value": {
+                "type": "string"
+            },
+            "inner": {
+                "type": "string"
+            }
+        },
+        "text": "`{key}: '{value}'` writes the class that `{key}: '{inner}'` writes; csszyx adds the brackets itself.",
+        "help": "write `{key}: '{inner}'`."
     },
     {
         "id": "opacity-value",

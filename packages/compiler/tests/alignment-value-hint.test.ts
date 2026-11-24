@@ -46,6 +46,16 @@ describe('alignment CSS-longhand value warning (dev)', () => {
         vi.unstubAllEnvs();
     });
 
+    it('warns in the browser too, where a prop-API component resolves `_sz`', () => {
+        __resetSzWarnDedupForTests();
+        vi.stubGlobal('window', {});
+        try {
+            expect(warns({ justify: 'space-between' } as SzObject)).toHaveLength(1);
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
     it('warns on justify: flex-end', () => {
         expect(warns({ justify: 'flex-end' } as SzObject)[0]).toContain("'end'");
     });

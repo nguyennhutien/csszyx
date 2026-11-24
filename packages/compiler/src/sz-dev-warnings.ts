@@ -48,11 +48,69 @@ interface BrowserWarningsGlobal {
  * @returns Whether a dev-mode sz warning should be printed, given development.
  */
 export function szNodeWarningsUnmuted(): boolean {
+    if (mutedRuns > 0) {
+        mutedAttempts++;
+        return false;
+    }
     return (
         ((globalThis as BrowserWarningsGlobal).__CSSZYX_SZ_WARNINGS_IN_BROWSER__ !== undefined ||
             typeof window === 'undefined') &&
         process.env.CSSZYX_QUIET_SZ_WARNINGS !== '1'
     );
+}
+
+/** How many {@link withSzWarningsMuted} runs are open. */
+let mutedRuns = 0;
+
+/** How many warnings a muted run reached the gate of, and so held back. */
+let mutedAttempts = 0;
+
+/**
+ * Whether a {@link withSzWarningsMuted} run is open, for a caller whose own
+ * record would only restate the value the run lowers, so it is no warning.
+ *
+ * @returns True inside a muted run.
+ */
+export function szWarningsMuted(): boolean {
+    return mutedRuns > 0;
+}
+
+/**
+ * Whether an open {@link withSzWarningsMuted} run holds this warning back,
+ * counted as one it held. For a warning that prints wherever it is lowered,
+ * the browser included, so it asks no other gate: an alignment value on a
+ * prop-API component is resolved through `_sz` on the client.
+ *
+ * @returns True inside a muted run.
+ */
+export function szWarningHeld(): boolean {
+    if (mutedRuns > 0) mutedAttempts++;
+    return mutedRuns > 0;
+}
+
+/**
+ * Run a trial lowering whose warnings would name a value the author did not
+ * write: the value of a bracketed spelling without its brackets, lowered to
+ * read the class its key writes. Both gates are shut while it runs, the
+ * development one ({@link szNodeWarningsUnmuted}) and the one the
+ * every-mode warnings read ({@link szWarningsQuiet}), so the trial prints
+ * nothing and takes no warning's dedup slot. A warning asks a gate only once
+ * it has found something to say, so the run also counts how many it held
+ * back: whether the lowering reports anything, whatever a dedup set already
+ * printed.
+ *
+ * @param run - The lowering.
+ * @returns What `run` returns, and how many warnings it held back.
+ */
+export function withSzWarningsMuted<T>(run: () => T): { result: T; held: number } {
+    const before = mutedAttempts;
+    mutedRuns++;
+    try {
+        const result = run();
+        return { result, held: mutedAttempts - before };
+    } finally {
+        mutedRuns--;
+    }
 }
 
 /**
@@ -70,5 +128,9 @@ export function szWarningsQuiet(): boolean {
     // `process.env.X` written plainly, not `process.env?.X`, so a bundler's
     // `define` can fold it: the CDN bundle defines it away and keeps no
     // `process.env` at all. The `typeof` guard covers a bundle that does not.
+    if (mutedRuns > 0) {
+        mutedAttempts++;
+        return true;
+    }
     return typeof process !== 'undefined' && process.env.CSSZYX_QUIET_SZ_WARNINGS === '1';
 }

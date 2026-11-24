@@ -8663,7 +8663,7 @@ export const C = ({ styles }) => <div sz={styles} />;
                 "sz={{ bgImg: 'url(/hero.png)' }}",
                 vec!["bg-[url(/hero.png)]"],
             ),
-            ("sz={{ bg: 'red-500/50' }}", vec![]),
+            ("sz={{ bg: 'red-500/50' }}", vec!["bg-red-500/50"]),
         ];
 
         for (attribute, expected) in cases {
