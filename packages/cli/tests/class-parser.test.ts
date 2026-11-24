@@ -1166,8 +1166,10 @@ describe('class-parser', () => {
             });
         });
 
-        it('kept boolean shorthand with !', () => {
-            expect(parseClass('truncate!')).toEqual({ prop: 'truncate', value: '!' });
+        it('a boolean shorthand with ! stays in className', () => {
+            // `{ truncate: '!' }` writes `truncate-!`, and a boolean key has
+            // no important spelling yet, so the class is not migrated.
+            expect(parseClass('truncate!')).toBeNull();
         });
 
         it('numeric with !', () => {

@@ -125,6 +125,8 @@ const BRACKETED_CLASSES = [
     ['bg-[top]', 'bg-[top]'],
     ['font-[Inter]', 'font-[Inter]'],
     ['break-words', 'break-words'],
+    ['bg-red-500/50!', 'bg-red-500/50!'],
+    ['bg-linear-to-r!', 'bg-linear-to-r!'],
 ] as const;
 
 describe('migrate → lower writes a bracketed class back with no report', () => {

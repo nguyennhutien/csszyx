@@ -39,7 +39,7 @@ pub fn parse_class_judged(class: &str, judge: Judge<'_>) -> Option<ParsedClass> 
         return Some(container);
     }
     if let Some(mask) = parse_mask(input) {
-        return Some(apply_important(mask, important));
+        return apply_important(mask, important);
     }
     // A layer-shaped class the layers do not read stays in `className`: on the
     // prefix path it became `mask: 'linear-…'`, a value the engine drops.
@@ -47,16 +47,16 @@ pub fn parse_class_judged(class: &str, judge: Judge<'_>) -> Option<ParsedClass> 
         return None;
     }
     if let Some(boolean) = try_boolean_match(input) {
-        return Some(apply_important(boolean, important));
+        return apply_important(boolean, important);
     }
     if let Some(gradient) = try_gradient(source, negative, judge) {
-        return Some(apply_important(gradient, important));
+        return apply_important(gradient, important);
     }
     if let Some(utility) = parse_longest_prefix(source, negative, judge) {
-        return Some(apply_important(utility, important));
+        return apply_important(utility, important);
     }
     parse_custom_property_declaration(input)
-        .map(|declaration| apply_important(declaration, important))
+        .and_then(|declaration| apply_important(declaration, important))
 }
 
 /// A mask utility, on the key that owns its CSS variable (ADR 0013).
@@ -781,25 +781,52 @@ fn parse_custom_property_declaration(input: &str) -> Option<ParsedClass> {
     Some(ParsedClass::new(prop, value))
 }
 
-/// `!` on a class becomes `!` on its value; a boolean becomes the bare
-/// marker. A companion prop does not survive, as in the TypeScript.
-fn apply_important(result: ParsedClass, important: bool) -> ParsedClass {
+/// `!` on a class becomes `!` on its value, or on the first member of an
+/// object value that writes the class back with it: a colour object on its
+/// colour (`bg-red-500/50!` is `{ color: 'red-500!', op: 50 }`), a gradient
+/// on its direction. With no such spelling the class stays in `className`
+/// rather than losing its `!`: so does a boolean, whose bare marker writes
+/// `truncate-!`, and a class with a companion prop (`text-sm/6!` as
+/// `{ text: 'sm!' }` wrote `text-sm!` and lost its line height).
+///
+/// Cost: one lowering per spelling tried, one per string or number member.
+fn apply_important(result: ParsedClass, important: bool) -> Option<ParsedClass> {
     if !important {
-        return result;
+        return Some(result);
     }
-    let value = match &result.value {
-        SzValue::String(text) => format!("{text}!"),
-        SzValue::Bool(_) => "!".to_string(),
-        SzValue::Number(number) => format!("{}!", js_number_to_string(*number)),
-        // Only an object reaches here from the parser; the map-only kinds
-        // share the arm so the match stays total.
-        SzValue::Object(_) | SzValue::Array(_) | SzValue::Null => return result,
-    };
-    ParsedClass {
-        prop: result.prop,
-        value: SzValue::from(value),
-        css_property: result.css_property,
-        extra: None,
+    if result.extra.is_some() {
+        return None;
+    }
+    let important = format!("{}!", lowered_class(&result)?);
+    important_spellings(&result.value)
+        .into_iter()
+        .map(|value| ParsedClass {
+            value,
+            ..result.clone()
+        })
+        .find(|candidate| lowered_class(candidate).as_deref() == Some(important.as_str()))
+}
+
+/// `value` with `!` added: on itself, or on one member of an object.
+fn important_spellings(value: &SzValue) -> Vec<SzValue> {
+    match value {
+        SzValue::String(text) => vec![SzValue::from(format!("{text}!"))],
+        SzValue::Number(number) => {
+            vec![SzValue::from(format!("{}!", js_number_to_string(*number)))]
+        }
+        SzValue::Object(object) => object
+            .iter()
+            .flat_map(|(member, inner)| {
+                important_spellings(inner).into_iter().map(move |marked| {
+                    let mut object = object.clone();
+                    object.insert(member.clone(), marked);
+                    SzValue::Object(object)
+                })
+            })
+            .collect(),
+        // A boolean is the bare marker. An array or null comes only from a
+        // resolution map, never from a class; the lowering judges it too.
+        SzValue::Bool(_) | SzValue::Array(_) | SzValue::Null => vec![SzValue::from("!")],
     }
 }
 
@@ -1354,6 +1381,18 @@ mod tests {
             ("p-[10px]!", r#"p="10px!""#),
             ("!p-4!", "null"),
             ("!", "null"),
+            // An object takes it on the member that writes it back.
+            ("bg-red-500/50!", r#"bg={"color":"red-500!","op":50}"#),
+            ("!bg-red-500/50", r#"bg={"color":"red-500!","op":50}"#),
+            (
+                "bg-linear-to-r!",
+                r#"bgImg={"gradient":"linear","dir":"to-r!"}"#,
+            ),
+            // No spelling writes `!` across a size and its line height.
+            ("text-sm/6!", "null"),
+            // `{ grow: '!' }` wrote `grow-!`; `'1px!'` sets `--x` to `1px!`.
+            ("grow!", "null"),
+            ("[--x:1px]!", "null"),
         ] {
             assert_eq!(prop_value(class), expected, "{class}");
         }

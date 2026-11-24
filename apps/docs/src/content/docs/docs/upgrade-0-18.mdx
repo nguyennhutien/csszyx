@@ -2033,7 +2033,9 @@ becomes `{ text: '13px' }` instead of the colour `length:13px`, `font-[700]`
 becomes `{ weight: 700 }` instead of the family `700`, `bg-[var(--v)]` becomes
 `{ bg: '--v' }`, and a value whose plain spelling compiles to another class
 keeps its brackets: `origin-[0]` becomes `{ origin: '[0]' }`. `!p-4` converts
-like `p-4!`. Classes Tailwind does not serve, such as `font-700` and
+like `p-4!`, and `bg-red-500/50!` keeps its `!` as
+`{ color: 'red-500!', op: 50 }` instead of losing it. A class whose `!` no `sz`
+value writes back, such as `grow!` or `text-sm/6!`, stays in `className`. Classes Tailwind does not serve, such as `font-700` and
 `from-12.5%`, now stay in `className` instead of becoming a class that does.
 `break-words` becomes `{ break: 'words' }`, which compiles to `break-words` on
 every Tailwind v4; `wrap-break-word` is 4.1 only.
