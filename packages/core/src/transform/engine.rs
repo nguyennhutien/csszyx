@@ -956,10 +956,12 @@ impl KeyValueFindings {
     /// `n` is the properties of the group: one pass, plus one per level of
     /// brackets a value is reported through, each shorter by a pair, so a
     /// group with none costs the single pass.
-    fn collect_group<'a>(&mut self, objects: impl Iterator<Item = &'a super::StaticSzObject>) {
+    ///
+    /// A slice rather than an iterator: every caller shares one copy of this
+    /// recursive function, which an iterator type per caller multiplied.
+    fn collect_group(&mut self, objects: &[&super::StaticSzObject]) {
         self.clear();
-        let objects: Vec<&super::StaticSzObject> = objects.collect();
-        for object in &objects {
+        for object in objects {
             self.collect(object);
         }
         let swaps = self.bracket_swaps();
@@ -971,8 +973,26 @@ impl KeyValueFindings {
             .iter()
             .map(|object| swap_bracketed(object, &swaps))
             .collect();
-        self.collect_group(swapped.iter());
+        self.collect_group(&swapped.iter().collect::<Vec<_>>());
         self.underscore_values = written;
+    }
+
+    /// [`Self::collect_group`] over the objects as their findings read them:
+    /// a shadow's `{ size, op }` is reported as its size on the key would be.
+    /// Its underscore fact is the size's too: `_` reads alike in `shadow-[…]`
+    /// and in the `shadow-[…]/50` the object writes. An object that holds no
+    /// size is read as written, uncopied.
+    fn collect_viewed(&mut self, objects: &[&super::StaticSzObject]) {
+        let viewed: Vec<Option<super::StaticSzObject>> = objects
+            .iter()
+            .map(|object| super::lower::sizes_as_values(object))
+            .collect();
+        let read: Vec<&super::StaticSzObject> = objects
+            .iter()
+            .zip(&viewed)
+            .map(|(object, view)| view.as_ref().unwrap_or(object))
+            .collect();
+        self.collect_group(&read);
     }
 
     /// Each bracketed value to report as the value it stands for: one that
@@ -989,7 +1009,7 @@ impl KeyValueFindings {
                     properties: vec![property.clone()],
                 };
                 let mut trial = Self::default();
-                trial.collect_group(std::iter::once(&single));
+                trial.collect_group(&[&single]);
                 trial.has_findings()
             };
             if reported {
@@ -1071,7 +1091,7 @@ fn push_group_key_value_diagnostics<'a>(
     repeat_free: bool,
     found: &mut KeyValueFindings,
 ) {
-    found.collect_group(objects);
+    found.collect_viewed(&objects.collect::<Vec<_>>());
     if !repeat_free {
         let seen = &mut std::collections::HashSet::new();
         retain_first_occurrence(&mut found.unknown, 0, seen, |(_, at)| *at);
@@ -2864,6 +2884,40 @@ mod tests {
         ] {
             assert!(result.code.contains(class), "{class}\n{}", result.code);
         }
+    }
+
+    #[test]
+    fn a_shadow_size_is_reported_as_the_same_value_on_its_key() {
+        // The runtime lowers `size` through the key's string lane and reports
+        // it there; the engine reports it as `key: size` would be, at the
+        // size, once, and nothing for a size that is fine or for a colour.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: [
+                "export const A = () => <div sz={{ shadow: { size: '[a', op: 50 },",
+                "  hover: { textShadow: { size: '[1/2]', op: 50 } },",
+                "  dropShadow: { size: 'sm/50', op: 20 },",
+                "  insetShadow: { size: 'sm', op: 25 }, bg: { color: '[a', op: 5 },",
+                "  ring: { size: '[a]' }, textShadow: { size: '(--t)', op: 50 } }} />;",
+            ]
+            .join("\n"),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        assert_eq!(
+            lines(&result),
+            [
+                r#"property-object {"key":"ring","nestedKeys":["size"]}"#,
+                r#"slash-opacity-string {"key":"dropShadow","member":"size","color":"sm","opacity":"50","op":"50"}"#,
+                r#"bracketed-value {"form":"escape","key":"shadow","value":"[a","inner":"[a"}"#,
+                r#"bracketed-value {"form":"unwrap","key":"textShadow","value":"[1/2]","inner":"1/2"}"#,
+                r#"bracketed-value {"form":"unwrap","key":"textShadow","value":"(--t)","inner":"--t"}"#,
+            ]
+        );
+        assert!(
+            result.code.contains("inset-shadow-sm/25"),
+            "{}",
+            result.code
+        );
     }
 
     #[test]

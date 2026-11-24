@@ -757,7 +757,12 @@ export const SIZE_BUDGETS = [
         // the member to write (`slash_member`), and a size held in a variable
         // is noted from the invalid-opacity walk, not a family of its own
         // (+1,263 as one). CI reads `main` at 607,897.
-        maxGzipBytes: 609_100,
+        // Raised to 609,650 on 2026-11-25: 605,882 on the same toolchain, +1,451
+        // over `main`. Every CSS Values 4 unit bracketed (+174), and a shadow
+        // size reported as its string on the key would be (+382: one view of
+        // an object that holds one, `sizes_as_values`; `collect_group` takes a
+        // slice so its callers share one copy, +1,211 with an iterator each).
+        maxGzipBytes: 609_650,
     },
     // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
     // bundles from the compiler's source, unminified, and that every editor

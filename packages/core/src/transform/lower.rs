@@ -726,10 +726,71 @@ fn value_member<'a>(key: &str, nested: &'a StaticSzObject) -> Option<(&'static s
     object_string_property(nested, "size").map(|size| ("size", size))
 }
 
+/// `object` with each `{ size, op }` followed by its size as the key's own
+/// string, at the size's place, so a finding on the size is reported as one
+/// on `key: size` would be: the runtime lowers the size through the key's
+/// string lane, and reports it there. `None` when the object holds no size
+/// object, so an object without one is not copied.
+///
+/// Cost: linear in the properties, one copy of an object that holds one.
+#[cfg(feature = "native-engine")]
+pub(crate) fn sizes_as_values(object: &StaticSzObject) -> Option<StaticSzObject> {
+    if !holds_size_object(object) {
+        return None;
+    }
+    let mut properties = Vec::with_capacity(object.properties.len() + 1);
+    for property in &object.properties {
+        let StaticSzValue::Object(nested) = &property.value else {
+            properties.push(property.clone());
+            continue;
+        };
+        match value_member(&property.key, nested) {
+            Some(("size", _)) => {
+                properties.push(property.clone());
+                properties.extend(
+                    nested
+                        .properties
+                        .iter()
+                        .filter(|member| member.key == "size")
+                        .map(|size| StaticSzProperty {
+                            key: property.key.clone(),
+                            span: size.span,
+                            value: size.value.clone(),
+                        }),
+                );
+            }
+            Some(_) => properties.push(property.clone()),
+            None => properties.push(StaticSzProperty {
+                key: property.key.clone(),
+                span: property.span,
+                value: StaticSzValue::Object(
+                    sizes_as_values(nested).unwrap_or_else(|| nested.clone()),
+                ),
+            }),
+        }
+    }
+    Some(StaticSzObject { properties })
+}
+
+/// Whether a `{ size, op }` stands anywhere in `object`.
+#[cfg(feature = "native-engine")]
+fn holds_size_object(object: &StaticSzObject) -> bool {
+    object
+        .properties
+        .iter()
+        .any(|property| match &property.value {
+            StaticSzValue::Object(nested) => match value_member(&property.key, nested) {
+                Some((member, _)) => member == "size",
+                None => holds_size_object(nested),
+            },
+            _ => false,
+        })
+}
+
 /// Whether `key: nested` is one value written as an object (`{ color, op }`,
 /// `{ size, op }`), whose members are not sz keys.
 #[cfg(any(feature = "native-engine", test))]
-fn is_value_object(key: &str, nested: &StaticSzObject) -> bool {
+pub(crate) fn is_value_object(key: &str, nested: &StaticSzObject) -> bool {
     value_member(key, nested).is_some()
 }
 
@@ -4884,6 +4945,37 @@ mod tests {
         assert_eq!(lowered("bg", "color", "--a"), ["bg-(--a)/50"]);
         // `size` is a value only on a shadow key.
         assert_eq!(lowered("bg", "size", "sm"), ["bg:size-sm", "bg:op-50"]);
+    }
+
+    /// Only an object that holds a shadow size is copied for its findings,
+    /// and the copy puts the size beside it as the key's string.
+    #[cfg(feature = "native-engine")]
+    #[test]
+    fn only_an_object_with_a_shadow_size_is_viewed() {
+        let size = |key: &str| {
+            property(
+                key,
+                object(vec![property("size", StaticSzValue::String("sm".into()))]),
+            )
+        };
+        let plain = StaticSzObject {
+            properties: vec![
+                property("p", StaticSzValue::Number(4.0)),
+                property("hover", object(vec![size("bg")])),
+            ],
+        };
+        assert!(super::sizes_as_values(&plain).is_none());
+        let nested = StaticSzObject {
+            properties: vec![property("hover", object(vec![size("shadow")]))],
+        };
+        let viewed = super::sizes_as_values(&nested).expect("a size object is viewed");
+        let StaticSzValue::Object(hover) = &viewed.properties[0].value else {
+            panic!("hover stays an object");
+        };
+        let keys: Vec<_> = hover.properties.iter().map(|p| &p.value).collect();
+        assert!(
+            matches!(keys.as_slice(), [StaticSzValue::Object(_), StaticSzValue::String(text)] if text == "sm")
+        );
     }
 
     /// The member a slash string's help writes: `size` for a shadow on a

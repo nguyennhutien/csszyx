@@ -109,10 +109,15 @@ describe.each(LANES)('a shadow size object — %s', (_name, lower) => {
         expect(lower(sz)).toMatchObject({ className, ids: [] });
     });
 
-    it('writes nothing for a size the key writes no class for', () => {
-        // The size lowers as the key's own string; `shadow: '[a'` writes
-        // nothing. Reporting it from the object form is TASK-13.53.
-        expect(lower({ shadow: { size: '[a', op: 50 }, p: 4 }).className).toBe('p-4');
+    it.each<[Sz, string, string]>([
+        // The size is reported as the same value on the key would be.
+        [{ shadow: { size: '[a', op: 50 }, p: 4 }, 'p-4', 'bracketed-value'],
+        [{ shadow: { size: '[1/2]', op: 50 } }, '', 'bracketed-value'],
+        [{ hover: { textShadow: { size: '[a', op: 50 } } }, '', 'bracketed-value'],
+        // A slash in the size is the string's slash: the opacity goes in `op`.
+        [{ shadow: { size: 'sm/50', op: 20 } }, 'shadow-sm/50/20', 'slash-opacity-string'],
+    ])('%j writes %j and reports the size as %s', (sz, className, id) => {
+        expect(lower(sz)).toMatchObject({ className, ids: [id] });
     });
 
     it('reports an op that is no opacity and writes the size alone', () => {
