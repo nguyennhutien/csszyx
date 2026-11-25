@@ -198,7 +198,7 @@ jobs:
           key: ${{ runner.os }}-cargo-mutants-${{ hashFiles('**/Cargo.toml') }}
 
       - name: Install cargo-mutants
-        uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
+        uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:
           tool: cargo-mutants
 
