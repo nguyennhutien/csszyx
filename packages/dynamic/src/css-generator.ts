@@ -85,14 +85,147 @@ function warnUnsafeArbitrary(utility: string): void {
 }
 
 /**
- * Expand Tailwind arbitrary-value underscores.
+ * An arbitrary value as Tailwind decodes it: each `_` is a space, except
+ * inside `url()`, which is kept as written, and in the variable name a
+ * `var()` or `theme()` starts with (`var(--my_color)`). Tailwind reads a call
+ * name with the text before it (`1px_+_var(`), so a name ending in `_var`
+ * counts. A backslash never reaches here: the sanitizer drops a value that
+ * holds one, so `\_` needs no reading. Tailwind also spaces a math
+ * function's operators (`calc(100%-2rem)`), which this does not do yet.
  *
- * @param value Encoded arbitrary value.
- * @returns Value with underscore space markers expanded.
+ * Cost: one pass, O(n) in the value's length, holding one frame per open call;
+ * the input is the text inside a class's brackets, which the sanitizer has
+ * already bounded. Read by `dynamic()` only: the lowering writes values and
+ * never decodes them.
+ *
+ * @param value - The text inside the brackets.
+ * @returns The CSS value.
+ * @internal Exported for its tests.
  */
-function expandArbitrarySpaces(value: string): string {
-    return value.replaceAll('_', ' ');
+export function decodeArbitraryValue(value: string): string {
+    if (!value.includes('(')) return value.replaceAll('_', ' ');
+    const state: DecodeState = { out: '', token: '', keepFirst: [], urlDepth: 0 };
+    for (const char of value) readDecodedChar(state, char);
+    flushDecodedWord(state);
+    return state.out;
 }
+
+/**
+ * The characters Tailwind's value parser ends a word at, so a call after one
+ * is still named by the text after it (`1px/var(--a_b)`).
+ */
+const WORD_END = /[),/:=<> ]/;
+
+/** Where {@link decodeArbitraryValue} is in its one pass. */
+interface DecodeState {
+    /** The value decoded so far. */
+    out: string;
+    /** The word being read, written at the next `(`, `)` or `,`. */
+    token: string;
+    /** Per open call: whether its first word keeps its `_` (`var`, `theme`). */
+    keepFirst: boolean[];
+    /** The depth inside a `url()`, whose text is kept as written; 0 outside. */
+    urlDepth: number;
+}
+
+/**
+ * @param state - The pass.
+ * @param char - The next character of the value.
+ */
+function readDecodedChar(state: DecodeState, char: string): void {
+    if (state.urlDepth > 0) {
+        state.out += char;
+        state.urlDepth += Number(char === '(') - Number(char === ')');
+    } else if (char === '(') {
+        openDecodedCall(state);
+    } else if (WORD_END.test(char)) {
+        flushDecodedWord(state);
+        state.out += char;
+        if (char === ')') state.keepFirst.pop();
+    } else {
+        state.token += char;
+    }
+}
+
+/**
+ * Write the word before a `(` as the call's name. Tailwind reads the name
+ * with the text before it, so a name ending in `_url` or `_var` counts, and a
+ * `var()` whose first part is a call keeps no `_` of it.
+ *
+ * @param state - The pass, at a `(`.
+ */
+function openDecodedCall(state: DecodeState): void {
+    const name = state.token;
+    state.out += `${name.replaceAll('_', ' ')}(`;
+    state.token = '';
+    if (state.keepFirst.length > 0) state.keepFirst[state.keepFirst.length - 1] = false;
+    if (/(?:^|_)url$/.test(name)) state.urlDepth = 1;
+    else state.keepFirst.push(/(?:^|_)(?:var|theme)$/.test(name));
+}
+
+/**
+ * Write the word read so far, its `_` kept when it is a `var()`'s first.
+ *
+ * @param state - The pass.
+ */
+function flushDecodedWord(state: DecodeState): void {
+    const keep = state.keepFirst.at(-1) === true;
+    state.out += keep ? state.token : state.token.replaceAll('_', ' ');
+    if (keep && state.token) state.keepFirst[state.keepFirst.length - 1] = false;
+    state.token = '';
+}
+
+/**
+ * The value inside `[…]` or `(…)`, as Tailwind writes it: the type hint that
+ * tells Tailwind what the value is (`[length:10px]`, `(color:--c)`) dropped,
+ * the rest decoded ({@link decodeArbitraryValue}), and a variable wrapped in
+ * `var()`. A parenthesis holds a variable and nothing else: `(--a:b)` names
+ * none, and Tailwind writes no rule for it, so neither does this.
+ *
+ * @param value - The bracket or parenthesis form, delimiters included.
+ * @returns The CSS value, or `''` when there is none.
+ */
+function delimitedValue(value: string): string {
+    const hint = typeHint(value);
+    const body = value.slice(hint === undefined ? 1 : hint.length + 2, -1);
+    if (!value.startsWith('(')) return decodeArbitraryValue(body);
+    return body.startsWith('--') ? decodeArbitraryValue(`var(${body})`) : '';
+}
+
+/**
+ * The type hint a `[…]` or `(…)` value starts with: `length` in
+ * `[length:10px]`, `color` in `(color:--c)`.
+ *
+ * @param value - The value, delimiters included.
+ * @returns The hint, or undefined when it has none.
+ */
+function typeHint(value: string): string | undefined {
+    return value.startsWith('[') || value.startsWith('(')
+        ? /^.([a-z-]+):/.exec(value)?.[1]
+        : undefined;
+}
+
+/**
+ * The hints that name another property than the colour, on a prefix the
+ * colour shares with it: `bg-(image:--x)` is the background image. Each is
+ * written between spaces; every border side reads `border`'s. Tailwind reads
+ * every other hint on these prefixes as the colour, and on a prefix with one
+ * property it drops whichever hint it is given. Measured against Tailwind
+ * 4.3.3, one class per prefix and hint (`<prefix>-[<hint>:var(--x)]`).
+ */
+const OTHER_PROPERTY_HINTS: Readonly<Record<string, string>> = {
+    bg: ' length size bg-size percentage position url image ',
+    text: ' length percentage size absolute-size relative-size ',
+    border: ' length line-width ',
+    outline: ' length percentage number ',
+    decoration: ' length percentage ',
+    stroke: ' length percentage number ',
+    ring: ' length ',
+    'ring-offset': ' length ',
+};
+
+/** The hints that make a `font-[…]` value its family; any other is its weight. */
+const FONT_FAMILY_HINTS: ReadonlySet<string> = new Set(['family-name', 'generic-name']);
 
 // ── Variant metadata ──────────────────────────────────────────────────────────
 
@@ -290,11 +423,11 @@ function resolveNamedSpacingValue(value: string, property?: string): string | nu
     }
     const keyword = own(SIZE_KEYWORDS, value);
     if (keyword !== undefined) return keyword;
-    if (value.startsWith('[') && value.endsWith(']')) {
-        return expandArbitrarySpaces(value.slice(1, -1));
-    }
-    if (value.startsWith('(') && value.endsWith(')') && value.includes('--')) {
-        return `var(${value.slice(1, -1)})`;
+    if (
+        (value.startsWith('[') && value.endsWith(']')) ||
+        (value.startsWith('(') && value.endsWith(')'))
+    ) {
+        return delimitedValue(value);
     }
     return null;
 }
@@ -413,7 +546,7 @@ function resolveColorValue(v: string): string {
     if (split !== undefined) {
         const colorVar = resolveColorValue(split[0]);
         const opacityPct = opacityPercent(split[1]);
-        return opacityPct === undefined
+        return opacityPct === undefined || colorVar === ''
             ? colorVar
             : `color-mix(in srgb, ${colorVar} ${opacityPct}, transparent)`;
     }
@@ -425,18 +558,10 @@ function resolveColorValue(v: string): string {
         return v;
     }
 
-    // Arbitrary: [#ff6b35], [color:var(--my)]
-    if (v.startsWith('[') && v.endsWith(']')) {
-        const inner = expandArbitrarySpaces(v.slice(1, -1));
-        if (inner.startsWith('color:')) {
-            return inner.slice(6);
-        }
-        return inner;
-    }
-
-    // CSS variable shorthand: (--my-color) → var(--my-color)
-    if (v.startsWith('(') && v.endsWith(')') && v.includes('--')) {
-        return `var(${v.slice(1, -1)})`;
+    // Arbitrary: [#ff6b35], [color:var(--my)]; a variable: (--my-color),
+    // (color:--my-color).
+    if ((v.startsWith('[') && v.endsWith(']')) || (v.startsWith('(') && v.endsWith(')'))) {
+        return delimitedValue(v);
     }
 
     return `var(--color-${v})`;
@@ -924,7 +1049,7 @@ const DECLARATION_RESOLVERS: readonly DeclarationResolver[] = [
 function resolveOpacityDeclaration(utility: string): string | null {
     if (!utility.startsWith('opacity-')) return null;
     const value = utility.slice(8);
-    if (value.startsWith('[') && value.endsWith(']')) return `opacity: ${value.slice(1, -1)}`;
+    if (value.startsWith('[') && value.endsWith(']')) return `opacity: ${delimitedValue(value)}`;
     const numeric = Number.parseInt(value, 10);
     if (Number.isNaN(numeric)) return null;
     return `opacity: ${OPACITY_NAMED[numeric] ?? String(numeric / 100)}`;
@@ -938,7 +1063,7 @@ function resolveZIndexDeclaration(utility: string): string | null {
     if (!utility.startsWith('z-')) return null;
     const value = utility.slice(2);
     if (value === 'auto') return 'z-index: auto';
-    if (value.startsWith('[') && value.endsWith(']')) return `z-index: ${value.slice(1, -1)}`;
+    if (value.startsWith('[') && value.endsWith(']')) return `z-index: ${delimitedValue(value)}`;
     return Number.isNaN(Number.parseInt(value, 10)) ? null : `z-index: ${value}`;
 }
 
@@ -957,7 +1082,7 @@ function resolveBorderDeclaration(utility: string): string | null {
     // same shape carries a colour (`border-[#123]`), which the colour resolver
     // handles.
     if (/^border-\[.+\]$/.test(utility) && !classifiedAsOther(utility, 'width')) {
-        return `border-width: ${expandArbitrarySpaces(utility.slice(8, -1))}`;
+        return `border-width: ${delimitedValue(utility.slice(7))}`;
     }
     const sideWidth = /^border-([trblxse])-(\d+)$/.exec(utility);
     if (!sideWidth) return null;
@@ -985,7 +1110,7 @@ function resolveRadiusDeclaration(utility: string): string | null {
         );
     }
     return value.startsWith('[') && value.endsWith(']')
-        ? `border-radius: ${value.slice(1, -1)}`
+        ? `border-radius: ${delimitedValue(value)}`
         : null;
 }
 
@@ -1015,7 +1140,7 @@ function resolveTextDeclaration(utility: string): string | null {
     if (!value.startsWith('[') || !value.endsWith(']') || classifiedAsOther(utility, 'size')) {
         return null;
     }
-    return `font-size: ${expandArbitrarySpaces(value.slice(1, -1))}`;
+    return `font-size: ${delimitedValue(value)}`;
 }
 
 /**
@@ -1034,7 +1159,8 @@ function resolveLeadingDeclaration(utility: string): string | null {
         loose: '2',
     };
     if (own(named, value) !== undefined) return `line-height: ${named[value]}`;
-    if (value.startsWith('[') && value.endsWith(']')) return `line-height: ${value.slice(1, -1)}`;
+    if (value.startsWith('[') && value.endsWith(']'))
+        return `line-height: ${delimitedValue(value)}`;
     return Number.isNaN(Number.parseFloat(value))
         ? null
         : `line-height: calc(var(--spacing) * ${value})`;
@@ -1057,7 +1183,7 @@ function resolveTrackingDeclaration(utility: string): string | null {
     };
     if (own(named, value) !== undefined) return `letter-spacing: ${named[value]}`;
     return value.startsWith('[') && value.endsWith(']')
-        ? `letter-spacing: ${value.slice(1, -1)}`
+        ? `letter-spacing: ${delimitedValue(value)}`
         : null;
 }
 
@@ -1075,10 +1201,14 @@ function resolveFontDeclaration(utility: string): string | null {
     };
     if (own(families, value) !== undefined) return `font-family: ${families[value]}`;
     if (!value.startsWith('[') || !value.endsWith(']')) return null;
-    const inner = expandArbitrarySpaces(value.slice(1, -1));
-    // `font-[500]` is a weight, `font-[Inter]` a family — the same bracket
-    // shape, so the classifier is what tells them apart.
-    return classifiedAsOther(utility, 'family') ? `font-weight: ${inner}` : `font-family: ${inner}`;
+    const inner = delimitedValue(value);
+    // A hint says which: a family's names the family, any other the weight
+    // (`font-[number:var(--w)]`). Without one, `font-[500]` is a weight and
+    // `font-[Inter]` a family, which the classifier tells apart.
+    const hint = typeHint(value);
+    const family =
+        hint === undefined ? !classifiedAsOther(utility, 'family') : FONT_FAMILY_HINTS.has(hint);
+    return family ? `font-family: ${inner}` : `font-weight: ${inner}`;
 }
 
 /**
@@ -1089,8 +1219,10 @@ function resolveShadowDeclaration(utility: string): string | null {
     if (utility === 'shadow') return 'box-shadow: var(--shadow)';
     if (!utility.startsWith('shadow-')) return null;
     const value = utility.slice(7);
+    // A bracket Tailwind reads as a colour (`shadow-[#f00]`) is the colour
+    // resolver's: it sets the shadow's colour, not the shadow.
     if (value.startsWith('[') && value.endsWith(']')) {
-        return `box-shadow: ${expandArbitrarySpaces(value.slice(1, -1))}`;
+        return isShadowValue(value) ? `box-shadow: ${delimitedValue(value)}` : null;
     }
     if (!SHADOW_SIZE_KEYWORDS.has(value)) return null;
     return value === 'none' ? 'box-shadow: none' : `box-shadow: var(--shadow-${value})`;
@@ -1159,8 +1291,7 @@ function resolveGridDeclaration(utility: string): string | null {
  */
 function resolveGridTemplate(value: string, axis: 'columns' | 'rows'): string {
     if (value === 'none' || value === 'subgrid') return `grid-template-${axis}: ${value}`;
-    if (value.startsWith('['))
-        return `grid-template-${axis}: ${expandArbitrarySpaces(value.slice(1, -1))}`;
+    if (value.startsWith('[')) return `grid-template-${axis}: ${delimitedValue(value)}`;
     return `grid-template-${axis}: repeat(${value}, minmax(0, 1fr))`;
 }
 
@@ -1187,7 +1318,7 @@ function resolveTransformDeclaration(utility: string): string | null {
     if (utility.startsWith('scale-')) return `scale: ${Number.parseFloat(utility.slice(6)) / 100}`;
     if (utility.startsWith('rotate-')) {
         const value = utility.slice(7);
-        return value.startsWith('[') ? `rotate: ${value.slice(1, -1)}` : `rotate: ${value}deg`;
+        return value.startsWith('[') ? `rotate: ${delimitedValue(value)}` : `rotate: ${value}deg`;
     }
     if (utility.startsWith('translate-x-'))
         return `translate: ${resolveSpacingValue(utility.slice(12), 'width')} var(--tw-translate-y, 0)`;
@@ -1227,7 +1358,7 @@ function resolveTransitionDeclaration(utility: string): string | null {
  * @param kind
  */
 function resolveTimedTransition(value: string, kind: 'duration' | 'delay'): string {
-    const duration = value.startsWith('[') ? value.slice(1, -1) : `${value}ms`;
+    const duration = value.startsWith('[') ? delimitedValue(value) : `${value}ms`;
     return `transition-${kind}: ${duration}`;
 }
 
@@ -1261,20 +1392,35 @@ function resolveColorDeclaration(utility: string): string | null {
     for (const prefix of prefixes) {
         if (utility !== prefix && !utility.startsWith(`${prefix}-`)) continue;
         const value = utility.slice(prefix.length + 1);
-        if (!value) continue;
-        // A shadow's size, with an opacity or not (`shadow-sm/50`,
-        // `inset-shadow-xs`), is the shadow, not its colour: Tailwind rewrites the
-        // colours inside the theme's shadow at build time, which a rule here
-        // cannot do from a variable, so it writes none (`dynamic.mdx`).
-        if (SHADOW_PREFIXES.has(prefix) && isShadowValue(slashOpacitySplit(value)?.[0] ?? value)) {
-            return '';
-        }
-        // A prefix in this table is not enough: `bg-cover`, `bg-center` and
-        // `border-[3px]` all live under one, and none of them is a colour.
-        if (classifiedAsOther(utility, 'color')) return null;
-        return `${COLOR_PROPS[prefix]}: ${resolveColorValue(value)}`;
+        if (value) return colorDeclaration(utility, prefix, value);
     }
     return null;
+}
+
+/**
+ * The declaration of one colour utility under its prefix.
+ * @param utility
+ * @param prefix
+ * @param value
+ */
+function colorDeclaration(utility: string, prefix: string, value: string): string | null {
+    // A shadow's size, with an opacity or not (`shadow-sm/50`,
+    // `inset-shadow-xs`), is the shadow, not its colour: Tailwind rewrites the
+    // colours inside the theme's shadow at build time, which a rule here
+    // cannot do from a variable, so it writes none (`dynamic.mdx`).
+    if (SHADOW_PREFIXES.has(prefix) && isShadowValue(slashOpacitySplit(value)?.[0] ?? value)) {
+        return '';
+    }
+    // A hint naming the prefix's other property (`bg-(image:--x)`) is not
+    // the colour; no rule rather than a colour that resets it.
+    const hint = typeHint(value);
+    const others = own(OTHER_PROPERTY_HINTS, prefix.startsWith('border') ? 'border' : prefix);
+    if (hint !== undefined && others?.includes(` ${hint} `)) return '';
+    // A prefix in this table is not enough: `bg-cover`, `bg-center` and
+    // `border-[3px]` all live under one, and none of them is a colour.
+    if (classifiedAsOther(utility, 'color')) return null;
+    const color = resolveColorValue(value);
+    return color && `${COLOR_PROPS[prefix]}: ${color}`;
 }
 
 /**
@@ -1302,9 +1448,10 @@ function resolveSpacingDeclaration(utility: string): string | null {
  */
 function resolveArbitraryPropertyDeclaration(utility: string): string | null {
     if (!utility.startsWith('[') || !utility.endsWith(']') || !utility.includes(':')) return null;
-    const inner = expandArbitrarySpaces(utility.slice(1, -1));
+    // The property is written as given; only its value is decoded.
+    const inner = utility.slice(1, -1);
     const colon = inner.indexOf(':');
-    return `${inner.slice(0, colon)}: ${inner.slice(colon + 1)}`;
+    return `${inner.slice(0, colon)}: ${decodeArbitraryValue(inner.slice(colon + 1))}`;
 }
 
 /* eslint-enable jsdoc/require-param-description, jsdoc/require-returns */

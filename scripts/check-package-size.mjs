@@ -207,18 +207,20 @@ export const SIZE_BUDGETS = [
         // token or a custom property, so an escape cannot carry a `;` out of a
         // value (`x\(;position:fixed;--z:\)`). About 200 bytes of headroom.
         //
-        // Raised on 2026-11-26, measured 11,641 / 11,336, Vite 11,579 / 11,291
-        // (about 190 above the budgets before): `dynamic()` decodes a bracket
-        // as Tailwind does, keeping the `_` of a variable's name and of
-        // `url()`, and drops a type hint on every resolver, where it wrote
-        // `var(--my color)` and `font-size: length:2rem`, which a browser drops.
-        maxGzipBytes: 11_850,
+        // Raised on 2026-11-27, measured 11,883 / 11,578 / 9,122, Vite 11,821 /
+        // 11,534 / 8,987 (11,216 / 10,918 / 8,447 at the last raise above, so
+        // about 670 across this branch's `dynamic()` commits, not measured one
+        // by one): `dynamic()` decodes a bracket as Tailwind does, keeping the
+        // `_` of a variable's name and of `url()`; drops a type hint where
+        // Tailwind does and writes no rule where the hint names another
+        // property (`bg-(image:--x)`); and writes no rule for a shadow size.
+        maxGzipBytes: 12_100,
         // Measured 2026-10-08: 10,358 / 7,897. `./react` raised to 8,950 on
         // 2026-11-25, measured 8,666: the shadow-value test (see `.` below).
-        entryBudgets: { '.': 11_550, './react': 8_950 },
+        entryBudgets: { '.': 11_800, './react': 9_350 },
         // Built by Vite, measured 2026-10-19: 10,659, then 10,373 / 7,800.
         // `./react` raised to 8,800 on 2026-11-25, measured 8,538.
-        vite: { maxGzipBytes: 11_800, entryBudgets: { '.': 11_500, './react': 8_800 } },
+        vite: { maxGzipBytes: 12_050, entryBudgets: { '.': 11_750, './react': 9_200 } },
         // None today: its one production failure, an unreachable manifest, is
         // a rejected fetch it catches. Read from the registry all the same, so
         // a production line added to its sources has to be registered.
@@ -482,10 +484,10 @@ export const SIZE_BUDGETS = [
         // colour class's modifier through `./color-modifier`, as Tailwind reads it.
         // Raised to 42,450 on 2026-11-25, measured 42,141: the shadow size object
         // and `dynamic()` telling a shadow from its colour.
-        // Raised to 42,900 on 2026-11-26, measured 42,616: `dynamic()` decodes
+        // Raised to 43,150 on 2026-11-27, measured 42,886: `dynamic()` decodes
         // a bracket as Tailwind does (see `@csszyx/dynamic`), and a shadow
         // bracket is a colour by Tailwind's own test.
-        maxGzipBytes: 42_900,
+        maxGzipBytes: 43_150,
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
     // The wasm build of the parser is the fourth surface: not browser code,

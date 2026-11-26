@@ -524,6 +524,10 @@ importers:
       ignore:
         specifier: 7.0.14
         version: 7.0.14
+    devDependencies:
+      '@csszyx/dynamic':
+        specifier: workspace:*
+        version: link:../dynamic
 
   packages/tooling-metadata:
     devDependencies:

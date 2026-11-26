@@ -328,12 +328,33 @@ describe('generateDeclarations — a shadow with its own opacity', () => {
         expect(generateDeclarations('drop-shadow-[#f00]/50')).toBe(
             '--tw-drop-shadow-color: color-mix(in srgb, #f00 50%, transparent)',
         );
-        // A colour function in brackets is a colour.
+        // A colour function in brackets and a `color:` variable are colours.
         expect(generateDeclarations('shadow-[rgb(255_0_0)]/50')).toBe(
             '--tw-shadow-color: color-mix(in srgb, rgb(255 0 0) 50%, transparent)',
+        );
+        expect(generateDeclarations('shadow-(color:--c)/50')).toBe(
+            '--tw-shadow-color: color-mix(in srgb, var(--c) 50%, transparent)',
         );
         expect(generateDeclarations('text-shadow-red-500/50')).toBe(
             '--tw-text-shadow-color: color-mix(in srgb, var(--color-red-500) 50%, transparent)',
         );
+    });
+});
+
+describe('generateDeclarations — a type hint names the value, not its text', () => {
+    // `(color:--c)` and `[length:10px]` tell Tailwind what the value is; the
+    // declaration holds the value alone, as Tailwind writes it.
+    it.each([
+        ['bg-(color:--c)', 'background-color: var(--c)'],
+        ['bg-(color:--c)/50', 'background-color: color-mix(in srgb, var(--c) 50%, transparent)'],
+        ['text-(color:--c)', 'color: var(--c)'],
+        ['w-(length:--s)', 'width: var(--s)'],
+        ['w-[length:10px]', 'width: 10px'],
+        ['bg-[color:#f00]', 'background-color: #f00'],
+        // No hint: unchanged.
+        ['bg-(--c)', 'background-color: var(--c)'],
+        ['w-(--s,1rem)', 'width: var(--s,1rem)'],
+    ])('%s writes %s', (utility, declaration) => {
+        expect(generateDeclarations(utility)).toBe(declaration);
     });
 });
