@@ -284,7 +284,18 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "position": "site",
+        "forms": [
+            "same-key",
+            "colour-key"
+        ],
         "args": {
+            "form": {
+                "type": [
+                    "enum",
+                    "same-key",
+                    "colour-key"
+                ]
+            },
             "key": {
                 "type": "string"
             },
@@ -294,6 +305,10 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                     "color",
                     "size"
                 ]
+            },
+            "owner": {
+                "type": "string",
+                "optional": true
             },
             "color": {
                 "type": "string"
@@ -313,12 +328,15 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "text": "`{key}: '{color}/{opacity}{important}'` puts the opacity in a string; the object form takes it in `op`.",
-        "help": "write `{ {member}: '{color}{important}', op: {op} }`.",
+        "help": {
+            "same-key": "write `{ {member}: '{color}{important}', op: {op} }`.",
+            "colour-key": "write `{owner}: { color: '{color}{important}', op: {op} }`; `{key}` takes a shadow's size and its alpha."
+        },
         "note": "the class is still emitted as written; a theme colour serves it, and a hex, a colour function or a variable before the slash writes a value no browser takes."
     },
     {
         "id": "color-slash-opacity",
-        "summary": "A colour object with a slash opacity in `color`; the object takes it in `op`.",
+        "summary": "A colour or shadow size object with a slash opacity in its value; the object takes it in `op`.",
         "surfaces": {
             "engine": {},
             "runtime": {
@@ -342,6 +360,13 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "key": {
                 "type": "string"
             },
+            "member": {
+                "type": [
+                    "enum",
+                    "color",
+                    "size"
+                ]
+            },
             "base": {
                 "type": "string"
             },
@@ -360,12 +385,12 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "text": {
-            "op-given": "`{key}: { color: '{base}/{opacity}{important}', op: {op} }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
-            "op-absent": "`{key}: { color: '{base}/{opacity}{important}' }` puts the opacity in `color`; a colour object takes it in `op`."
+            "op-given": "`{key}: { {member}: '{base}/{opacity}{important}', op: {op} }` sets opacity twice; the object takes its opacity in `op`, not in `{member}`.",
+            "op-absent": "`{key}: { {member}: '{base}/{opacity}{important}' }` puts the opacity in `{member}`; the object takes it in `op`."
         },
         "help": {
-            "op-given": "write `{ color: '{base}{important}', op: {op} }`.",
-            "op-absent": "write `{ color: '{base}{important}', op: {op} }`."
+            "op-given": "write `{ {member}: '{base}{important}', op: {op} }`.",
+            "op-absent": "write `{ {member}: '{base}{important}', op: {op} }`."
         },
         "note": "the class is still emitted as written; a theme colour serves it, and a hex, a colour function or a variable before the slash writes a value no browser takes."
     },

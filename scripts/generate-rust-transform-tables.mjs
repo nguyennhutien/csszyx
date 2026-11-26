@@ -71,6 +71,9 @@ function readTables() {
         const keyTables = readTableSource(
             path.join(repoRoot, 'packages/compiler/src/sz-key-tables.ts'),
         );
+        const keywords = readTableSource(
+            path.join(repoRoot, 'packages/compiler/src/shadow-size-keywords.ts'),
+        );
         const closedEnums = readTableSource(
             path.join(repoRoot, 'packages/compiler/src/closed-enum-tables.ts'),
         );
@@ -100,7 +103,7 @@ function readTables() {
             clampedFactorKeys: keyTables.stringSet('CLAMPED_FACTOR_KEYS'),
             booleanOnlyDynamicKeys: core.objectKeys('BOOLEAN_ONLY_DYNAMIC_VOCABULARY'),
             knownSpecialProperties: keyTables.stringSet('KNOWN_SPECIAL_PROPERTIES'),
-            cssWideKeywords: core.stringSet('CSS_WIDE_KEYWORDS'),
+            cssWideKeywords: keywords.stringSet('CSS_WIDE_KEYWORDS'),
             gridTrackKeywords: core.stringSet('GRID_TRACK_KEYWORDS'),
             gridLineNameKeys: core.stringSet('GRID_LINE_NAME_KEYS'),
             cssWideKeywordUtilities: core.stringSet('CSS_WIDE_KEYWORD_UTILITIES'),

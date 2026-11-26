@@ -706,7 +706,7 @@ fn for_each_group_peer_body(object: &StaticSzObject, visit: &mut dyn FnMut(&Stat
 }
 
 /// The keys whose `{ size, op }` object writes a shadow with its opacity
-/// (`shadow-sm/50`, which scales the theme shadow's alpha). Migrate reads the
+/// (`shadow-sm/50`, which sets the shadow's alpha). Migrate reads the
 /// same list.
 pub(crate) const SHADOW_SIZE_KEYS: [&str; 4] =
     ["shadow", "insetShadow", "textShadow", "dropShadow"];
@@ -747,11 +747,17 @@ pub(crate) fn sizes_as_values(object: &StaticSzObject) -> Option<StaticSzObject>
         match value_member(&property.key, nested) {
             Some(("size", _)) => {
                 properties.push(property.clone());
+                // A size with a slash is named by `color-slash-opacity`, with
+                // the `op` the object gives.
                 properties.extend(
                     nested
                         .properties
                         .iter()
                         .filter(|member| member.key == "size")
+                        .filter(|size| {
+                            !matches!(&size.value, StaticSzValue::String(text)
+                                if slash_opacity_split(split_important(text).0).is_some())
+                        })
                         .map(|size| StaticSzProperty {
                             key: property.key.clone(),
                             span: size.span,
@@ -1074,22 +1080,55 @@ pub(crate) fn op_literal(opacity: &str) -> String {
 pub(crate) type SlashOpacityString = (String, &'static str, String, String, bool, u32);
 
 /// The member of the object that replaces `value/op` on `key`: `size` for a
-/// shadow on a shadow key (a size keyword, a bracket of several tokens, a
-/// variable, which Tailwind reads as the shadow itself), `color` for anything
-/// else.
+/// shadow on a shadow key ([`is_shadow_value`]: a size keyword, a variable, a
+/// bracket that is not a colour), `color` for anything else.
 #[cfg(feature = "native-engine")]
 fn slash_member(shadow_key: bool, value: &str) -> &'static str {
-    // A bracket of several tokens is a shadow; `[red]` is a colour, as
-    // Tailwind reads `shadow-[red]`. Mirrors `isShadowValue`.
-    if shadow_key
-        && (super::generated::migrate_tables::shadow_size_keywords(value)
-            || value.starts_with('(')
-            || value.starts_with("--")
-            || (value.starts_with('[') && value.contains('_')))
-    {
+    if shadow_key && is_shadow_value(value) {
         "size"
     } else {
         "color"
+    }
+}
+
+/// Whether the value before a shadow key's slash is the shadow itself rather
+/// than its colour, as Tailwind reads `shadow-<value>`: a named size, a
+/// variable and a parenthesis without the `color:` hint are the shadow, and a
+/// bracket is the colour by [`is_bracket_colour`]. Mirrors `isShadowValue` in
+/// `shadow-size-keywords.ts`.
+#[cfg(feature = "native-engine")]
+fn is_shadow_value(value: &str) -> bool {
+    use super::generated::migrate_tables::shadow_size_keywords;
+    if let Some(reference) = value.strip_prefix('(') {
+        return !reference.starts_with("color:");
+    }
+    if let Some(inner) = value.strip_prefix('[') {
+        return !is_bracket_colour(inner.strip_suffix(']').unwrap_or(inner));
+    }
+    shadow_size_keywords(value) || value.starts_with("--")
+}
+
+/// Whether Tailwind reads a bracket's text as a colour: a `color:` hint, a
+/// leading `#` or colour function, or one word other than a size or a CSS-wide
+/// keyword. O(n) in the leading name. Mirrors `isBracketColour`.
+#[cfg(feature = "native-engine")]
+fn is_bracket_colour(inner: &str) -> bool {
+    use super::generated::migrate_tables::{colour_function_names, shadow_size_keywords};
+    let end = inner
+        .find(|c: char| !(c.is_ascii_alphabetic() || c == '-'))
+        .unwrap_or(inner.len());
+    let name = &inner[..end];
+    match inner[end..].chars().next() {
+        Some(':') => name == "color",
+        Some('(') => colour_function_names(&name.to_ascii_lowercase()),
+        Some(_) => inner.starts_with('#'),
+        None => {
+            let word = name.to_ascii_lowercase();
+            !word.is_empty()
+                && word.bytes().all(|byte| byte.is_ascii_alphabetic())
+                && !shadow_size_keywords(&word)
+                && !super::generated::tables::is_css_wide_keyword(&word)
+        }
     }
 }
 
@@ -1135,14 +1174,17 @@ pub(crate) fn collect_slash_opacity_strings(
     }
 }
 
-/// A colour object whose `color` carries a slash opacity: key, `color` as
-/// written, `op` as written when given, offset.
+/// A value object whose value member carries a slash opacity: key, the
+/// member (`color` or `size`), its value as written, `op` as written when
+/// given, offset.
 #[cfg(feature = "native-engine")]
-pub(crate) type ColorSlashOpacity = (String, String, Option<String>, u32);
+pub(crate) type ColorSlashOpacity = (String, &'static str, String, Option<String>, u32);
 
-/// Collect the colour objects whose `color` carries a slash opacity
-/// (`color-slash-opacity`). `color` is written as given; the finding points at
-/// `op`, the one spelling. Descends like [`collect_slash_opacity_strings`].
+/// Collect the value objects whose value carries a slash opacity
+/// (`color-slash-opacity`): a colour object's `color`, a shadow's `size`. The
+/// value is written as given; the finding points at `op`, the one spelling.
+/// Key, member, value, `op` as written, offset. Descends like
+/// [`collect_slash_opacity_strings`].
 #[cfg(feature = "native-engine")]
 pub(crate) fn collect_color_slash_opacities(
     object: &StaticSzObject,
@@ -1152,8 +1194,8 @@ pub(crate) fn collect_color_slash_opacities(
         let StaticSzValue::Object(nested) = &property.value else {
             continue;
         };
-        match object_string_property(nested, "color") {
-            Some(color) if property_prefix(&property.key).is_some() => {
+        match value_member(&property.key, nested) {
+            Some((member, color)) => {
                 if slash_opacity_split(split_important(color).0).is_some() {
                     let op = nested
                         .properties
@@ -1166,13 +1208,14 @@ pub(crate) fn collect_color_slash_opacities(
                         });
                     out.push((
                         property.key.clone(),
+                        member,
                         color.to_string(),
                         op,
                         property.span.start,
                     ));
                 }
             }
-            _ => for_each_sz_object_in(&property.key, nested, &mut |object| {
+            None => for_each_sz_object_in(&property.key, nested, &mut |object| {
                 collect_color_slash_opacities(object, out);
             }),
         }
@@ -3195,8 +3238,9 @@ pub(crate) fn collect_invalid_opacities(object: &StaticSzObject, out: &mut Vec<I
                 push_invalid_opacity(&property.key, op, out);
                 // `shadow-(--s)/50` sets the shadow's alpha, which the
                 // variable's shadow uses only if it reads it.
+                let size = split_important(value).0;
                 if member == "size"
-                    && split_important(value).0.starts_with("--")
+                    && (size.starts_with("--") || size.starts_with("var("))
                     && format_opacity_value(&op.value).is_some()
                 {
                     out.push((
@@ -4599,9 +4643,39 @@ mod tests {
             super::collect_color_slash_opacities(&colour(op), &mut found);
             assert_eq!(
                 found,
-                [("bg".to_string(), "red-500/50".to_string(), named, 0)]
+                [(
+                    "bg".to_string(),
+                    "color",
+                    "red-500/50".to_string(),
+                    named,
+                    0
+                )]
             );
         }
+        // A shadow's size takes its opacity in `op` too.
+        let mut found = Vec::new();
+        super::collect_color_slash_opacities(
+            &StaticSzObject {
+                properties: vec![property(
+                    "shadow",
+                    object(vec![
+                        property("size", StaticSzValue::String("sm/50".to_string())),
+                        property("op", StaticSzValue::Number(20.0)),
+                    ]),
+                )],
+            },
+            &mut found,
+        );
+        assert_eq!(
+            found,
+            [(
+                "shadow".to_string(),
+                "size",
+                "sm/50".to_string(),
+                Some("20".to_string()),
+                0
+            )]
+        );
     }
 
     /// The `op` a modifier names, as `csszyx migrate` and a slash report's
@@ -4966,10 +5040,15 @@ mod tests {
         };
         assert!(super::sizes_as_values(&plain).is_none());
         let nested = StaticSzObject {
-            properties: vec![property("hover", object(vec![size("shadow")]))],
+            properties: vec![
+                property("p", StaticSzValue::Number(4.0)),
+                property("hover", object(vec![size("shadow")])),
+            ],
         };
         let viewed = super::sizes_as_values(&nested).expect("a size object is viewed");
-        let StaticSzValue::Object(hover) = &viewed.properties[0].value else {
+        // A value that is no object is kept as it is.
+        assert_eq!(viewed.properties[0], nested.properties[0]);
+        let StaticSzValue::Object(hover) = &viewed.properties[1].value else {
             panic!("hover stays an object");
         };
         let keys: Vec<_> = hover.properties.iter().map(|p| &p.value).collect();
@@ -4999,6 +5078,30 @@ mod tests {
         assert_eq!(members("insetShadow", "--s/50"), ["size"]);
         assert_eq!(members("shadow", "red-500/50"), ["color"]);
         assert_eq!(members("shadow", "[#f00]/50"), ["color"]);
+        // A colour function in brackets and a `color:` reference are colours.
+        assert_eq!(members("shadow", "[rgb(255_0_0)]/50"), ["color"]);
+        assert_eq!(members("textShadow", "[oklch(0.5_0.1_20)]/50"), ["color"]);
+        assert_eq!(members("shadow", "(color:--c)/50"), ["color"]);
+        assert_eq!(members("shadow", "[inset_0_1px_rgb(0_0_0)]/50"), ["size"]);
+        // Tailwind reads a bracket that starts with a colour as a colour.
+        assert_eq!(members("shadow", "[rgb(255_0_0)_0_1px]/50"), ["color"]);
+        assert_eq!(members("shadow", "[RGB(0_0_0)]/50"), ["color"]);
+        assert_eq!(members("shadow", "[#f00_0_1px]/50"), ["color"]);
+        assert_eq!(members("shadow", "[RED]/50"), ["color"]);
+        assert_eq!(members("shadow", "[color:var(--s)]/50"), ["color"]);
+        // A variable, `none`, a CSS-wide keyword, another hint, a word with a
+        // shadow's parts, and nothing at all are the shadow.
+        assert_eq!(members("shadow", "[var(--s)]/50"), ["size"]);
+        assert_eq!(members("shadow", "[none]/50"), ["size"]);
+        assert_eq!(members("shadow", "[inherit]/50"), ["size"]);
+        assert_eq!(members("shadow", "[revert-layer]/50"), ["size"]);
+        assert_eq!(members("shadow", "[length:var(--c)]/50"), ["size"]);
+        assert_eq!(members("shadow", "[red_0_1px]/50"), ["size"]);
+        assert_eq!(members("shadow", "[calc(1px)]/50"), ["size"]);
+        assert_eq!(
+            members("shadow", "[color-mix(in_srgb,red_50%,blue)]/50"),
+            ["color"]
+        );
         // A bracket or a variable on a colour key is a colour.
         assert_eq!(members("bg", "[#f00]/50"), ["color"]);
         assert_eq!(members("bg", "--c/50"), ["color"]);

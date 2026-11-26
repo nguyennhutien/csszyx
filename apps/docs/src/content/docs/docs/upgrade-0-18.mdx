@@ -1577,13 +1577,18 @@ is a size (`1/2`), and a gradient's slash names its interpolation
 
 A shadow's own opacity has an object form too, since 0.18.1: `shadow`,
 `insetShadow`, `textShadow` and `dropShadow` take `{ size, op }`, so
-`{ shadow: { size: 'sm', op: 50 } }` writes `shadow-sm/50`, which scales the
-theme shadow's alpha. `shadowColor: { color, op }` is not the same thing: it
-replaces the shadow's colour. The string `shadow: 'sm/50'` still writes its
-class and is now reported as `slash-opacity-string` with `{ size, op }` in the
-help, and so is a colour slash on a shadow key (`shadow: 'red-500/50'`, help
-`{ color, op }`), which 0.18.0 did not report. `{ size: '--s', op: 50 }` writes
-`shadow-(--s)/50` and adds the note `variable-shadow-opacity`: the opacity
+`{ shadow: { size: 'sm', op: 50 } }` writes `shadow-sm/50`, which sets the
+shadow's alpha to 50%, where the theme's shadows use 5% to 25%. The shadow's
+colour is a lane of its own, `shadowColor: { color, op }`. The string
+`shadow: 'sm/50'` still writes its class and is now reported as
+`slash-opacity-string` with `{ size, op }` in the help, and so is a colour slash
+on a shadow key (`shadow: 'red-500/50'`, help `shadowColor: { color, op }`),
+which 0.18.0 did not report. A slash in the object's `size` is reported as
+`color-slash-opacity`, as a slash in a colour object's `color` is, with or
+without an `op`; with one (`{ size: 'sm/50', op: 20 }`) the alpha is set
+twice. `{ size: '--s', op: 50 }` writes
+`shadow-(--s)/50` and adds the note `variable-shadow-opacity` (also for
+`var(--s)`): the opacity
 reaches a shadow held in a variable only if its value reads
 `--tw-shadow-alpha`. `csszyx migrate` writes `shadow-sm/50` as the object.
 

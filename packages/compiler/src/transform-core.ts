@@ -142,7 +142,10 @@ import {
     UNSERVED_VARIANT,
     VARIABLE_SHADOW_OPACITY,
 } from './report.js';
-import { isShadowValue } from './shadow-size-keywords.js';
+import { CSS_WIDE_KEYWORDS, isShadowValue } from './shadow-size-keywords.js';
+
+export { CSS_WIDE_KEYWORDS };
+
 import { unservedStateVariantForm } from './state-variants.js';
 
 /** A value in the sz object that is not a nested object. */
@@ -1697,6 +1700,7 @@ const ARBITRARY_LENGTH_UNITS = new Set([
     'in',
     'pt',
     'pc',
+    'Q',
     'deg',
     'rad',
     'turn',
@@ -1713,10 +1717,11 @@ const ARBITRARY_LENGTH_UNITS = new Set([
  * @returns Whether the value needs Tailwind arbitrary-value brackets.
  */
 function isArbitraryLength(value: string): boolean {
-    const match = /^(-?(?:\d+(?:\.\d+)?|\.\d+))([a-z%]+)?$/.exec(value);
+    const match = /^(-?(?:\d+(?:\.\d+)?|\.\d+))([a-z%]+)?$/i.exec(value);
     if (!match) return false;
+    const leadingDecimal = match[1].replace(/^-/, '').startsWith('.');
     const unit = match[2];
-    if (!unit) return match[1].replace(/^-/, '').startsWith('.');
+    if (!unit) return leadingDecimal;
     return ARBITRARY_LENGTH_UNITS.has(unit);
 }
 
@@ -2663,7 +2668,7 @@ const SHADOW_COLOR_HINT_PREFIXES = new Set([
 
 /**
  * The keys whose `{ size, op }` object writes a shadow with its opacity
- * (`shadow-sm/50`, which scales the theme shadow's alpha). Mirrors
+ * (`shadow-sm/50`, which sets the shadow's alpha). Mirrors
  * `SHADOW_SIZE_KEYS` in `lower.rs`; editor tooling reads this list.
  * @internal Used by csszyx's own packages; not a stable API.
  */
@@ -2717,13 +2722,18 @@ function buildValueObjectClass(
     const important = written.endsWith('!') ? '!' : '';
     const raw = important ? written.slice(0, -1) : written;
     let head: string;
+    warnColorObjectSlashOpacity(key, member, written, object.op);
     if (member === 'size') {
-        // The class the key writes for the size as a string.
-        const classes = nestedClasses({ [key]: raw }, prefix);
+        // The class the key writes for the size as a string, which reports
+        // the size as that string would be; a slash in it is reported above,
+        // with the `op` the object gives.
+        const slashed =
+            process.env.NODE_ENV !== 'production' && slashOpacitySplit(raw) !== undefined;
+        const lower = (): string[] => nestedClasses({ [key]: raw }, prefix);
+        const classes = slashed ? withSzWarningsMuted(lower).result : lower();
         if (classes.length !== 1) return '';
         head = classes[0] as string;
     } else {
-        warnColorObjectSlashOpacity(key, written, object.op);
         head = `${prefix}${PROPERTY_MAP[key]}-${colorObjectValue(PROPERTY_MAP[key] as string, raw)}`;
     }
     // A null `op` is no `op`, as any null value.
@@ -2760,7 +2770,11 @@ function colorObjectValue(utilityPrefix: string, raw: string): string {
  * @param raw - The size without `!`.
  */
 function warnVariableShadowOpacity(key: string, written: string, raw: string): void {
-    if (process.env.NODE_ENV !== 'production' && raw.startsWith('--') && szNodeWarningsUnmuted()) {
+    if (
+        process.env.NODE_ENV !== 'production' &&
+        (raw.startsWith('--') || raw.startsWith('var(')) &&
+        szNodeWarningsUnmuted()
+    ) {
         szReport({
             diagnostic: VARIABLE_SHADOW_OPACITY,
             args: { key, size: written },
@@ -2807,11 +2821,18 @@ function warnSlashOpacityString(key: string, value: string): void {
         const [color, opacity] = split;
         if (_warnedSlashOpacities.has(`${key}:${color}/${opacity}`)) return;
         _warnedSlashOpacities.add(`${key}:${color}/${opacity}`);
+        const member = slashMember(key, color);
+        // A colour on a shadow key belongs to its colour key: `shadow` is the
+        // size and its alpha. Mirrors `push_slash_opacity_diagnostics`.
+        const colourKey = member === 'color' && SHADOW_SIZE_KEYS.includes(key);
         szReport({
             diagnostic: SLASH_OPACITY_STRING,
             args: {
+                ...(colourKey
+                    ? { form: 'colour-key' as const, owner: `${key}Color` }
+                    : { form: 'same-key' as const }),
                 key,
-                member: slashMember(key, color),
+                member,
                 color,
                 opacity,
                 op: opLiteral(opacity),
@@ -2824,8 +2845,9 @@ function warnSlashOpacityString(key: string, value: string): void {
 
 /**
  * The member of the object that replaces `value/op` on `key`: `size` for a
- * shadow on a shadow key (a size keyword, a bracket of several tokens, a variable, which
- * Tailwind reads as the shadow itself), `color` for anything else. Mirrors
+ * shadow on a shadow key (`isShadowValue`: a size keyword, a variable, a bracket
+ * that is not a colour, which Tailwind reads as the shadow itself), `color` for
+ * anything else. Mirrors
  * `slash_member` in `lower.rs`.
  *
  * @param key - The sz key.
@@ -2854,12 +2876,14 @@ function writtenOp(op: unknown): string {
  * spelling (`color-slash-opacity`), on every key a colour object serves.
  * `color` is written as given.
  *
- * @param key - The key the colour object is on.
- * @param color - `color` as written.
+ * @param key - The key the value object is on.
+ * @param member - The member the value is in: `color`, or a shadow's `size`.
+ * @param color - The value as written.
  * @param op - `op` as written, when given.
  */
 function warnColorObjectSlashOpacity(
     key: string,
+    member: ValueMember,
     color: string,
     op: number | string | undefined,
 ): void {
@@ -2876,6 +2900,7 @@ function warnColorObjectSlashOpacity(
             args: {
                 form: shown ? 'op-given' : 'op-absent',
                 key,
+                member,
                 base: split[0],
                 opacity: split[1],
                 op: shown || opLiteral(split[1]),
@@ -4186,21 +4211,6 @@ function buildGenericStringClass(
         ? `${prefix}-${key}-${finalValue.substring(1)}`
         : `${prefix}${key}-${finalValue}`;
 }
-
-/**
- * The CSS-wide keywords. Every property takes them, but Tailwind serves only a
- * few as a named utility (`text-inherit`); for every other key the keyword
- * needs the arbitrary form (`p-[inherit]`), and the bare one is a class with
- * no CSS.
- * @internal Used by csszyx's own packages; not a stable API.
- */
-export const CSS_WIDE_KEYWORDS: ReadonlySet<string> = new Set([
-    'inherit',
-    'initial',
-    'unset',
-    'revert',
-    'revert-layer',
-]);
 
 /**
  * The `<prefix>-<keyword>` utilities Tailwind 4 serves by name for a CSS-wide

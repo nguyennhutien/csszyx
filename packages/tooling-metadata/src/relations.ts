@@ -90,7 +90,7 @@ const COLOR_FORM: ObjectValueForm = {
     ],
 };
 
-/** `shadow: { size, op }` → `shadow-sm/50`, which scales the theme shadow's alpha. */
+/** `shadow: { size, op }` → `shadow-sm/50`, which sets the shadow's alpha. */
 const SHADOW_SIZE_FORM: ObjectValueForm = {
     members: [
         {

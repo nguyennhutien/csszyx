@@ -545,7 +545,7 @@ export const OBJECT_POSITION_KEYWORDS: ReadonlySet<string> = new Set([
     'right-bottom',
 ]);
 
-export { SHADOW_SIZE_KEYWORDS } from '../shadow-size-keywords.js';
+export { COLOUR_FUNCTION_NAMES, SHADOW_SIZE_KEYWORDS } from '../shadow-size-keywords.js';
 
 // align-content keywords. `content-<keyword>` is align-content (→ alignContent),
 // while quoted / none / var / arbitrary `content-*` is the `content` CSS property.

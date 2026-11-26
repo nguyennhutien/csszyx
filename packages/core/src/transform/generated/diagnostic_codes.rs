@@ -23,7 +23,7 @@ pub enum DiagnosticCode {
     ClosedEnumValue,
     /// A colour or shadow key given its opacity in a string; the object form is the one spelling of it.
     SlashOpacityString,
-    /// A colour object with a slash opacity in `color`; the object takes it in `op`.
+    /// A colour or shadow size object with a slash opacity in its value; the object takes it in `op`.
     ColorSlashOpacity,
     /// A spacing value off Tailwind's quarter-step scale, or a fraction on a key that takes none.
     OffScaleValue,
@@ -444,12 +444,13 @@ pub mod issue {
         )
     }
 
-    /// `slash-opacity-string`: A colour or shadow key given its opacity in a string; the object form is the one spelling of it.
+    /// `slash-opacity-string` (`same-key`): A colour or shadow key given its opacity in a string; the object form is the one spelling of it.
     #[must_use]
     #[inline]
-    pub fn slash_opacity_string(
+    pub fn slash_opacity_string_same_key(
         key: &str,
         member: &'static str,
+        owner: Option<&str>,
         color: &str,
         opacity: &str,
         op: &str,
@@ -460,8 +461,10 @@ pub mod issue {
         (
             DiagnosticCode::SlashOpacityString,
             Args::default()
+                .text("form", "same-key")
                 .text("key", key)
                 .text("member", member)
+                .optional_text("owner", owner)
                 .text("color", color)
                 .text("opacity", opacity)
                 .text("op", op)
@@ -469,22 +472,53 @@ pub mod issue {
         )
     }
 
-    /// `color-slash-opacity` (`op-given`): A colour object with a slash opacity in `color`; the object takes it in `op`.
+    /// `slash-opacity-string` (`colour-key`): A colour or shadow key given its opacity in a string; the object form is the one spelling of it.
+    #[must_use]
+    #[inline]
+    pub fn slash_opacity_string_colour_key(
+        key: &str,
+        member: &'static str,
+        owner: Option<&str>,
+        color: &str,
+        opacity: &str,
+        op: &str,
+        important: Option<&'static str>,
+    ) -> (DiagnosticCode, Args) {
+        debug_assert!(["color", "size"].contains(&member));
+        debug_assert!(important.is_none_or(|v| ["!"].contains(&v)));
+        (
+            DiagnosticCode::SlashOpacityString,
+            Args::default()
+                .text("form", "colour-key")
+                .text("key", key)
+                .text("member", member)
+                .optional_text("owner", owner)
+                .text("color", color)
+                .text("opacity", opacity)
+                .text("op", op)
+                .optional_text("important", important),
+        )
+    }
+
+    /// `color-slash-opacity` (`op-given`): A colour or shadow size object with a slash opacity in its value; the object takes it in `op`.
     #[must_use]
     #[inline]
     pub fn color_slash_opacity_op_given(
         key: &str,
+        member: &'static str,
         base: &str,
         opacity: &str,
         important: Option<&'static str>,
         op: &str,
     ) -> (DiagnosticCode, Args) {
+        debug_assert!(["color", "size"].contains(&member));
         debug_assert!(important.is_none_or(|v| ["!"].contains(&v)));
         (
             DiagnosticCode::ColorSlashOpacity,
             Args::default()
                 .text("form", "op-given")
                 .text("key", key)
+                .text("member", member)
                 .text("base", base)
                 .text("opacity", opacity)
                 .optional_text("important", important)
@@ -492,22 +526,25 @@ pub mod issue {
         )
     }
 
-    /// `color-slash-opacity` (`op-absent`): A colour object with a slash opacity in `color`; the object takes it in `op`.
+    /// `color-slash-opacity` (`op-absent`): A colour or shadow size object with a slash opacity in its value; the object takes it in `op`.
     #[must_use]
     #[inline]
     pub fn color_slash_opacity_op_absent(
         key: &str,
+        member: &'static str,
         base: &str,
         opacity: &str,
         important: Option<&'static str>,
         op: &str,
     ) -> (DiagnosticCode, Args) {
+        debug_assert!(["color", "size"].contains(&member));
         debug_assert!(important.is_none_or(|v| ["!"].contains(&v)));
         (
             DiagnosticCode::ColorSlashOpacity,
             Args::default()
                 .text("form", "op-absent")
                 .text("key", key)
+                .text("member", member)
                 .text("base", base)
                 .text("opacity", opacity)
                 .optional_text("important", important)
@@ -1362,47 +1399,83 @@ mod tests {
             args.to_json(),
             r#"{"form":"flag","key":"key","value":"value"}"#
         );
-        let (code, args) =
-            issue::slash_opacity_string("key", "color", "color", "opacity", "op", Some("!"));
+        let (code, args) = issue::slash_opacity_string_same_key(
+            "key",
+            "color",
+            Some("owner"),
+            "color",
+            "opacity",
+            "op",
+            Some("!"),
+        );
         assert_eq!(code, DiagnosticCode::SlashOpacityString);
         assert_eq!(
             args.to_json(),
-            r#"{"key":"key","member":"color","color":"color","opacity":"opacity","op":"op","important":"!"}"#
+            r#"{"form":"same-key","key":"key","member":"color","owner":"owner","color":"color","opacity":"opacity","op":"op","important":"!"}"#
         );
-        let (code, args) =
-            issue::slash_opacity_string("key", "color", "color", "opacity", "op", None);
+        let (code, args) = issue::slash_opacity_string_same_key(
+            "key", "color", None, "color", "opacity", "op", None,
+        );
         assert_eq!(code, DiagnosticCode::SlashOpacityString);
         assert_eq!(
             args.to_json(),
-            r#"{"key":"key","member":"color","color":"color","opacity":"opacity","op":"op"}"#
+            r#"{"form":"same-key","key":"key","member":"color","color":"color","opacity":"opacity","op":"op"}"#
+        );
+        let (code, args) = issue::slash_opacity_string_colour_key(
+            "key",
+            "color",
+            Some("owner"),
+            "color",
+            "opacity",
+            "op",
+            Some("!"),
+        );
+        assert_eq!(code, DiagnosticCode::SlashOpacityString);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"colour-key","key":"key","member":"color","owner":"owner","color":"color","opacity":"opacity","op":"op","important":"!"}"#
+        );
+        let (code, args) = issue::slash_opacity_string_colour_key(
+            "key", "color", None, "color", "opacity", "op", None,
+        );
+        assert_eq!(code, DiagnosticCode::SlashOpacityString);
+        assert_eq!(
+            args.to_json(),
+            r#"{"form":"colour-key","key":"key","member":"color","color":"color","opacity":"opacity","op":"op"}"#
         );
         let (code, args) =
-            issue::color_slash_opacity_op_given("key", "base", "opacity", Some("!"), "op");
+            issue::color_slash_opacity_op_given("key", "color", "base", "opacity", Some("!"), "op");
         assert_eq!(code, DiagnosticCode::ColorSlashOpacity);
         assert_eq!(
             args.to_json(),
-            r#"{"form":"op-given","key":"key","base":"base","opacity":"opacity","important":"!","op":"op"}"#
+            r#"{"form":"op-given","key":"key","member":"color","base":"base","opacity":"opacity","important":"!","op":"op"}"#
         );
         let (code, args) =
-            issue::color_slash_opacity_op_given("key", "base", "opacity", None, "op");
+            issue::color_slash_opacity_op_given("key", "color", "base", "opacity", None, "op");
         assert_eq!(code, DiagnosticCode::ColorSlashOpacity);
         assert_eq!(
             args.to_json(),
-            r#"{"form":"op-given","key":"key","base":"base","opacity":"opacity","op":"op"}"#
+            r#"{"form":"op-given","key":"key","member":"color","base":"base","opacity":"opacity","op":"op"}"#
         );
-        let (code, args) =
-            issue::color_slash_opacity_op_absent("key", "base", "opacity", Some("!"), "op");
+        let (code, args) = issue::color_slash_opacity_op_absent(
+            "key",
+            "color",
+            "base",
+            "opacity",
+            Some("!"),
+            "op",
+        );
         assert_eq!(code, DiagnosticCode::ColorSlashOpacity);
         assert_eq!(
             args.to_json(),
-            r#"{"form":"op-absent","key":"key","base":"base","opacity":"opacity","important":"!","op":"op"}"#
+            r#"{"form":"op-absent","key":"key","member":"color","base":"base","opacity":"opacity","important":"!","op":"op"}"#
         );
         let (code, args) =
-            issue::color_slash_opacity_op_absent("key", "base", "opacity", None, "op");
+            issue::color_slash_opacity_op_absent("key", "color", "base", "opacity", None, "op");
         assert_eq!(code, DiagnosticCode::ColorSlashOpacity);
         assert_eq!(
             args.to_json(),
-            r#"{"form":"op-absent","key":"key","base":"base","opacity":"opacity","op":"op"}"#
+            r#"{"form":"op-absent","key":"key","member":"color","base":"base","opacity":"opacity","op":"op"}"#
         );
         let (code, args) = issue::off_scale_value_step("key", "value", Some("percent"));
         assert_eq!(code, DiagnosticCode::OffScaleValue);

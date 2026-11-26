@@ -178,8 +178,12 @@ const csstree = createRequire(import.meta.url)('css-tree') as CssTree;
 /** A value css-tree cannot judge: it resolves only in the browser. */
 const UNJUDGED_VALUE = /\b(?:var|calc|env)\(/;
 
+/** How many declarations were matched, and how many left to the browser. */
+const declarationCounts = { matched: 0, unjudged: 0 };
+
 /**
- * The declarations in one class's CSS that its property's grammar rejects.
+ * The declarations in one class's CSS that its property's grammar rejects,
+ * counted into {@link declarationCounts}.
  *
  * Cost: linear in the CSS; one lexer match per declaration checked.
  *
@@ -193,7 +197,11 @@ function invalidDeclarations(css: string): string[] {
         enter(node) {
             if (this.atrule?.name === 'property' || node.property.startsWith('--')) return;
             const value = csstree.generate(node.value);
-            if (UNJUDGED_VALUE.test(value)) return;
+            if (UNJUDGED_VALUE.test(value)) {
+                declarationCounts.unjudged++;
+                return;
+            }
+            declarationCounts.matched++;
             if (csstree.lexer.matchProperty(node.property, node.value).error) {
                 invalid.push(`${node.property}: ${value}`);
             }
@@ -225,7 +233,9 @@ function checkDeclarations(
         token => live.includes(token) && !found.has(token),
     );
     console.log(
-        `\nchecked the declarations of ${live.length} live classes — ${found.size} rejected by CSS, ${unbaselined.length} new`,
+        `\nmatched ${declarationCounts.matched} declarations of ${live.length} live classes against their grammar ` +
+            `(${declarationCounts.unjudged} with var()/calc()/env() left to the browser, custom properties and ` +
+            `@property descriptors not read) — ${found.size} classes rejected by CSS, ${unbaselined.length} new`,
     );
     if (stale.length > 0) {
         console.log('\nSTALE invalid-declaration entries — these match their grammar now:');

@@ -316,12 +316,13 @@ export type BorderRadiusValue =
 type ShadowKeyword = 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'inner' | 'none' | true | (string & {});
 
 /**
- * A shadow size with its opacity: `{ size: 'sm', op: 50 }` writes
- * `shadow-sm/50`, which scales the theme shadow's alpha (`shadowColor`
- * replaces the colour instead).
+ * A shadow size with its alpha: `{ size: 'sm', op: 50 }` writes
+ * `shadow-sm/50`, which sets the shadow's alpha to 50% (the theme's shadows
+ * use 5% to 25%); the shadow's colour is its own key, `shadowColor`.
+ * `size` names a size, never the bare `true` of the shorthand.
  */
 export interface ShadowSizeObject<Size> {
-    size: Size;
+    size: Exclude<Size, true>;
     op?: number | (string & {});
 }
 

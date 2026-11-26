@@ -328,6 +328,10 @@ describe('generateDeclarations — a shadow with its own opacity', () => {
         expect(generateDeclarations('drop-shadow-[#f00]/50')).toBe(
             '--tw-drop-shadow-color: color-mix(in srgb, #f00 50%, transparent)',
         );
+        // A colour function in brackets is a colour.
+        expect(generateDeclarations('shadow-[rgb(255_0_0)]/50')).toBe(
+            '--tw-shadow-color: color-mix(in srgb, rgb(255 0 0) 50%, transparent)',
+        );
         expect(generateDeclarations('text-shadow-red-500/50')).toBe(
             '--tw-text-shadow-color: color-mix(in srgb, var(--color-red-500) 50%, transparent)',
         );

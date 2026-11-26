@@ -432,24 +432,35 @@ export const DIAGNOSTICS = [
         // the opacity names (`modifierOp`), a number bare and a string quoted,
         // so following the help writes the same opacity. `member` is the
         // object's member for the value: `size` on a shadow key whose value
-        // is a shadow (a size keyword, a bracket, a variable), `color`
-        // otherwise. `color` is the value before the slash, either way.
+        // is a shadow (`isShadowValue`: a size keyword, a variable, a
+        // bracket that is not a colour), `color` otherwise. `color` is the value before the
+        // slash, either way. A colour on a shadow key (form `colour-key`)
+        // belongs to its colour key, `owner`: `shadow` is the size and its
+        // alpha, `shadowColor` the colour (user decision 2026-11-26).
+        forms: ['same-key', 'colour-key'],
         args: {
+            form: formArg(['same-key', 'colour-key']),
             key: STRING,
             member: { type: ['enum', 'color', 'size'] },
+            owner: { type: 'string', optional: true },
             color: STRING,
             opacity: STRING,
             op: STRING,
             important: { type: ['enum', '!'], optional: true },
         },
         text: "`{key}: '{color}/{opacity}{important}'` puts the opacity in a string; the object form takes it in `op`.",
-        help: "write `{ {member}: '{color}{important}', op: {op} }`.",
+        help: {
+            'same-key': "write `{ {member}: '{color}{important}', op: {op} }`.",
+            'colour-key':
+                "write `{owner}: { color: '{color}{important}', op: {op} }`; `{key}` takes a shadow's size and its alpha.",
+        },
         note: SLASH_KEPT_NOTE,
         sources: [ENGINE, CORE_TS],
     },
     {
         id: 'color-slash-opacity',
-        summary: 'A colour object with a slash opacity in `color`; the object takes it in `op`.',
+        summary:
+            'A colour or shadow size object with a slash opacity in its value; the object takes it in `op`.',
         surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
         position: 'site',
         // `color` is written as given, as a colour string is; with `op` as
@@ -457,10 +468,12 @@ export const DIAGNOSTICS = [
         // The colour as written is `{base}/{opacity}{important}`. `op` is the
         // JS literal the author wrote, quotes included for a string, or, with
         // no `op` written, the `op` the opacity names, as for a string.
+        // `member` is `size` for a shadow's `{ size, op }`, `color` otherwise.
         forms: ['op-given', 'op-absent'],
         args: {
             form: formArg(['op-given', 'op-absent']),
             key: STRING,
+            member: { type: ['enum', 'color', 'size'] },
             base: STRING,
             opacity: STRING,
             important: { type: ['enum', '!'], optional: true },
@@ -468,13 +481,13 @@ export const DIAGNOSTICS = [
         },
         text: {
             'op-given':
-                "`{key}: { color: '{base}/{opacity}{important}', op: {op} }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
+                "`{key}: { {member}: '{base}/{opacity}{important}', op: {op} }` sets opacity twice; the object takes its opacity in `op`, not in `{member}`.",
             'op-absent':
-                "`{key}: { color: '{base}/{opacity}{important}' }` puts the opacity in `color`; a colour object takes it in `op`.",
+                "`{key}: { {member}: '{base}/{opacity}{important}' }` puts the opacity in `{member}`; the object takes it in `op`.",
         },
         help: {
-            'op-given': "write `{ color: '{base}{important}', op: {op} }`.",
-            'op-absent': "write `{ color: '{base}{important}', op: {op} }`.",
+            'op-given': "write `{ {member}: '{base}{important}', op: {op} }`.",
+            'op-absent': "write `{ {member}: '{base}{important}', op: {op} }`.",
         },
         note: SLASH_KEPT_NOTE,
         sources: [ENGINE, CORE_TS],
@@ -1004,8 +1017,8 @@ export const DIAGNOSTICS = [
         surfaces: { engine: {}, runtime: { production: false, host: 'browser' } },
         // `'[…]'` is a second spelling of the arbitrary class (ADR 0037 §2),
         // and the class `key-[…]` is written: a note on the spelling, raised
-        // to warn under atomic (user decision 2026-11-23), as the retired
-        // `color-slash-opacity` was.
+        // to warn under atomic (user decision 2026-11-23), as
+        // `variable-shadow-opacity` is.
         defaults: { recommended: 'info', atomic: 'warn' },
         position: 'site',
         // `inner` is the value without its brackets, `!` kept at the end, a

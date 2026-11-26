@@ -52,8 +52,8 @@ export interface SzDiagnosticArgs {
     'removed-key': { readonly form: 'runtime-alias' | 'sugar-replaced' | 'sugar' | 'removed' | 'replaced'; readonly key: string; readonly replacement?: string };
     'numeric-key': { readonly key: string };
     'closed-enum-value': { readonly form: 'sibling-group' | 'dead' | 'css-value' | 'font-style' | 'font-smoothing' | 'flag'; readonly key: string; readonly value: string; readonly suggestion?: string; readonly groupKey?: string; readonly groupValue?: string };
-    'slash-opacity-string': { readonly key: string; readonly member: 'color' | 'size'; readonly color: string; readonly opacity: string; readonly op: string; readonly important?: '!' };
-    'color-slash-opacity': { readonly form: 'op-given' | 'op-absent'; readonly key: string; readonly base: string; readonly opacity: string; readonly important?: '!'; readonly op: string };
+    'slash-opacity-string': { readonly form: 'same-key' | 'colour-key'; readonly key: string; readonly member: 'color' | 'size'; readonly owner?: string; readonly color: string; readonly opacity: string; readonly op: string; readonly important?: '!' };
+    'color-slash-opacity': { readonly form: 'op-given' | 'op-absent'; readonly key: string; readonly member: 'color' | 'size'; readonly base: string; readonly opacity: string; readonly important?: '!'; readonly op: string };
     'off-scale-value': { readonly form: 'step' | 'fraction'; readonly key: string; readonly value: string; readonly percent?: string };
     'clamped-factor': { readonly key: string; readonly value: string };
     'per-side-border-style': { readonly key: string; readonly value: string };

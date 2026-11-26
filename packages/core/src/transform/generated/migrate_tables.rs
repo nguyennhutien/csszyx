@@ -266,6 +266,43 @@ pub(crate) fn color_scale_names(value: &str) -> bool {
     )
 }
 
+/// `COLOUR_FUNCTION_NAMES` from reverse-map.ts, in source order.
+pub(crate) const COLOUR_FUNCTION_NAMES: &[&str] = &[
+    "rgb",
+    "rgba",
+    "hsl",
+    "hsla",
+    "hwb",
+    "color",
+    "lab",
+    "lch",
+    "oklab",
+    "oklch",
+    "light-dark",
+    "color-mix",
+    "--alpha",
+];
+
+/// Whether `value` is in `COLOUR_FUNCTION_NAMES`.
+pub(crate) fn colour_function_names(value: &str) -> bool {
+    matches!(
+        value,
+        "rgb"
+            | "rgba"
+            | "hsl"
+            | "hsla"
+            | "hwb"
+            | "color"
+            | "lab"
+            | "lch"
+            | "oklab"
+            | "oklch"
+            | "light-dark"
+            | "color-mix"
+            | "--alpha"
+    )
+}
+
 /// `DECORATION_STYLE_KEYWORDS` from reverse-map.ts, in source order.
 pub(crate) const DECORATION_STYLE_KEYWORDS: &[&str] =
     &["solid", "double", "dotted", "dashed", "wavy"];
@@ -1063,6 +1100,11 @@ pub(crate) const MIGRATE_SETS: &[MigrateSet] = &[
     ),
     ("COLOR_NAMES", COLOR_NAMES, color_names),
     ("COLOR_SCALE_NAMES", COLOR_SCALE_NAMES, color_scale_names),
+    (
+        "COLOUR_FUNCTION_NAMES",
+        COLOUR_FUNCTION_NAMES,
+        colour_function_names,
+    ),
     (
         "DECORATION_STYLE_KEYWORDS",
         DECORATION_STYLE_KEYWORDS,

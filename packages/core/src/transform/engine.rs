@@ -1508,8 +1508,27 @@ fn push_slash_opacity_diagnostics(
     for (key, member, color, opacity, important, offset) in found {
         let op = super::lower::op_literal(opacity);
         let important = important.then_some("!");
+        // A colour on a shadow key belongs to its colour key: `shadow` is
+        // the size and its alpha.
+        let shadow_colour =
+            *member == "color" && super::lower::SHADOW_SIZE_KEYS.contains(&key.as_str());
+        let owner = format!("{key}Color");
         out.push_issue(
-            issue::slash_opacity_string(key, member, color, opacity, &op, important),
+            if shadow_colour {
+                issue::slash_opacity_string_colour_key(
+                    key,
+                    member,
+                    Some(&owner),
+                    color,
+                    opacity,
+                    &op,
+                    important,
+                )
+            } else {
+                issue::slash_opacity_string_same_key(
+                    key, member, None, color, opacity, &op, important,
+                )
+            },
             *offset,
         );
     }
@@ -1521,7 +1540,7 @@ fn push_color_slash_opacity_diagnostics(
     found: &[super::lower::ColorSlashOpacity],
     out: &mut Diagnostics,
 ) {
-    for (key, color, op, offset) in found {
+    for (key, member, color, op, offset) in found {
         let (unmarked, important) = color
             .strip_suffix('!')
             .map_or((color.as_str(), ""), |color| (color, "!"));
@@ -1531,9 +1550,18 @@ fn push_color_slash_opacity_diagnostics(
         let issue = op.as_deref().map_or_else(
             || {
                 let op = super::lower::op_literal(opacity);
-                issue::color_slash_opacity_op_absent(key, base, opacity, important_mark, &op)
+                issue::color_slash_opacity_op_absent(
+                    key,
+                    member,
+                    base,
+                    opacity,
+                    important_mark,
+                    &op,
+                )
             },
-            |op| issue::color_slash_opacity_op_given(key, base, opacity, important_mark, op),
+            |op| {
+                issue::color_slash_opacity_op_given(key, member, base, opacity, important_mark, op)
+            },
         );
         out.push_issue(issue, *offset);
     }
@@ -2858,7 +2886,9 @@ mod tests {
                 "  fill: '#f00/[0.3]', color: 'rgb(255_0_0/50%)', stroke: '1/2',",
                 "  outlineColor: 'red-500/[50%]', focus: { bg: 'linear-to-r/oklch', color: 'red-500/40' },",
                 // A key that takes no colour, and a value the bracket lane claims.
-                "  p: 'red-500/50', caret: '[#f00]/[50%]' }} />;",
+                "  p: 'red-500/50', caret: '[#f00]/[50%]',",
+                // A colour on a shadow key: its help names the colour key.
+                "  shadow: 'red-500/50' }} />;",
             ]
             .join("\n"),
         };
@@ -2866,12 +2896,13 @@ mod tests {
         assert_eq!(
             lines(&result),
             [
-                r#"slash-opacity-string {"key":"bg","member":"color","color":"red-500","opacity":"50","op":"50","important":"!"}"#,
-                r#"slash-opacity-string {"key":"from","member":"color","color":"blue-500","opacity":"20","op":"20"}"#,
-                r#"slash-opacity-string {"key":"bg","member":"color","color":"red-500","opacity":"5","op":"5"}"#,
-                r##"slash-opacity-string {"key":"fill","member":"color","color":"#f00","opacity":"[0.3]","op":"30"}"##,
-                r#"slash-opacity-string {"key":"outlineColor","member":"color","color":"red-500","opacity":"[50%]","op":"'50%'"}"#,
-                r#"slash-opacity-string {"key":"color","member":"color","color":"red-500","opacity":"40","op":"40"}"#,
+                r#"slash-opacity-string {"form":"same-key","key":"bg","member":"color","color":"red-500","opacity":"50","op":"50","important":"!"}"#,
+                r#"slash-opacity-string {"form":"same-key","key":"from","member":"color","color":"blue-500","opacity":"20","op":"20"}"#,
+                r#"slash-opacity-string {"form":"same-key","key":"bg","member":"color","color":"red-500","opacity":"5","op":"5"}"#,
+                r##"slash-opacity-string {"form":"same-key","key":"fill","member":"color","color":"#f00","opacity":"[0.3]","op":"30"}"##,
+                r#"slash-opacity-string {"form":"same-key","key":"outlineColor","member":"color","color":"red-500","opacity":"[50%]","op":"'50%'"}"#,
+                r#"slash-opacity-string {"form":"same-key","key":"color","member":"color","color":"red-500","opacity":"40","op":"40"}"#,
+                r#"slash-opacity-string {"form":"colour-key","key":"shadow","member":"color","owner":"shadowColor","color":"red-500","opacity":"50","op":"50"}"#,
                 r##"bracketed-value {"form":"escape","key":"caret","value":"[#f00]/[50%]","inner":"#f00]/[50%"}"##,
                 // A fact for the build's oracle, not a finding.
                 r#"underscore-space {"key":"color","value":"rgb(255_0_0/50%)","className":"text-[rgb(255_0_0/50%)]"}"#,
@@ -2907,7 +2938,7 @@ mod tests {
             lines(&result),
             [
                 r#"property-object {"key":"ring","nestedKeys":["size"]}"#,
-                r#"slash-opacity-string {"key":"dropShadow","member":"size","color":"sm","opacity":"50","op":"50"}"#,
+                r#"color-slash-opacity {"form":"op-given","key":"dropShadow","member":"size","base":"sm","opacity":"50","op":"20"}"#,
                 r#"bracketed-value {"form":"escape","key":"shadow","value":"[a","inner":"[a"}"#,
                 r#"bracketed-value {"form":"unwrap","key":"textShadow","value":"[1/2]","inner":"1/2"}"#,
                 r#"bracketed-value {"form":"unwrap","key":"textShadow","value":"(--t)","inner":"--t"}"#,
@@ -6110,34 +6141,34 @@ mod tests {
             (
                 "const A = () => <div sz={{ bg: { color: 'red-500/50' } }} />;",
                 r#"className="bg-red-500/50""#,
-                r#"color-slash-opacity {"form":"op-absent","key":"bg","base":"red-500","opacity":"50","op":"50"}"#,
+                r#"color-slash-opacity {"form":"op-absent","key":"bg","member":"color","base":"red-500","opacity":"50","op":"50"}"#,
             ),
             (
                 "const A = () => <div sz={{ bg: { color: 'red-500/50!' } }} />;",
                 r#"className="bg-red-500/50!""#,
-                r#"color-slash-opacity {"form":"op-absent","key":"bg","base":"red-500","opacity":"50","important":"!","op":"50"}"#,
+                r#"color-slash-opacity {"form":"op-absent","key":"bg","member":"color","base":"red-500","opacity":"50","important":"!","op":"50"}"#,
             ),
             (
                 "const A = () => <div sz={{ bg: { color: 'red-500/50', op: 20 } }} />;",
                 r#"className="bg-red-500/50/20""#,
-                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","op":"20"}"#,
+                r#"color-slash-opacity {"form":"op-given","key":"bg","member":"color","base":"red-500","opacity":"50","op":"20"}"#,
             ),
             (
                 "const A = () => <div sz={{ md: { hover: { borderColor: { color: '#f00/75' } } } }} />;",
                 r#"className="md:hover:border-[#f00/75]""#,
-                r##"color-slash-opacity {"form":"op-absent","key":"borderColor","base":"#f00","opacity":"75","op":"75"}"##,
+                r##"color-slash-opacity {"form":"op-absent","key":"borderColor","member":"color","base":"#f00","opacity":"75","op":"75"}"##,
             ),
             // Every key a colour object serves; the help's `op` is the one the
             // opacity names.
             (
                 "const A = () => <div sz={{ ring: { color: 'red-500/(--o)' } }} />;",
                 r#"className="ring-red-500/(--o)""#,
-                r#"color-slash-opacity {"form":"op-absent","key":"ring","base":"red-500","opacity":"(--o)","op":"'--o'"}"#,
+                r#"color-slash-opacity {"form":"op-absent","key":"ring","member":"color","base":"red-500","opacity":"(--o)","op":"'--o'"}"#,
             ),
             (
                 "const A = () => <div sz={{ textShadow: { color: 'red-500/[0.5]', op: 5 } }} />;",
                 r#"className="text-shadow-red-500/[0.5]/5""#,
-                r#"color-slash-opacity {"form":"op-given","key":"textShadow","base":"red-500","opacity":"[0.5]","op":"5"}"#,
+                r#"color-slash-opacity {"form":"op-given","key":"textShadow","member":"color","base":"red-500","opacity":"[0.5]","op":"5"}"#,
             ),
         ];
         for (source, class_attr, message) in cases {

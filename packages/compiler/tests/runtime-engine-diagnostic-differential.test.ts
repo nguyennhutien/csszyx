@@ -128,14 +128,21 @@ const CASES: Readonly<Record<string, readonly SzObject[]>> = {
         { hover: { srOnly: 'yes' } },
         { not: { supports: { 'display:grid': { numOrdinal: 0.5 } } } },
     ],
-    'slash-opacity-string': [
+    'slash-opacity-string/same-key': [
         { bg: 'red-500/50' },
         { hover: { bg: '#f00/50!' } },
         { shadow: 'sm/50' },
+        { shadow: '[var(--s)]/50' },
+    ],
+    'slash-opacity-string/colour-key': [
+        { shadow: '[rgb(255_0_0)_0_1px]/50' },
         { md: { textShadow: 'red-500/25' } },
+        { shadow: '[rgb(255_0_0)]/50!' },
+        { dropShadow: '(color:--c)/50' },
     ],
     'variable-shadow-opacity': [
         { shadow: { size: '--s', op: 50 } },
+        { shadow: { size: 'var(--s)', op: 50 } },
         { hover: { dropShadow: { size: '--d!', op: '50%' } } },
     ],
     'off-scale-value/fraction': [{ p: '1/2' }, { hover: { mx: '2/3' } }],
@@ -159,8 +166,14 @@ const CASES: Readonly<Record<string, readonly SzObject[]>> = {
     ],
     'bracketed-value/escape': [{ p: '[a]_1_[b]' }, { md: { w: '[[a]_1fr]' } }, { w: '[10px' }],
     'bracketed-value/type-hint': [{ text: '[color:--x]' }, { hover: { border: '[color:red]' } }],
-    'color-slash-opacity/op-given': [{ bg: { color: 'red-500/50', op: 30 } }],
-    'color-slash-opacity/op-absent': [{ bg: { color: 'blue-500/40!' } }],
+    'color-slash-opacity/op-given': [
+        { bg: { color: 'red-500/50', op: 30 } },
+        { shadow: { size: 'sm/50', op: 20 } },
+    ],
+    'color-slash-opacity/op-absent': [
+        { bg: { color: 'blue-500/40!' } },
+        { dropShadow: { size: 'md/50' } },
+    ],
     'opacity-value/range': [
         { bg: { color: 'red-500', op: 150 } },
         { hover: { borderColor: { color: 'blue-600', op: '20' } } },

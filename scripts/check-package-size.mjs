@@ -206,13 +206,19 @@ export const SIZE_BUDGETS = [
         // character and a utility's text outside its brackets must be a plain
         // token or a custom property, so an escape cannot carry a `;` out of a
         // value (`x\(;position:fixed;--z:\)`). About 200 bytes of headroom.
-        maxGzipBytes: 11_450,
+        //
+        // Raised on 2026-11-26, measured 11,641 / 11,336, Vite 11,579 / 11,291
+        // (about 190 above the budgets before): `dynamic()` decodes a bracket
+        // as Tailwind does, keeping the `_` of a variable's name and of
+        // `url()`, and drops a type hint on every resolver, where it wrote
+        // `var(--my color)` and `font-size: length:2rem`, which a browser drops.
+        maxGzipBytes: 11_850,
         // Measured 2026-10-08: 10,358 / 7,897. `./react` raised to 8,950 on
         // 2026-11-25, measured 8,666: the shadow-value test (see `.` below).
-        entryBudgets: { '.': 11_150, './react': 8_950 },
+        entryBudgets: { '.': 11_550, './react': 8_950 },
         // Built by Vite, measured 2026-10-19: 10,659, then 10,373 / 7,800.
         // `./react` raised to 8,800 on 2026-11-25, measured 8,538.
-        vite: { maxGzipBytes: 11_400, entryBudgets: { '.': 11_100, './react': 8_800 } },
+        vite: { maxGzipBytes: 11_800, entryBudgets: { '.': 11_500, './react': 8_800 } },
         // None today: its one production failure, an unreachable manifest, is
         // a rejected fetch it catches. Read from the registry all the same, so
         // a production line added to its sources has to be registered.
@@ -476,7 +482,10 @@ export const SIZE_BUDGETS = [
         // colour class's modifier through `./color-modifier`, as Tailwind reads it.
         // Raised to 42,450 on 2026-11-25, measured 42,141: the shadow size object
         // and `dynamic()` telling a shadow from its colour.
-        maxGzipBytes: 42_450,
+        // Raised to 42,900 on 2026-11-26, measured 42,616: `dynamic()` decodes
+        // a bracket as Tailwind does (see `@csszyx/dynamic`), and a shadow
+        // bracket is a colour by Tailwind's own test.
+        maxGzipBytes: 42_900,
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
     // The wasm build of the parser is the fourth surface: not browser code,
@@ -762,7 +771,11 @@ export const SIZE_BUDGETS = [
         // size reported as its string on the key would be (+382: one view of
         // an object that holds one, `sizes_as_values`; `collect_group` takes a
         // slice so its callers share one copy, +1,211 with an iterator each).
-        maxGzipBytes: 609_650,
+        // Raised to 610,450 on 2026-11-27: CI reads 610,148, +2,251 over
+        // `main`'s 607,897 and +498 over the raise above, from each slash
+        // report carrying the member it replaces and from Tailwind's
+        // shadow-bracket test on the engine, not measured one by one.
+        maxGzipBytes: 610_450,
     },
     // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
     // bundles from the compiler's source, unminified, and that every editor
@@ -814,7 +827,9 @@ export const SIZE_BUDGETS = [
         // Raised to 53,050 on 2026-11-24, measured 52,754: a slash opacity on a
         // colour key is reported again (`slash-opacity-string`,
         // `color-slash-opacity`), whose words only a development build prints.
-        maxGzipBytes: 53_050,
+        // Raised to 53,500 on 2026-11-26, measured 53,216: the two slash
+        // reports name the member they replace and the shadow's colour key.
+        maxGzipBytes: 53_500,
         // Built as production, so the leak gate reads it, except for the ids
         // whose words the extension shows as its own editor diagnostics
         // (`diagnostic-provider.ts`, from `SZ_EDITOR_DIAGNOSTIC_TEMPLATES`).
@@ -940,7 +955,10 @@ export const SIZE_BUDGETS = [
         // Raised to 26,050 on 2026-11-25, measured 25,756 (25,481 on `main`):
         // the shadow size object, a shadow key's slash string reported with the
         // member to write, and `variable-shadow-opacity`'s words.
-        maxGzipBytes: 26_050,
+        // Raised to 26,450 on 2026-11-26, measured 26,165: a shadow bracket is
+        // a colour by Tailwind's own test (a `color:` hint, a leading `#` or
+        // colour function, one colour word).
+        maxGzipBytes: 26_450,
         build: cdnBuildOptions('development'),
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
@@ -1328,7 +1346,10 @@ export const SIZE_BUDGETS = [
         // Raised to 63,800 on 2026-11-25, measured 63,513 (63,019 on `main`):
         // the shadow size object on the TypeScript lane and its two reports'
         // words (see `./engine`).
-        maxGzipBytes: 63_800,
+        // Raised to 64,200 on 2026-11-26, measured 63,903: the slash reports
+        // name the member and the colour key, and a shadow bracket is read by
+        // its parts outside a colour function.
+        maxGzipBytes: 64_200,
     },
     {
         name: '@csszyx/compiler `./migrate`, loaded by Node',
@@ -1356,7 +1377,9 @@ export const SIZE_BUDGETS = [
         // Measured 31,045. 32,000 on 2026-11-12, measured 31,733: the
         // `mangle-mark-missed` registry entry. 32,350 on 2026-11-22, measured
         // 32,072 (31,883 before): the `dynamic-unsupported` registry entry.
-        maxGzipBytes: 32_350,
+        // 32,650 on 2026-11-26, measured 32,364: the `slash-opacity-string`
+        // forms and the `member` argument in the registry.
+        maxGzipBytes: 32_650,
     },
     // The MCP server's bin, which is also its `.` export: an editor starts
     // it for every session.

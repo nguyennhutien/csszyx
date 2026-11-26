@@ -1074,7 +1074,7 @@ describe('class-parser', () => {
     // ========================================================================
     describe('size-utility slash modifiers', () => {
         it('a shadow size with an opacity is the size object', () => {
-            // `shadow-sm/50` scales the theme shadow's alpha: `{ size, op }`.
+            // `shadow-sm/50` sets the shadow's alpha: `{ size, op }`.
             expect(parseClass('shadow-sm/12.5')).toEqual({
                 prop: 'shadow',
                 value: { size: 'sm', op: 12.5 },

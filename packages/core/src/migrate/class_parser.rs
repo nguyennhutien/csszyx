@@ -875,7 +875,7 @@ fn disambiguate_and_parse(
         return Err(Unread::NoRule);
     }
     // A shadow's own opacity is the size object: `shadow-sm/50` is
-    // `{ size: 'sm', op: 50 }`, which scales the theme shadow's alpha.
+    // `{ size: 'sm', op: 50 }`, which sets the shadow's alpha.
     if SHADOW_SIZE_KEYS.contains(&result.prop.as_str()) {
         let mut size = SzObject::new();
         size.insert("size".to_string(), SzValue::from(text.as_str()));

@@ -51,6 +51,7 @@ describe.each(LANES)('a value with a CSS unit — %s', (_name, lower) => {
         [{ w: '3ic' }, 'w-[3ic]'],
         [{ w: '1in' }, 'w-[1in]'],
         [{ w: '12pt' }, 'w-[12pt]'],
+        [{ w: '10Q' }, 'w-[10Q]'],
         // A leading decimal, on any unit.
         [{ p: '.5vmin' }, 'p-[.5vmin]'],
         [{ text: '.25cqi' }, 'text-[.25cqi]'],

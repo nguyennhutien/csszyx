@@ -518,7 +518,7 @@ pub(crate) const ARBITRARY_LENGTH_UNITS: &[&str] = &[
     "px", "rem", "em", "%", "ex", "rex", "cap", "rcap", "ch", "rch", "ic", "ric", "lh", "rlh",
     "vw", "vh", "vi", "vb", "vmin", "vmax", "svw", "svh", "svi", "svb", "svmin", "svmax", "lvw",
     "lvh", "lvi", "lvb", "lvmin", "lvmax", "dvw", "dvh", "dvi", "dvb", "dvmin", "dvmax", "cqw",
-    "cqh", "cqi", "cqb", "cqmin", "cqmax", "cm", "mm", "in", "pt", "pc", "deg", "rad", "turn",
+    "cqh", "cqi", "cqb", "cqmin", "cqmax", "cm", "mm", "in", "pt", "pc", "Q", "deg", "rad", "turn",
     "grad", "ms", "s", "fr",
 ];
 

@@ -1,11 +1,11 @@
 /**
  * A shadow's size and opacity as one object: `{ size, op }`.
  *
- * `shadow-sm/50` scales the theme shadow's alpha, which `shadowColor` does not
- * do: it replaces the colour. Its only spelling was the string `'sm/50'`, the
- * one slash on a key that a colour object did not replace. `{ size, op }` takes
- * the colour object's place on the four shadow keys and goes through the same
- * `op` formatter, on every lane.
+ * `shadow-sm/50` sets the shadow's alpha to 50%, where the theme's shadows
+ * use 5% to 25%; the shadow's colour is its own lane, `shadowColor`. The
+ * alpha's only spelling was the string `'sm/50'`. `{ size, op }` takes it on
+ * the four shadow keys through the colour object's `op` formatter, on every
+ * lane.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { escapeUnsafeChars } from '../../core/tests/helpers/sz-fuzz.js';
@@ -76,15 +76,16 @@ const LANES: ReadonlyArray<readonly [string, (sz: Sz) => Lowered]> = [
 ];
 
 /**
- * The object a report's help says to write.
+ * The key and object a report's help says to write.
  *
  * @param lines - What the lane printed.
- * @returns The object, evaluated as the JavaScript it is written as.
+ * @param key - The key the report was on, when the help names none.
+ * @returns The sz object the help writes, evaluated as the JavaScript it is.
  */
-function helpObject(lines: readonly string[]): Sz {
-    const help = /help: write `(\{.*\})`\./.exec(lines.join('\n'));
+function helpObject(lines: readonly string[], key: string): Sz {
+    const help = /help: write `(?:(\w+): )?(\{.*?\})`[.;]/.exec(lines.join('\n'));
     expect(help, lines.join('\n')).not.toBeNull();
-    return new Function(`return (${help?.[1]});`)() as Sz;
+    return { [help?.[1] ?? key]: new Function(`return (${help?.[2]});`)() };
 }
 
 beforeEach(() => {
@@ -114,8 +115,9 @@ describe.each(LANES)('a shadow size object — %s', (_name, lower) => {
         [{ shadow: { size: '[a', op: 50 }, p: 4 }, 'p-4', 'bracketed-value'],
         [{ shadow: { size: '[1/2]', op: 50 } }, '', 'bracketed-value'],
         [{ hover: { textShadow: { size: '[a', op: 50 } } }, '', 'bracketed-value'],
-        // A slash in the size is the string's slash: the opacity goes in `op`.
-        [{ shadow: { size: 'sm/50', op: 20 } }, 'shadow-sm/50/20', 'slash-opacity-string'],
+        // A slash in the size is reported as a colour's is, and `op` is kept.
+        [{ shadow: { size: 'sm/50', op: 20 } }, 'shadow-sm/50/20', 'color-slash-opacity'],
+        [{ dropShadow: { size: 'md/50' } }, 'drop-shadow-md/50', 'color-slash-opacity'],
     ])('%j writes %j and reports the size as %s', (sz, className, id) => {
         expect(lower(sz)).toMatchObject({ className, ids: [id] });
     });
@@ -133,11 +135,11 @@ describe.each(LANES)('a shadow size object — %s', (_name, lower) => {
         expect(run.lines.join('\n')).toContain('`shadow` takes `{ size, op }`');
     });
 
-    it('notes that op does not reach a shadow held in a variable', () => {
-        expect(lower({ shadow: { size: '--s', op: 50 } })).toMatchObject({
-            className: 'shadow-(--s)/50',
-            ids: ['variable-shadow-opacity'],
-        });
+    it.each<[Sz, string]>([
+        [{ shadow: { size: '--s', op: 50 } }, 'shadow-(--s)/50'],
+        [{ shadow: { size: 'var(--s)', op: 50 } }, 'shadow-[var(--s)]/50'],
+    ])('notes that op does not reach a shadow held in a variable: %j', (sz, className) => {
+        expect(lower(sz)).toMatchObject({ className, ids: ['variable-shadow-opacity'] });
     });
 
     it('reports an op with no size, as on any key', () => {
@@ -155,11 +157,27 @@ describe.each(LANES)('a shadow size object — %s', (_name, lower) => {
         // One token in brackets is a colour, as Tailwind reads `shadow-[#f00]`.
         [{ shadow: '[#f00]/50' }, 'shadow-[#f00]/50'],
         [{ shadow: '[0_1px_red]/50' }, 'shadow-[0_1px_red]/50'],
+        // A variable typed as a colour is a colour too.
+        [{ shadow: '(color:--c)/50' }, 'shadow-(color:--c)/50'],
     ])('%j keeps %s, reports the slash, and its help lowers clean', (sz, className) => {
         const run = lower(sz);
         expect(run).toMatchObject({ className, ids: ['slash-opacity-string'] });
         const [key] = Object.keys(sz);
-        const after = lower({ [key as string]: helpObject(run.lines) });
+        const after = lower(helpObject(run.lines, key as string));
         expect(after).toMatchObject({ className, ids: [] });
+    });
+
+    it.each<[string, string]>([
+        // A bracket that starts with a colour is a colour, as Tailwind reads it.
+        ['[rgb(255_0_0)]/50', 'shadowColor: {'],
+        ['[color-mix(in_srgb,red_50%,blue)]/50', 'shadowColor: {'],
+        ['[rgb(255_0_0)_0_1px]/50', 'shadowColor: {'],
+        // A shadow's parts, or a variable, are the shadow.
+        ['[inset_0_1px_rgb(0_0_0)]/50', "{ size: '[inset_0_1px_rgb(0_0_0)]'"],
+        ['[var(--s)]/50', "{ size: '[var(--s)]'"],
+    ])('a slash string %s is helped as %s', (value, help) => {
+        const run = lower({ shadow: value });
+        expect(run.ids).toEqual(['slash-opacity-string']);
+        expect(run.lines.join('\n')).toContain(`help: write \`${help}`);
     });
 });

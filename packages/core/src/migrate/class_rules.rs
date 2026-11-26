@@ -331,8 +331,10 @@ pub const RULE_TABLES: &[(&str, &[Rule])] = &[
             rule!(Paren, Key("shadow"), ParenInner),
             // `shadow-[var(--v)]` is the shadow itself, like `shadow-(--v)`.
             rule!(StartsWith("[var("), Key("shadow"), Unwrapped),
-            // Tailwind reads several tokens as the shadow (`--tw-shadow`) and
-            // one as its colour: `shadow-[0_1px_2px_black]`, `shadow-[red]`.
+            // Several tokens go on `shadow`, one on `shadowColor`:
+            // `shadow-[0_1px_2px_black]`, `shadow-[red]`. Either is kept only
+            // when it writes the class back, so a bracket Tailwind reads the
+            // other way (`is_shadow_value`) stays in `className`.
             rule!(BracketTokens, Key("shadow"), Unwrapped),
             rule!(Always, Key("shadowColor"), Unwrapped),
         ],
