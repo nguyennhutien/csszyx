@@ -13,7 +13,11 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { generateDeclarations } from '../../dynamic/src/css-generator.js';
+import {
+    COLOR_PROPS,
+    generateDeclarations,
+    SPACING_PROPS,
+} from '../../dynamic/src/css-generator.js';
 import { createEmittedClassOracle } from '../src/index.js';
 
 const REPO = path.resolve(import.meta.dirname, '../../..');
@@ -74,28 +78,87 @@ const SERVED = [
 ];
 
 /**
- * Classes whose hint names another property of a shared prefix than the one
- * `dynamic()` writes for it: it writes no rule rather than the wrong one, so
- * anything it does write is what Tailwind writes.
+ * Every type hint Tailwind reads, and one it does not (`weight`), which a
+ * shared prefix reads as its colour.
  */
-const OTHER_PROPERTY = [
-    'bg-(image:--x)',
-    'bg-(length:--x)',
-    'bg-(size:--x)',
-    'bg-(position:--x)',
-    'bg-(url:--x)',
-    'bg-[length:var(--x)]',
-    'bg-[position:var(--x)]',
-    'border-(length:--x)',
-    'border-(line-width:--x)',
-    'outline-(length:--x)',
-    'decoration-(length:--x)',
-    'stroke-(length:--x)',
-    'stroke-(number:--x)',
-    'ring-(length:--x)',
-    'ring-offset-(length:--x)',
-    'text-(length:--x)',
+const HINTS = [
+    'color',
+    'length',
+    'percentage',
+    'number',
+    'integer',
+    'ratio',
+    'angle',
+    'url',
+    'image',
+    'position',
+    'size',
+    'bg-size',
+    'line-width',
+    'absolute-size',
+    'relative-size',
+    'family-name',
+    'generic-name',
+    'vector',
+    'weight',
 ];
+
+/** Values with no hint, which Tailwind infers a type for. */
+const UNTYPED = [
+    '2',
+    'red-500',
+    '[12px]',
+    '[2]',
+    '[var(--x)]',
+    '[#f00]',
+    '[linear-gradient(red,blue)]',
+    // A colour with a math call is still the colour.
+    '[rgb(calc(255)_0_0)]',
+    // Relative colour syntax; its math spacing is TASK-13.61.
+    '[oklch(from_var(--c)_calc(l)_c_h)]',
+    '(--x)',
+    // A slash on a bracket another property of the prefix reads.
+    '[12px]/50',
+    '[var(--x)]/50',
+    // Three numbers: a vector on `rotate`, a colour or size elsewhere.
+    '[1_0_0]',
+];
+
+/** Prefixes with a bracket form `dynamic()` reads outside the two tables. */
+const OTHER_PREFIXES = [
+    'opacity',
+    'z',
+    'rounded',
+    'rounded-t',
+    'rounded-tl',
+    'rounded-s',
+    'leading',
+    'tracking',
+    'font',
+    'grid-cols',
+    'grid-rows',
+    'rotate',
+    'duration',
+    'delay',
+];
+
+/**
+ * Every prefix `dynamic()` knows, with every untyped value and every hint, in
+ * each form. A hint or the type Tailwind infers picks the property on a prefix
+ * several share (`bg-(image:--x)`, `text-[12px]`) and is dropped on one a
+ * single property owns; the longest prefix owns the class (`outline-offset-2`).
+ * Whatever `dynamic()` writes, Tailwind writes; it may write no rule.
+ */
+const SWEEP = [...new Set([...Object.keys(COLOR_PROPS), ...Object.keys(SPACING_PROPS)])]
+    .concat(OTHER_PREFIXES)
+    .flatMap(prefix => [
+        ...UNTYPED.map(value => `${prefix}-${value}`),
+        ...HINTS.flatMap(hint => [
+            `${prefix}-[${hint}:var(--x)]`,
+            `${prefix}-[${hint}:12px]`,
+            `${prefix}-(${hint}:--x)`,
+        ]),
+    ]);
 
 /** Classes Tailwind writes no rule for, so `dynamic()` writes none either. */
 const UNSERVED = ['bg-(--a:b)', 'w-(--a:b)', 'p-(length:b)'];
@@ -111,6 +174,31 @@ function pairs(declarations: string): string[] {
         .map(pair => pair.trim());
 }
 
+/**
+ * @param css - The CSS Tailwind writes for a class, or null for none.
+ * @param pair - One `prop: value` pair `dynamic()` writes for it.
+ * @returns Whether Tailwind writes that pair; a colour it writes inside the
+ *   alpha's `color-mix()`.
+ */
+function writes(css: string | null | undefined, pair: string): boolean {
+    const [property, value] = pair.split(/: (.*)/s) as [string, string];
+    // `dynamic()` writes a shadow as the `box-shadow` itself, where Tailwind
+    // composes it from `--tw-shadow` (TASK-13.63).
+    const shadow = property === 'box-shadow' ? `--tw-shadow: ${value}` : pair;
+    // Each starts a declaration, so `color: red;` is not found in `--tw-color: red;`.
+    return [`${pair};`, `${shadow};`, `${property}: color-mix(in oklab, ${value} `].some(text =>
+        [' ', '\n', '{', ';'].some(before => css?.includes(before + text)),
+    );
+}
+
+/** What `dynamic()` writes unlike Tailwind, each with the task that fixes it. */
+const KNOWN_UNLIKE: readonly string[] = [
+    // TASK-13.63: a bracket shadow with no colour, which Tailwind gives the shadow colour.
+    'shadow-[1_0_0] -> box-shadow: 1 0 0',
+    // TASK-13.63: a ring with no offset and no `box-shadow`.
+    'ring-2 -> --tw-ring-shadow: 0 0 0 2px var(--tw-ring-color, #3b82f680)',
+];
+
 describe('an arbitrary value written by dynamic(), as Tailwind writes it', async () => {
     const oracle = await createEmittedClassOracle({
         resolveFrom: REPO,
@@ -124,23 +212,21 @@ describe('an arbitrary value written by dynamic(), as Tailwind writes it', async
         expect(css, utility).toBeTruthy();
         const written = pairs(generateDeclarations(utility));
         expect(written.length, utility).toBeGreaterThan(0);
-        // A colour utility writes its colour inside the alpha's `color-mix()`.
-        const missing = written.filter(pair => {
-            const [property, value] = pair.split(/: (.*)/s) as [string, string];
-            return ![`${pair};`, `${property}: color-mix(in oklab, ${value} `].some(text =>
-                css?.includes(text),
-            );
-        });
-        expect(missing, css ?? '').toEqual([]);
+        expect(
+            written.filter(pair => !writes(css, pair)),
+            css ?? '',
+        ).toEqual([]);
     });
 
-    it.each(OTHER_PROPERTY)('%s writes no other property than Tailwind does', utility => {
-        const [css] = oracle.cssFor([utility]);
-        expect(css, utility).toBeTruthy();
-        const wrong = pairs(generateDeclarations(utility)).filter(
-            pair => !css?.includes(`${pair};`),
+    it(`every prefix and value writes nothing Tailwind does not, over ${SWEEP.length} classes`, () => {
+        const css = oracle.cssFor(SWEEP);
+        const unlike = SWEEP.flatMap((utility, index) =>
+            pairs(generateDeclarations(utility))
+                .filter(pair => !writes(css[index], pair))
+                .map(pair => `${utility} -> ${pair}`),
         );
-        expect(wrong, css ?? '').toEqual([]);
+        // Exact, so a fixed entry fails until it leaves the list.
+        expect(unlike).toEqual(KNOWN_UNLIKE);
     });
 
     it.each(UNSERVED)('%s gets no rule', utility => {

@@ -6,7 +6,7 @@
  * like hover, focus, etc.
  */
 
-import { isBackgroundGradientString, modifierOp, slashOpacitySplit } from './color-modifier.js';
+import { ARBITRARY_LENGTH_UNITS } from './css-units.js';
 import type {
     SzDiagnosticIssue,
     SzMergeGroup,
@@ -25,6 +25,7 @@ import { NUMERIC_STRING } from './numeric-string.js';
 import { own } from './own.js';
 import type { ParserMode } from './parser-mode.js';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
+import { isBackgroundGradientString, modifierOp, slashOpacitySplit } from './slash-opacity.js';
 import { SZ_CAP_CSS_WIDE_BRACKET, SZ_CAPABILITIES } from './sz-capabilities.generated.js';
 import {
     szNodeWarningsUnmuted,
@@ -1643,71 +1644,6 @@ const FRACTION_SUPPORTED_PROPS = new Set([
     'translateY',
     // Aspect
     'aspect',
-]);
-
-/**
- * Every unit a numeric value can carry, which no bare class does: CSS Values 4
- * lengths (font-relative, viewport, container query, absolute), angles, times
- * and `fr`. The engine's `needs_brackets` reads this set, generated.
- */
-const ARBITRARY_LENGTH_UNITS = new Set([
-    'px',
-    'rem',
-    'em',
-    '%',
-    'ex',
-    'rex',
-    'cap',
-    'rcap',
-    'ch',
-    'rch',
-    'ic',
-    'ric',
-    'lh',
-    'rlh',
-    'vw',
-    'vh',
-    'vi',
-    'vb',
-    'vmin',
-    'vmax',
-    'svw',
-    'svh',
-    'svi',
-    'svb',
-    'svmin',
-    'svmax',
-    'lvw',
-    'lvh',
-    'lvi',
-    'lvb',
-    'lvmin',
-    'lvmax',
-    'dvw',
-    'dvh',
-    'dvi',
-    'dvb',
-    'dvmin',
-    'dvmax',
-    'cqw',
-    'cqh',
-    'cqi',
-    'cqb',
-    'cqmin',
-    'cqmax',
-    'cm',
-    'mm',
-    'in',
-    'pt',
-    'pc',
-    'Q',
-    'deg',
-    'rad',
-    'turn',
-    'grad',
-    'ms',
-    's',
-    'fr',
 ]);
 
 /**

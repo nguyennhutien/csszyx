@@ -53,10 +53,10 @@ describe('generateDeclarations — resolveSpacingValue edge cases', () => {
         expect(generateDeclarations('w-(--my-width)')).toBe('width: var(--my-width)');
     });
 
-    it('falls back to the raw value for a fraction with a non-numeric side', () => {
+    it('writes no rule for a fraction with a non-numeric side', () => {
         // "a/2" isn't a valid fraction (num side is NaN) and isn't a plain
-        // number either — resolveSpacingValue gives up and returns it as-is.
-        expect(generateDeclarations('w-a/2')).toBe('width: a/2');
+        // number either; Tailwind writes no rule for it, and neither does this.
+        expect(generateDeclarations('w-a/2')).toBe('');
     });
 
     it('generates negative spacing from a leading-dash utility (-m-4)', () => {
@@ -96,13 +96,13 @@ describe('generateDeclarations — resolveColorValue edge cases', () => {
 
     it('keeps a direct color keyword bare under an opacity modifier', () => {
         const result = generateDeclarations('bg-white/50');
-        expect(result).toBe('background-color: color-mix(in srgb, white 50%, transparent)');
+        expect(result).toBe('background-color: color-mix(in oklab, white 50%, transparent)');
     });
 
     it('reads a bare decimal modifier as a percent, as Tailwind does', () => {
         const result = generateDeclarations('bg-blue-500/0.5');
         expect(result).toBe(
-            'background-color: color-mix(in srgb, var(--color-blue-500) 0.5%, transparent)',
+            'background-color: color-mix(in oklab, var(--color-blue-500) 0.5%, transparent)',
         );
     });
 
@@ -110,12 +110,12 @@ describe('generateDeclarations — resolveColorValue edge cases', () => {
     // written (ADR 0036), so every modifier Tailwind reads is read here too:
     // `[x%]` as given, `[x]` as a fraction of one, `(--v)` as a variable.
     it.each([
-        ['bg-red-500/[50%]', 'color-mix(in srgb, var(--color-red-500) 50%, transparent)'],
-        ['bg-red-500/[0.3]', 'color-mix(in srgb, var(--color-red-500) 30%, transparent)'],
-        ['bg-red-500/(--o)', 'color-mix(in srgb, var(--color-red-500) var(--o), transparent)'],
-        ['bg-[#f00]/50', 'color-mix(in srgb, #f00 50%, transparent)'],
-        ['bg-(--c)/50', 'color-mix(in srgb, var(--c) 50%, transparent)'],
-        ['bg-(--c)/(--o)', 'color-mix(in srgb, var(--c) var(--o), transparent)'],
+        ['bg-red-500/[50%]', 'color-mix(in oklab, var(--color-red-500) 50%, transparent)'],
+        ['bg-red-500/[0.3]', 'color-mix(in oklab, var(--color-red-500) 30%, transparent)'],
+        ['bg-red-500/(--o)', 'color-mix(in oklab, var(--color-red-500) var(--o), transparent)'],
+        ['bg-[#f00]/50', 'color-mix(in oklab, #f00 50%, transparent)'],
+        ['bg-(--c)/50', 'color-mix(in oklab, var(--c) 50%, transparent)'],
+        ['bg-(--c)/(--o)', 'color-mix(in oklab, var(--c) var(--o), transparent)'],
         // `[2]` is 200%, past what `color-mix()` takes: the colour alone.
         ['bg-red-500/[2]', 'var(--color-red-500)'],
     ])('reads the opacity modifier of %s', (className, value) => {
@@ -135,8 +135,14 @@ describe('parseVariants — container query tiers', () => {
 
 describe('generateDeclarations — named-lookup-miss fall-through paths', () => {
     it.each<[string, string]>([
-        // opacity: numeric value with no OPACITY_NAMED entry (not a multiple of 5)
-        ['opacity-33', 'opacity: 0.33'],
+        // opacity: a number is a percentage, as Tailwind writes it
+        ['opacity-33', 'opacity: 33%'],
+        // columns: a count, a container size, and the delimited forms
+        ['columns-3', 'columns: 3'],
+        ['columns-sm', 'columns: var(--container-sm)'],
+        ['columns-[20rem]', 'columns: 20rem'],
+        ['columns-(--x)', 'columns: var(--x)'],
+        ['opacity-2.5', 'opacity: 2.5%'],
         // opacity: not a bracket and not parseable as a number at all
         ['opacity-foo', ''],
         // z-index: garbage value matches neither auto/bracket/number
@@ -203,10 +209,27 @@ describe('generateDeclarations — border-radius directional edge cases', () => 
         expect(result).toBe('border-top-left-radius: 0; border-top-right-radius: 0');
     });
 
-    it('rounded-<dir>-<n> passes an unrecognized size through unchanged', () => {
-        expect(generateDeclarations('rounded-t-3')).toBe(
-            'border-top-left-radius: 3; border-top-right-radius: 3',
+    it('rounded-<dir>-<n> writes no rule for a size the theme does not name', () => {
+        // Tailwind writes none for `rounded-t-3`; `3` is no length.
+        expect(generateDeclarations('rounded-t-3')).toBe('');
+    });
+
+    it('rounded-<dir>-[…] reads the bracket as every other resolver does', () => {
+        expect(generateDeclarations('rounded-t-[3px]')).toBe(
+            'border-top-left-radius: 3px; border-top-right-radius: 3px',
         );
+        expect(generateDeclarations('rounded-tl-(--r)')).toBe('border-top-left-radius: var(--r)');
+        expect(generateDeclarations('rounded-t-(--a:b)')).toBe('');
+        // A `$` in the size is text, not a replacement pattern.
+        expect(generateDeclarations('rounded-t-[calc($&_+_1px)]')).toBe(
+            'border-top-left-radius: calc($& + 1px); border-top-right-radius: calc($& + 1px)',
+        );
+    });
+
+    it('rotate-[…] writes no rule for an axis with no angle', () => {
+        // Tailwind reads three numbers as a vector and adds its own angle variable.
+        expect(generateDeclarations('rotate-[1_0_0]')).toBe('');
+        expect(generateDeclarations('rotate-[1_0_0_45deg]')).toBe('rotate: 1 0 0 45deg');
     });
 
     it('rejects a direction combo that is not a valid rounded-* direction key', () => {
@@ -323,20 +346,20 @@ describe('generateDeclarations — a shadow with its own opacity', () => {
     it('still writes a shadow and a shadow colour with an opacity', () => {
         expect(generateDeclarations('shadow-sm')).toBe('box-shadow: var(--shadow-sm)');
         expect(generateDeclarations('shadow-black/50')).toBe(
-            '--tw-shadow-color: color-mix(in srgb, black 50%, transparent)',
+            '--tw-shadow-color: color-mix(in oklab, black 50%, transparent)',
         );
         expect(generateDeclarations('drop-shadow-[#f00]/50')).toBe(
-            '--tw-drop-shadow-color: color-mix(in srgb, #f00 50%, transparent)',
+            '--tw-drop-shadow-color: color-mix(in oklab, #f00 50%, transparent)',
         );
         // A colour function in brackets and a `color:` variable are colours.
         expect(generateDeclarations('shadow-[rgb(255_0_0)]/50')).toBe(
-            '--tw-shadow-color: color-mix(in srgb, rgb(255 0 0) 50%, transparent)',
+            '--tw-shadow-color: color-mix(in oklab, rgb(255 0 0) 50%, transparent)',
         );
         expect(generateDeclarations('shadow-(color:--c)/50')).toBe(
-            '--tw-shadow-color: color-mix(in srgb, var(--c) 50%, transparent)',
+            '--tw-shadow-color: color-mix(in oklab, var(--c) 50%, transparent)',
         );
         expect(generateDeclarations('text-shadow-red-500/50')).toBe(
-            '--tw-text-shadow-color: color-mix(in srgb, var(--color-red-500) 50%, transparent)',
+            '--tw-text-shadow-color: color-mix(in oklab, var(--color-red-500) 50%, transparent)',
         );
     });
 });
@@ -346,7 +369,7 @@ describe('generateDeclarations — a type hint names the value, not its text', (
     // declaration holds the value alone, as Tailwind writes it.
     it.each([
         ['bg-(color:--c)', 'background-color: var(--c)'],
-        ['bg-(color:--c)/50', 'background-color: color-mix(in srgb, var(--c) 50%, transparent)'],
+        ['bg-(color:--c)/50', 'background-color: color-mix(in oklab, var(--c) 50%, transparent)'],
         ['text-(color:--c)', 'color: var(--c)'],
         ['w-(length:--s)', 'width: var(--s)'],
         ['w-[length:10px]', 'width: 10px'],

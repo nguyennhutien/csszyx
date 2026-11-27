@@ -14,6 +14,7 @@
  */
 
 import {
+    inferDataType,
     isShadowValue,
     modifierOp,
     SHADOW_SIZE_KEYWORDS,
@@ -196,36 +197,129 @@ function delimitedValue(value: string): string {
  * The type hint a `[…]` or `(…)` value starts with: `length` in
  * `[length:10px]`, `color` in `(color:--c)`.
  *
- * @param value - The value, delimiters included.
+ * @param value - The value, delimiters included; only a delimited one is
+ *   passed.
  * @returns The hint, or undefined when it has none.
  */
 function typeHint(value: string): string | undefined {
-    return value.startsWith('[') || value.startsWith('(')
-        ? /^.([a-z-]+):/.exec(value)?.[1]
-        : undefined;
+    return /^.([a-z-]+):/.exec(value)?.[1];
 }
 
 /**
- * The hints that name another property than the colour, on a prefix the
- * colour shares with it: `bg-(image:--x)` is the background image. Each is
- * written between spaces; every border side reads `border`'s. Tailwind reads
- * every other hint on these prefixes as the colour, and on a prefix with one
- * property it drops whichever hint it is given. Measured against Tailwind
- * 4.3.3, one class per prefix and hint (`<prefix>-[<hint>:var(--x)]`).
+ * How a prefix several properties share reads a `[…]` or `(…)` value: a hint
+ * names its type (`bg-(image:--x)`), and otherwise Tailwind infers one, trying
+ * the types in the order given ({@link inferDataType}). The type picks the
+ * property; `~` is the colour, which the colour resolver writes, and a value
+ * of no type, a `var()` among them, is the colour too, or the property listed
+ * for `*`. Each entry is `property:type,…`; an empty property is one
+ * `dynamic()` writes no rule for, and every border side reads `border`'s.
+ * Read from Tailwind 4.3.3's utilities, one per prefix.
  */
-const OTHER_PROPERTY_HINTS: Readonly<Record<string, string>> = {
-    bg: ' length size bg-size percentage position url image ',
-    text: ' length percentage size absolute-size relative-size ',
-    border: ' length line-width ',
-    outline: ' length percentage number ',
-    decoration: ' length percentage ',
-    stroke: ' length percentage number ',
-    ring: ' length ',
-    'ring-offset': ' length ',
+const SHARED_PREFIX_TYPES: Readonly<Record<string, string>> = {
+    bg: 'background-image:image ~:color background-position:percentage,position background-size:bg-size,length,size background-image:url',
+    text: '~:color font-size:length,percentage,absolute-size,relative-size,size',
+    border: '~:color border-width:line-width,length',
+    outline: '~:color outline-width:length,number,percentage',
+    decoration: '~:color text-decoration-thickness:length,percentage',
+    stroke: '~:color stroke-width:number,length,percentage',
+    ring: '~:color :length',
+    'inset-ring': '~:color :length',
+    'ring-offset': '~:color --tw-ring-offset-width:length',
+    from: '~:color --tw-gradient-from-position:length,percentage',
+    via: '~:color --tw-gradient-via-position:length,percentage',
+    to: '~:color --tw-gradient-to-position:length,percentage',
+    font: 'font-weight:*,number font-family:generic-name,family-name',
+    rotate: 'rotate:*,angle :vector',
 };
 
-/** The hints that make a `font-[…]` value its family; any other is its weight. */
-const FONT_FAMILY_HINTS: ReadonlySet<string> = new Set(['family-name', 'generic-name']);
+/**
+ * The property a shared prefix writes for a `[…]` or `(…)` value.
+ *
+ * @param prefix - The prefix, from {@link prefixOf}.
+ * @param value - The value, delimiters included.
+ * @returns The property, `''` for one with no rule here, or undefined for the
+ *   colour, which the colour resolver writes.
+ */
+function sharedPrefixProperty(prefix: string, value: string): string | undefined {
+    const row = sharedPrefixRow(borderSide(prefix) === undefined ? prefix : 'border');
+    if (row === undefined) return undefined;
+    const type = typeHint(value) ?? inferDataType(delimitedValue(value), row.types);
+    const property = row.property.get(type ?? '*') ?? row.property.get('*');
+    return property === '~' ? undefined : property;
+}
+
+/** A {@link SHARED_PREFIX_TYPES} entry read: its types in order, and each one's property. */
+interface SharedPrefixRow {
+    readonly types: readonly string[];
+    readonly property: ReadonlyMap<string, string>;
+}
+
+/** Each entry, read the first time a class asks for it. */
+const sharedPrefixRows = new Map<string, SharedPrefixRow>();
+
+/**
+ * @param prefix - A key of {@link SHARED_PREFIX_TYPES}.
+ * @returns Its entry read, or undefined for a prefix with none.
+ */
+function sharedPrefixRow(prefix: string): SharedPrefixRow | undefined {
+    const text = own(SHARED_PREFIX_TYPES, prefix);
+    if (text === undefined) return undefined;
+    let row = sharedPrefixRows.get(prefix);
+    if (row === undefined) {
+        const property = new Map<string, string>();
+        for (const entry of text.split(' ')) {
+            const [name, types] = entry.split(':') as [string, string];
+            for (const type of types.split(',')) property.set(type, name);
+        }
+        row = { types: [...property.keys()], property };
+        sharedPrefixRows.set(prefix, row);
+    }
+    return row;
+}
+
+/**
+ * @param prefix - A prefix.
+ * @returns The width property of the border side it names (`border-t`), or
+ *   undefined for any other prefix.
+ */
+function borderSide(prefix: string): string | undefined {
+    return prefix.startsWith('border-') ? own(BORDER_SIDES, prefix.slice(7)) : undefined;
+}
+
+/**
+ * @param value - A class's value.
+ * @returns Whether it is a whole `[…]` or `(…)`.
+ */
+function delimited(value: string): boolean {
+    return (
+        (value.startsWith('[') && value.endsWith(']')) ||
+        (value.startsWith('(') && value.endsWith(')'))
+    );
+}
+
+/**
+ * One declaration, or none when either half is empty: a property `dynamic()`
+ * has no rule for, or a value with no CSS (`(--a:b)`).
+ *
+ * @param property - The property.
+ * @param value - The CSS value.
+ * @returns The declaration, or `''`.
+ */
+function declare(property: string, value: string): string {
+    return property && value && `${property}: ${value}`;
+}
+
+/**
+ * The declaration a `[…]` or `(…)` value writes on a prefix one property owns.
+ *
+ * @param property - The property.
+ * @param value - The class's value.
+ * @returns The declaration, `''` for a value with no CSS, or null when the
+ *   value is not delimited.
+ */
+function arbitraryDeclaration(property: string, value: string): string | null {
+    return delimited(value) ? declare(property, delimitedValue(value)) : null;
+}
 
 // ── Variant metadata ──────────────────────────────────────────────────────────
 
@@ -273,8 +367,10 @@ const PSEUDO_CLASS_MAP: Record<string, string> = {
 /**
  * Maps Tailwind spacing utility prefix → CSS logical/physical properties (Tailwind v4).
  * Tailwind v4 uses logical properties (padding-inline, margin-block, etc.).
+ *
+ * @internal Exported so a test can ask Tailwind about every prefix here.
  */
-const SPACING_PROPS: Record<string, string[]> = {
+export const SPACING_PROPS: Readonly<Record<string, readonly string[]>> = {
     // Padding
     p: ['padding'],
     pt: ['padding-top'],
@@ -460,13 +556,19 @@ function resolveSpacingValue(v: string, prop?: string): string {
         return `calc(var(--spacing) * ${v})`;
     }
 
-    return v;
+    // A name the theme here does not hold (`p-red-500`): no value, as
+    // Tailwind writes no rule.
+    return '';
 }
 
 // ── Color utilities ───────────────────────────────────────────────────────────
 
-/** Maps Tailwind color utility prefix → CSS property. */
-const COLOR_PROPS: Record<string, string> = {
+/**
+ * Maps Tailwind color utility prefix → CSS property.
+ *
+ * @internal Exported so a test can ask Tailwind about every prefix here.
+ */
+export const COLOR_PROPS: Readonly<Record<string, string>> = {
     bg: 'background-color',
     text: 'color',
     border: 'border-color',
@@ -490,6 +592,7 @@ const COLOR_PROPS: Record<string, string> = {
     caret: 'caret-color',
     shadow: '--tw-shadow-color',
     'inset-shadow': '--tw-inset-shadow-color',
+    'inset-ring': '--tw-inset-ring-color',
     ring: '--tw-ring-color',
     'ring-offset': '--tw-ring-offset-color',
     'drop-shadow': '--tw-drop-shadow-color',
@@ -548,7 +651,7 @@ function resolveColorValue(v: string): string {
         const opacityPct = opacityPercent(split[1]);
         return opacityPct === undefined || colorVar === ''
             ? colorVar
-            : `color-mix(in srgb, ${colorVar} ${opacityPct}, transparent)`;
+            : `color-mix(in oklab, ${colorVar} ${opacityPct}, transparent)`;
     }
 
     if (DIRECT_COLOR_KEYWORDS.has(v)) {
@@ -821,33 +924,6 @@ const KEYWORD_RULES: Record<string, string> = {
         'position: static; width: auto; height: auto; padding: 0; margin: 0; overflow: visible; clip: auto; white-space: normal',
 };
 
-// ── Opacity utilities ─────────────────────────────────────────────────────────
-
-/** Named opacity values (Tailwind uses 0-100 scale). */
-const OPACITY_NAMED: Record<string, string> = {
-    0: '0',
-    5: '0.05',
-    10: '0.1',
-    15: '0.15',
-    20: '0.2',
-    25: '0.25',
-    30: '0.3',
-    35: '0.35',
-    40: '0.4',
-    45: '0.45',
-    50: '0.5',
-    55: '0.55',
-    60: '0.6',
-    65: '0.65',
-    70: '0.7',
-    75: '0.75',
-    80: '0.8',
-    85: '0.85',
-    90: '0.9',
-    95: '0.95',
-    100: '1',
-};
-
 // ── Border radius utilities ───────────────────────────────────────────────────
 
 const RADIUS_SIZES = new Set(['sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl']);
@@ -994,6 +1070,9 @@ export function parseVariants(cls: string): ParsedVariants {
         : { tier, pseudoSuffix, selectorPrefix, utility, unknownVariant };
 }
 
+/** A plain number: `4`, `2.5`. */
+const NUMBER_TEXT = /^\d+(?:\.\d+)?$/;
+
 /** One stage in the ordered utility-to-declaration pipeline. */
 type DeclarationResolver = (utility: string) => string | null;
 
@@ -1020,6 +1099,7 @@ const ROUNDED_DIRECTIONS: Record<string, string> = {
 };
 
 const DECLARATION_RESOLVERS: readonly DeclarationResolver[] = [
+    resolveSharedPrefixDeclaration,
     resolveOpacityDeclaration,
     resolveZIndexDeclaration,
     resolveBorderDeclaration,
@@ -1049,10 +1129,10 @@ const DECLARATION_RESOLVERS: readonly DeclarationResolver[] = [
 function resolveOpacityDeclaration(utility: string): string | null {
     if (!utility.startsWith('opacity-')) return null;
     const value = utility.slice(8);
-    if (value.startsWith('[') && value.endsWith(']')) return `opacity: ${delimitedValue(value)}`;
-    const numeric = Number.parseInt(value, 10);
-    if (Number.isNaN(numeric)) return null;
-    return `opacity: ${OPACITY_NAMED[numeric] ?? String(numeric / 100)}`;
+    const arbitrary = arbitraryDeclaration('opacity', value);
+    if (arbitrary !== null) return arbitrary;
+    // A number is a percentage, as Tailwind writes it (`opacity-50` is 50%).
+    return NUMBER_TEXT.test(value) ? `opacity: ${value}%` : null;
 }
 
 /**
@@ -1063,7 +1143,8 @@ function resolveZIndexDeclaration(utility: string): string | null {
     if (!utility.startsWith('z-')) return null;
     const value = utility.slice(2);
     if (value === 'auto') return 'z-index: auto';
-    if (value.startsWith('[') && value.endsWith(']')) return `z-index: ${delimitedValue(value)}`;
+    const arbitrary = arbitraryDeclaration('z-index', value);
+    if (arbitrary !== null) return arbitrary;
     return Number.isNaN(Number.parseInt(value, 10)) ? null : `z-index: ${value}`;
 }
 
@@ -1078,12 +1159,6 @@ function resolveBorderDeclaration(utility: string): string | null {
         return `${property}: 1px`;
     }
     if (/^border-\d+$/.test(utility)) return `border-width: ${utility.slice(7)}px`;
-    // An arbitrary width: `border-[3px]`. Gated on the classifier because the
-    // same shape carries a colour (`border-[#123]`), which the colour resolver
-    // handles.
-    if (/^border-\[.+\]$/.test(utility) && !classifiedAsOther(utility, 'width')) {
-        return `border-width: ${delimitedValue(utility.slice(7))}`;
-    }
     const sideWidth = /^border-([trblxse])-(\d+)$/.exec(utility);
     if (!sideWidth) return null;
     const property = BORDER_SIDES[sideWidth[1]];
@@ -1104,14 +1179,10 @@ function resolveRadiusDeclaration(utility: string): string | null {
     if (direction !== undefined) return direction;
     const directional = /^([trblse]+)-(.+)$/.exec(value);
     if (directional && own(ROUNDED_DIRECTIONS, directional[1]) !== undefined) {
-        return ROUNDED_DIRECTIONS[directional[1]].replaceAll(
-            'var(--radius)',
-            resolveRadiusValue(directional[2]),
-        );
+        const size = resolveRadiusValue(directional[2]);
+        return size && ROUNDED_DIRECTIONS[directional[1]].replaceAll('var(--radius)', () => size);
     }
-    return value.startsWith('[') && value.endsWith(']')
-        ? `border-radius: ${delimitedValue(value)}`
-        : null;
+    return arbitraryDeclaration('border-radius', value);
 }
 
 /**
@@ -1119,9 +1190,11 @@ function resolveRadiusDeclaration(utility: string): string | null {
  * @param size
  */
 function resolveRadiusValue(size: string): string {
+    if (delimited(size)) return delimitedValue(size);
     if (RADIUS_SIZES.has(size)) return `var(--radius-${size})`;
     if (size === 'full') return 'calc(infinity * 1px)';
-    return size === 'none' ? '0' : size;
+    // A size the theme does not name: no value, as Tailwind writes no rule.
+    return size === 'none' ? '0' : '';
 }
 
 /**
@@ -1134,13 +1207,9 @@ function resolveTextDeclaration(utility: string): string | null {
     if (TEXT_SIZES.has(value)) {
         return `font-size: var(--text-${value}); line-height: var(--tw-leading, var(--text-${value}--line-height))`;
     }
-    // `text-[#123]` is a colour and `text-[14px]` a size; the brackets say
-    // nothing about which, so the classifier decides and the colour resolver
-    // further down takes what this one declines.
-    if (!value.startsWith('[') || !value.endsWith(']') || classifiedAsOther(utility, 'size')) {
-        return null;
-    }
-    return `font-size: ${delimitedValue(value)}`;
+    // A bracket is the shared prefixes' (`resolveSharedPrefixDeclaration`),
+    // or the colour resolver's when it is a colour.
+    return null;
 }
 
 /**
@@ -1159,8 +1228,8 @@ function resolveLeadingDeclaration(utility: string): string | null {
         loose: '2',
     };
     if (own(named, value) !== undefined) return `line-height: ${named[value]}`;
-    if (value.startsWith('[') && value.endsWith(']'))
-        return `line-height: ${delimitedValue(value)}`;
+    const arbitrary = arbitraryDeclaration('line-height', value);
+    if (arbitrary !== null) return arbitrary;
     return Number.isNaN(Number.parseFloat(value))
         ? null
         : `line-height: calc(var(--spacing) * ${value})`;
@@ -1182,9 +1251,7 @@ function resolveTrackingDeclaration(utility: string): string | null {
         widest: 'var(--tracking-widest)',
     };
     if (own(named, value) !== undefined) return `letter-spacing: ${named[value]}`;
-    return value.startsWith('[') && value.endsWith(']')
-        ? `letter-spacing: ${delimitedValue(value)}`
-        : null;
+    return arbitraryDeclaration('letter-spacing', value);
 }
 
 /**
@@ -1199,16 +1266,7 @@ function resolveFontDeclaration(utility: string): string | null {
         serif: 'var(--font-serif, ui-serif, Georgia, serif)',
         mono: 'var(--font-mono, ui-monospace, SFMono-Regular, monospace)',
     };
-    if (own(families, value) !== undefined) return `font-family: ${families[value]}`;
-    if (!value.startsWith('[') || !value.endsWith(']')) return null;
-    const inner = delimitedValue(value);
-    // A hint says which: a family's names the family, any other the weight
-    // (`font-[number:var(--w)]`). Without one, `font-[500]` is a weight and
-    // `font-[Inter]` a family, which the classifier tells apart.
-    const hint = typeHint(value);
-    const family =
-        hint === undefined ? !classifiedAsOther(utility, 'family') : FONT_FAMILY_HINTS.has(hint);
-    return family ? `font-family: ${inner}` : `font-weight: ${inner}`;
+    return own(families, value) === undefined ? null : `font-family: ${families[value]}`;
 }
 
 /**
@@ -1267,6 +1325,8 @@ function resolveFlexOrderDeclaration(utility: string): string | null {
     }
     if (!utility.startsWith('columns-')) return null;
     const value = utility.slice(8);
+    const arbitrary = arbitraryDeclaration('columns', value);
+    if (arbitrary !== null) return arbitrary;
     return Number.isNaN(Number.parseInt(value, 10))
         ? `columns: var(--container-${value})`
         : `columns: ${value}`;
@@ -1289,10 +1349,11 @@ function resolveGridDeclaration(utility: string): string | null {
  * @param value
  * @param axis
  */
-function resolveGridTemplate(value: string, axis: 'columns' | 'rows'): string {
+function resolveGridTemplate(value: string, axis: 'columns' | 'rows'): string | null {
     if (value === 'none' || value === 'subgrid') return `grid-template-${axis}: ${value}`;
-    if (value.startsWith('[')) return `grid-template-${axis}: ${delimitedValue(value)}`;
-    return `grid-template-${axis}: repeat(${value}, minmax(0, 1fr))`;
+    const arbitrary = arbitraryDeclaration(`grid-template-${axis}`, value);
+    if (arbitrary !== null) return arbitrary;
+    return /^\d+$/.test(value) ? `grid-template-${axis}: repeat(${value}, minmax(0, 1fr))` : null;
 }
 
 /**
@@ -1318,12 +1379,18 @@ function resolveTransformDeclaration(utility: string): string | null {
     if (utility.startsWith('scale-')) return `scale: ${Number.parseFloat(utility.slice(6)) / 100}`;
     if (utility.startsWith('rotate-')) {
         const value = utility.slice(7);
-        return value.startsWith('[') ? `rotate: ${delimitedValue(value)}` : `rotate: ${value}deg`;
+        return NUMBER_TEXT.test(value)
+            ? `rotate: ${value}deg`
+            : arbitraryDeclaration('rotate', value);
     }
-    if (utility.startsWith('translate-x-'))
-        return `translate: ${resolveSpacingValue(utility.slice(12), 'width')} var(--tw-translate-y, 0)`;
-    if (utility.startsWith('translate-y-'))
-        return `translate: var(--tw-translate-x, 0) ${resolveSpacingValue(utility.slice(12), 'height')}`;
+    if (utility.startsWith('translate-x-')) {
+        const x = resolveSpacingValue(utility.slice(12), 'width');
+        return x && `translate: ${x} var(--tw-translate-y, 0)`;
+    }
+    if (utility.startsWith('translate-y-')) {
+        const y = resolveSpacingValue(utility.slice(12), 'height');
+        return y && `translate: var(--tw-translate-x, 0) ${y}`;
+    }
     return null;
 }
 
@@ -1357,9 +1424,10 @@ function resolveTransitionDeclaration(utility: string): string | null {
  * @param value
  * @param kind
  */
-function resolveTimedTransition(value: string, kind: 'duration' | 'delay'): string {
-    const duration = value.startsWith('[') ? delimitedValue(value) : `${value}ms`;
-    return `transition-${kind}: ${duration}`;
+function resolveTimedTransition(value: string, kind: 'duration' | 'delay'): string | null {
+    return NUMBER_TEXT.test(value)
+        ? `transition-${kind}: ${value}ms`
+        : arbitraryDeclaration(`transition-${kind}`, value);
 }
 
 /**
@@ -1388,13 +1456,10 @@ function classifiedAsOther(utility: string, group: string): boolean {
  * @param utility
  */
 function resolveColorDeclaration(utility: string): string | null {
-    const prefixes = Object.keys(COLOR_PROPS).sort((a, b) => b.length - a.length);
-    for (const prefix of prefixes) {
-        if (utility !== prefix && !utility.startsWith(`${prefix}-`)) continue;
-        const value = utility.slice(prefix.length + 1);
-        if (value) return colorDeclaration(utility, prefix, value);
-    }
-    return null;
+    const prefix = prefixOf(utility);
+    if (prefix === undefined || own(COLOR_PROPS, prefix) === undefined) return null;
+    const value = utility.slice(prefix.length + 1);
+    return value ? colorDeclaration(utility, prefix, value) : null;
 }
 
 /**
@@ -1411,16 +1476,19 @@ function colorDeclaration(utility: string, prefix: string, value: string): strin
     if (SHADOW_PREFIXES.has(prefix) && isShadowValue(slashOpacitySplit(value)?.[0] ?? value)) {
         return '';
     }
-    // A hint naming the prefix's other property (`bg-(image:--x)`) is not
-    // the colour; no rule rather than a colour that resets it.
-    const hint = typeHint(value);
-    const others = own(OTHER_PROPERTY_HINTS, prefix.startsWith('border') ? 'border' : prefix);
-    if (hint !== undefined && others?.includes(` ${hint} `)) return '';
-    // A prefix in this table is not enough: `bg-cover`, `bg-center` and
-    // `border-[3px]` all live under one, and none of them is a colour.
-    if (classifiedAsOther(utility, 'color')) return null;
-    const color = resolveColorValue(value);
-    return color && `${COLOR_PROPS[prefix]}: ${color}`;
+    const color = slashOpacitySplit(value)?.[0] ?? value;
+    // Digits name no colour (`bg-2`); Tailwind writes no rule.
+    if (/^\d+$/.test(color)) return null;
+    if (delimited(color)) {
+        // A bracket another property of the prefix reads (`bg-[12px]/50`,
+        // `bg-(image:--x)/50`) is not the colour, whatever its slash says.
+        if (sharedPrefixProperty(prefix, color) !== undefined) return '';
+    } else if (classifiedAsOther(utility, 'color')) {
+        // A prefix in this table is not enough: `bg-cover` and `bg-center`
+        // live under one, and neither is a colour.
+        return null;
+    }
+    return declare(COLOR_PROPS[prefix] as string, resolveColorValue(value));
 }
 
 /**
@@ -1428,18 +1496,65 @@ function colorDeclaration(utility: string, prefix: string, value: string): strin
  * @param utility
  */
 function resolveSpacingDeclaration(utility: string): string | null {
-    const prefixes = Object.keys(SPACING_PROPS).sort((a, b) => b.length - a.length);
-    for (const prefix of prefixes) {
-        const dashPrefix = `${prefix}-`;
-        const negative = utility.startsWith(`-${dashPrefix}`);
-        const matchPrefix = negative ? `-${dashPrefix}` : dashPrefix;
-        if (!utility.startsWith(matchPrefix)) continue;
-        const rawValue = utility.slice(matchPrefix.length);
-        const properties = SPACING_PROPS[prefix];
-        const resolved = resolveSpacingValue(negative ? `-${rawValue}` : rawValue, properties[0]);
-        if (resolved) return properties.map(property => `${property}: ${resolved}`).join('; ');
-    }
-    return null;
+    const negative = utility.startsWith('-');
+    const base = negative ? utility.slice(1) : utility;
+    const prefix = prefixOf(base);
+    const properties = prefix === undefined ? undefined : own(SPACING_PROPS, prefix);
+    if (prefix === undefined || properties === undefined) return null;
+    const value = base.slice(prefix.length + 1);
+    const sign = negative ? '-' : '';
+    // An offset's number is pixels, not the spacing scale (`outline-offset-2`).
+    const resolved =
+        PIXEL_SCALE_PREFIXES.has(prefix) && /^\d+$/.test(value)
+            ? `${sign}${value}px`
+            : resolveSpacingValue(`${sign}${value}`, properties[0]);
+    return resolved ? properties.map(property => `${property}: ${resolved}`).join('; ') : null;
+}
+
+/** The spacing prefixes whose bare number is pixels. */
+const PIXEL_SCALE_PREFIXES: ReadonlySet<string> = new Set([
+    'outline-offset',
+    'underline-offset',
+    'ring-offset',
+]);
+
+/** Every prefix of the tables, longest first, once {@link prefixOf} asks. */
+let knownPrefixes: readonly string[] | undefined;
+
+/**
+ * The longest prefix of any table a utility starts with: `outline-offset-2`
+ * is `outline-offset`'s and `inset-ring-2` is `inset-ring`'s, never the
+ * shorter `outline`'s or `inset`'s, whichever resolver asks first.
+ *
+ * Cost: O(p) prefix tests for the `p` prefixes of the tables, sorted once.
+ *
+ * @param utility - The utility, without a leading `-`.
+ * @returns The prefix, or undefined.
+ */
+function prefixOf(utility: string): string | undefined {
+    knownPrefixes ??= [
+        ...new Set([
+            ...Object.keys(COLOR_PROPS),
+            ...Object.keys(SPACING_PROPS),
+            ...Object.keys(SHARED_PREFIX_TYPES),
+        ]),
+    ].sort((a, b) => b.length - a.length);
+    return knownPrefixes.find(prefix => utility.startsWith(`${prefix}-`));
+}
+
+/**
+ * Resolves a `[…]` or `(…)` value on a prefix several properties share, to
+ * the property its type picks (`text-[12px]` the size, `bg-[12px]` the
+ * position, `font-[Inter]` the family). A colour is the colour resolver's.
+ * @param utility
+ */
+function resolveSharedPrefixDeclaration(utility: string): string | null {
+    const prefix = prefixOf(utility);
+    const value = prefix === undefined ? '' : utility.slice(prefix.length + 1);
+    if (prefix === undefined || !delimited(value)) return null;
+    const property = sharedPrefixProperty(prefix, value);
+    if (property === undefined) return null;
+    return declare(borderSide(prefix) ?? property, delimitedValue(value));
 }
 
 /**

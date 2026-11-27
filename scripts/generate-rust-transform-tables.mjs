@@ -71,6 +71,7 @@ function readTables() {
         const keyTables = readTableSource(
             path.join(repoRoot, 'packages/compiler/src/sz-key-tables.ts'),
         );
+        const units = readTableSource(path.join(repoRoot, 'packages/compiler/src/css-units.ts'));
         const keywords = readTableSource(
             path.join(repoRoot, 'packages/compiler/src/shadow-size-keywords.ts'),
         );
@@ -124,7 +125,7 @@ function readTables() {
             splitShorthandKeys: keyTables.stringObject('SPLIT_SHORTHAND_KEYS'),
             cssVarTypeHints: core.stringObject('CSS_VAR_TYPE_HINTS'),
             alignmentKeys: core.stringSet('ALIGNMENT_KEYS'),
-            arbitraryLengthUnits: core.stringSet('ARBITRARY_LENGTH_UNITS'),
+            arbitraryLengthUnits: units.stringSet('ARBITRARY_LENGTH_UNITS'),
             alignmentCssValueHints: core.stringObject('ALIGNMENT_CSS_VALUE_HINT'),
             migrationNotes: keyTables.stringObject('MIGRATION_NOTES'),
             closedEnumClasses: closedEnums.objectOfStringObjects('CLOSED_ENUM_CLASSES'),
