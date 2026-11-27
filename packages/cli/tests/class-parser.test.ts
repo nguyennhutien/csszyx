@@ -332,8 +332,9 @@ describe('class-parser', () => {
             expect(parseClass('break-normal')).toEqual({ prop: 'break', value: 'normal' });
             expect(parseClass('break-all')).toEqual({ prop: 'break', value: 'all' });
             expect(parseClass('break-keep')).toEqual({ prop: 'break', value: 'keep' });
-            // break-words migrates to wrap (overflow-wrap) in v4.1
-            expect(parseClass('break-words')).toEqual({ prop: 'wrap', value: 'break-word' });
+            // `break-words` is overflow-wrap; `wrap: 'break-word'` would write
+            // `wrap-break-word`, which Tailwind serves from 4.1 only.
+            expect(parseClass('break-words')).toEqual({ prop: 'break', value: 'words' });
         });
 
         it('overflow wrap (wrap-*)', () => {
@@ -359,10 +360,13 @@ describe('class-parser', () => {
         });
 
         it('font weight numeric', () => {
-            expect(parseClass('font-100')).toEqual({ prop: 'weight', value: 100 });
-            expect(parseClass('font-400')).toEqual({ prop: 'weight', value: 400 });
-            expect(parseClass('font-700')).toEqual({ prop: 'weight', value: 700 });
-            expect(parseClass('font-900')).toEqual({ prop: 'weight', value: 900 });
+            // A number in brackets is a weight, as Tailwind reads it.
+            expect(parseClass('font-[100]')).toEqual({ prop: 'weight', value: 100 });
+            expect(parseClass('font-[550]')).toEqual({ prop: 'weight', value: 550 });
+            // Tailwind serves no bare number: `weight: 700` writes `font-[700]`,
+            // not the class written, so it stays in `className`.
+            expect(parseClass('font-100')).toBeNull();
+            expect(parseClass('font-700')).toBeNull();
         });
 
         it('font family', () => {
@@ -997,7 +1001,9 @@ describe('class-parser', () => {
             expect(parseClass('text-[16px]')).toEqual({ prop: 'text', value: '16px' });
             expect(parseClass('text-[1.5em]')).toEqual({ prop: 'text', value: '1.5em' });
             expect(parseClass('text-[-.25cqi]')).toEqual({ prop: 'text', value: '-.25cqi' });
-            expect(parseClass('text-[1.5foo]')).toEqual({ prop: 'color', value: '1.5foo' });
+            // Tailwind reads it as a colour; `color: '1.5foo'` writes
+            // `text-1.5foo`, no class, so the bracket lane writes it back.
+            expect(parseClass('text-[1.5foo]')).toEqual({ prop: 'color', value: '[1.5foo]' });
             // Arbitrary hex color still → color
             expect(parseClass('text-[#50d71e]')).toEqual({ prop: 'color', value: '#50d71e' });
         });
@@ -1067,21 +1073,23 @@ describe('class-parser', () => {
     // SIZE-UTILITY SLASH MODIFIERS (not color opacity)
     // ========================================================================
     describe('size-utility slash modifiers', () => {
-        it('named shadow sizes keep the verbatim string form', () => {
-            expect(parseClass('shadow-sm/12.5')).toEqual({ prop: 'shadow', value: 'sm/12.5' });
-            expect(parseClass('text-shadow-sm/12.5')).toEqual({
-                prop: 'textShadow',
-                value: 'sm/12.5',
+        it('a shadow size with an opacity is the size object', () => {
+            // `shadow-sm/50` sets the shadow's alpha: `{ size, op }`.
+            expect(parseClass('shadow-sm/12.5')).toEqual({
+                prop: 'shadow',
+                value: { size: 'sm', op: 12.5 },
             });
-            expect(parseClass('drop-shadow-sm/12.5')).toEqual({
-                prop: 'dropShadow',
-                value: 'sm/12.5',
+            for (const [className, prop] of [
+                ['text-shadow-sm/12.5', 'textShadow'],
+                ['drop-shadow-sm/12.5', 'dropShadow'],
+                ['inset-shadow-sm/12.5', 'insetShadow'],
+            ] as const) {
+                expect(parseClass(className)).toEqual({ prop, value: { size: 'sm', op: 12.5 } });
+            }
+            expect(parseClass('shadow-(--s)/50')).toEqual({
+                prop: 'shadow',
+                value: { size: '--s', op: 50 },
             });
-            expect(parseClass('inset-shadow-sm/12.5')).toEqual({
-                prop: 'insetShadow',
-                value: 'sm/12.5',
-            });
-            expect(parseClass('shadow-(--s)/50')).toEqual({ prop: 'shadow', value: '(--s)/50' });
         });
 
         it('font-size with line-height modifier splits into the documented two-token form', () => {
@@ -1158,8 +1166,10 @@ describe('class-parser', () => {
             });
         });
 
-        it('kept boolean shorthand with !', () => {
-            expect(parseClass('truncate!')).toEqual({ prop: 'truncate', value: '!' });
+        it('a boolean shorthand with ! stays in className', () => {
+            // `{ truncate: '!' }` writes `truncate-!`, and a boolean key has
+            // no important spelling yet, so the class is not migrated.
+            expect(parseClass('truncate!')).toBeNull();
         });
 
         it('numeric with !', () => {

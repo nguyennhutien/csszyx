@@ -396,7 +396,29 @@ mod migrate_tables_tests {
     /// Every `export const NAME = new Set([...])` in the module, spreads
     /// resolved against the sets declared before them and the ones it imports.
     fn typescript_sets() -> BTreeMap<String, Vec<String>> {
-        parse_sets_over(&typescript_source(), &imported_sets())
+        let source = typescript_source();
+        let mut sets = parse_sets_over(&source, &imported_sets());
+        // The sets the module re-exports from the module the lowering shares,
+        // which holds others the migrate tables do not carry.
+        let shared = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../compiler/src/shadow-size-keywords.ts"
+        );
+        let names = source
+            .lines()
+            .find(|line| line.ends_with("from '../shadow-size-keywords.js';"))
+            .and_then(|line| line.split_once('{')?.1.split_once('}'))
+            .map(|(names, _)| names.split(',').map(str::trim).collect::<Vec<_>>())
+            .expect("reverse-map.ts re-exports from shadow-size-keywords.ts");
+        sets.extend(
+            parse_sets(
+                &std::fs::read_to_string(shared)
+                    .expect("shadow-size-keywords.ts is in packages/compiler"),
+            )
+            .into_iter()
+            .filter(|(name, _)| names.contains(&name.as_str())),
+        );
+        sets
     }
 
     /// The compiler's sets the module spreads, by the name it imports them as.

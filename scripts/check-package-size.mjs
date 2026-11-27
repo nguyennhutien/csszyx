@@ -206,11 +206,27 @@ export const SIZE_BUDGETS = [
         // character and a utility's text outside its brackets must be a plain
         // token or a custom property, so an escape cannot carry a `;` out of a
         // value (`x\(;position:fixed;--z:\)`). About 200 bytes of headroom.
-        maxGzipBytes: 11_450,
-        // Measured 2026-10-08: 10,358 / 7,897.
-        entryBudgets: { '.': 11_150, './react': 8_650 },
+        //
+        // Raised on 2026-11-27, measured 11,883 / 11,578 / 9,122, Vite 11,821 /
+        // 11,534 / 8,987 (11,216 / 10,918 / 8,447 at the last raise above, so
+        // about 670 across this branch's `dynamic()` commits, not measured one
+        // by one): `dynamic()` decodes a bracket as Tailwind does, keeping the
+        // `_` of a variable's name and of `url()`; drops a type hint where
+        // Tailwind does and writes no rule where the hint names another
+        // property (`bg-(image:--x)`); and writes no rule for a shadow size.
+        // Raised on 2026-11-27, measured 12,153 / 11,845 / 9,377, Vite 12,094 /
+        // 11,811 / 9,248 (+270 over the raise above): a bracket on a prefix
+        // several properties share takes the type Tailwind infers for it
+        // (`inferDataType`, `text-[12px]` the size, `bg-[12px]` the position),
+        // in place of the hint table, the opacity table and three resolvers'
+        // own bracket readings, which went.
+        maxGzipBytes: 12_400,
+        // Measured 2026-10-08: 10,358 / 7,897. `./react` raised to 9,650 on
+        // 2026-11-27, measured 9,377: the raises above.
+        entryBudgets: { '.': 12_100, './react': 9_650 },
         // Built by Vite, measured 2026-10-19: 10,659, then 10,373 / 7,800.
-        vite: { maxGzipBytes: 11_400, entryBudgets: { '.': 11_100, './react': 8_500 } },
+        // `./react` raised to 9,500 on 2026-11-27, measured 9,248.
+        vite: { maxGzipBytes: 12_350, entryBudgets: { '.': 12_050, './react': 9_500 } },
         // None today: its one production failure, an unreachable manifest, is
         // a rejected fetch it catches. Read from the registry all the same, so
         // a production line added to its sources has to be registered.
@@ -311,7 +327,14 @@ export const SIZE_BUDGETS = [
         // which takes a trial lowering in production too (ADR 0037 §2).
         // Raised to 18,900 on 2026-11-24, measured 18,753: `./color-modifier`, the
         // slash-opacity reader `dynamic()` shares; `./browser` itself did not grow.
-        maxGzipBytes: 18_900,
+        // Raised to 19,250 on 2026-11-25, measured 18,952: the shadow size object
+        // (`./browser` +125 over `main`), and `./color-modifier` +110 for the
+        // shadow-value test `dynamic()` reads so it writes no colour for
+        // `shadow-sm/50`.
+        // Raised to 20,350 on 2026-11-27, measured 20,077: `./color-modifier`
+        // +979 for the type reading `dynamic()` takes a bracket with (see
+        // `@csszyx/dynamic`, which grew 270 for it); `./browser` did not grow.
+        maxGzipBytes: 20_350,
         // Measured 2026-10-08: 15,104 / 346 / 675 / 366 / 257 / 691.
         // `./browser` raised from 15,250 the same day: the special-key box
         // roles took it to 15,104, 146 under, so it went back to the usual
@@ -337,7 +360,11 @@ export const SIZE_BUDGETS = [
             // Raised to 17,800 on 2026-11-23, measured 17,499: a bracketed value
             // writes the class its key writes for the value without brackets,
             // which takes a trial lowering in production too (ADR 0037 §2).
-            './browser': 17_800,
+            // Raised to 18,150 on 2026-11-25, measured 17,859 (17,657 on `main`):
+            // the shadow size object, and every CSS Values 4 unit bracketed
+            // (`ARBITRARY_LENGTH_UNITS`, which the engine's list is generated
+            // from) where `w: '2lh'` wrote the dead `w-2lh`.
+            './browser': 18_150,
             // `./sz-limits` measured 501 on 2026-10-20 (346 before):
             // `SzDepthError` extends the error class of `./errors`, measured
             // 357 alone, which ships to the browser because the runtime
@@ -347,8 +374,9 @@ export const SIZE_BUDGETS = [
             './keyword-families': 1_000,
             './bool-class': 650,
             './color-var': 550,
-            // Measured 2026-11-24: 526.
-            './color-modifier': 850,
+            // Measured 2026-11-24: 526. Raised to 2,100 on 2026-11-27, measured
+            // 1,829: `inferDataType`, which only `dynamic()` loads.
+            './color-modifier': 2_100,
             './spacing-var': 1_000,
         },
         // The capability rows (with the category map) have to be laid out
@@ -380,7 +408,10 @@ export const SIZE_BUDGETS = [
             // which takes a trial lowering in production too (ADR 0037 §2).
             // Raised to 18,750 on 2026-11-24, measured 18,628: `./color-modifier`, the
             // slash-opacity reader `dynamic()` shares; `./browser` itself did not grow.
-            maxGzipBytes: 18_750,
+            // Raised to 19,100 on 2026-11-25, measured 18,828: the shadow size
+            // object and the shadow-value test (see the esbuild budget).
+            // Raised to 20,200 on 2026-11-27, measured 19,942 (see esbuild).
+            maxGzipBytes: 20_200,
             entryBudgets: {
                 // 16,589 on 2026-11-07 with grid line names lowering (see the
                 // esbuild union), so raised from 16,650. 17,021 on 2026-11-21
@@ -393,15 +424,17 @@ export const SIZE_BUDGETS = [
                 // Raised to 17,650 on 2026-11-23, measured 17,343: a bracketed value
                 // writes the class its key writes for the value without brackets,
                 // which takes a trial lowering in production too (ADR 0037 §2).
-                './browser': 17_650,
+                // Raised to 18,000 on 2026-11-25, measured 17,717 (see esbuild).
+                './browser': 18_000,
                 // Measured 2026-10-20: 527 and 393.
                 './sz-limits': 700,
                 './errors': 700,
                 './keyword-families': 1_050,
                 './bool-class': 750,
                 './color-var': 600,
-                // Measured 2026-11-24: 561.
-                './color-modifier': 900,
+                // Measured 2026-11-24: 561. Raised to 2,150 on 2026-11-27,
+                // measured 1,874 (see esbuild).
+                './color-modifier': 2_150,
                 './spacing-var': 1_050,
             },
         },
@@ -461,7 +494,15 @@ export const SIZE_BUDGETS = [
         // which takes a trial lowering in production too (ADR 0037 §2).
         // Raised to 42,100 on 2026-11-24, measured 41,954: `dynamic()` reads a
         // colour class's modifier through `./color-modifier`, as Tailwind reads it.
-        maxGzipBytes: 42_100,
+        // Raised to 42,450 on 2026-11-25, measured 42,141: the shadow size object
+        // and `dynamic()` telling a shadow from its colour.
+        // Raised to 43,150 on 2026-11-27, measured 42,886: `dynamic()` decodes
+        // a bracket as Tailwind does (see `@csszyx/dynamic`), and a shadow
+        // bracket is a colour by Tailwind's own test.
+        // Raised to 44,250 on 2026-11-27, measured 43,957: the type reading
+        // `dynamic()` takes a bracket with, in `./color-modifier` (+979 of its
+        // own; see `@csszyx/dynamic`, whose app bundle grew 270 for it).
+        maxGzipBytes: 44_250,
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
     // The wasm build of the parser is the fourth surface: not browser code,
@@ -734,7 +775,24 @@ export const SIZE_BUDGETS = [
         // merging each family's findings back in keeps a new family free; the
         // merge cost +18,862 as a sort per family, +7,771 as a rotation.
         // ~300 bytes of headroom.
-        maxGzipBytes: 608_000,
+        //
+        // Raised to 609,100 on 2026-11-25: +895 over `main` with the same
+        // toolchain (604,431 -> 605,326): a shadow's `{ size, op }` goes
+        // through the colour object's formatter (`value_member`,
+        // `format_value_object`), a shadow key's slash string is reported with
+        // the member to write (`slash_member`), and a size held in a variable
+        // is noted from the invalid-opacity walk, not a family of its own
+        // (+1,263 as one). CI reads `main` at 607,897.
+        // Raised to 609,650 on 2026-11-25: 605,882 on the same toolchain, +1,451
+        // over `main`. Every CSS Values 4 unit bracketed (+174), and a shadow
+        // size reported as its string on the key would be (+382: one view of
+        // an object that holds one, `sizes_as_values`; `collect_group` takes a
+        // slice so its callers share one copy, +1,211 with an iterator each).
+        // Raised to 610,450 on 2026-11-27: CI reads 610,148, +2,251 over
+        // `main`'s 607,897 and +498 over the raise above, from each slash
+        // report carrying the member it replaces and from Tailwind's
+        // shadow-bracket test on the engine, not measured one by one.
+        maxGzipBytes: 610_450,
     },
     // The VS Code extension: one CommonJS file that `packages/vscode/esbuild.mjs`
     // bundles from the compiler's source, unminified, and that every editor
@@ -786,7 +844,9 @@ export const SIZE_BUDGETS = [
         // Raised to 53,050 on 2026-11-24, measured 52,754: a slash opacity on a
         // colour key is reported again (`slash-opacity-string`,
         // `color-slash-opacity`), whose words only a development build prints.
-        maxGzipBytes: 53_050,
+        // Raised to 53,500 on 2026-11-26, measured 53,216: the two slash
+        // reports name the member they replace and the shadow's colour key.
+        maxGzipBytes: 53_500,
         // Built as production, so the leak gate reads it, except for the ids
         // whose words the extension shows as its own editor diagnostics
         // (`diagnostic-provider.ts`, from `SZ_EDITOR_DIAGNOSTIC_TEMPLATES`).
@@ -825,7 +885,10 @@ export const SIZE_BUDGETS = [
         // Raised to 17,300 on 2026-11-23, measured 17,035: a bracketed value
         // writes the class its key writes for the value without brackets,
         // which takes a trial lowering in production too (ADR 0037 §2).
-        maxGzipBytes: 17_300,
+        // Raised to 17,600 on 2026-11-25, measured 17,305 (17,197 on `main`): a
+        // shadow's `{ size, op }` lowers through the colour object's builder,
+        // the size through the key's own string lane.
+        maxGzipBytes: 17_600,
         // A `<script>` tag loads it as built, so the leak gate reads its bytes.
         templateFree: {},
         build: cdnBuildOptions('production'),
@@ -906,7 +969,13 @@ export const SIZE_BUDGETS = [
         // Raised to 25,500 on 2026-11-24, measured 25,202: a slash opacity on a
         // colour key is reported again (`slash-opacity-string`,
         // `color-slash-opacity`), whose words only a development build prints.
-        maxGzipBytes: 25_500,
+        // Raised to 26,050 on 2026-11-25, measured 25,756 (25,481 on `main`):
+        // the shadow size object, a shadow key's slash string reported with the
+        // member to write, and `variable-shadow-opacity`'s words.
+        // Raised to 26,450 on 2026-11-26, measured 26,165: a shadow bracket is
+        // a colour by Tailwind's own test (a `color:` hint, a leading `#` or
+        // colour function, one colour word).
+        maxGzipBytes: 26_450,
         build: cdnBuildOptions('development'),
         moduleOrder: ['per-key-rows-', 'closed-enum-tables-'],
     },
@@ -1021,7 +1090,9 @@ export const SIZE_BUDGETS = [
         // value on a factor key).
         // Raised to 32,000 on 2026-11-24, measured 31,960: the two slash-opacity
         // reports carry a note.
-        maxGzipBytes: 32_000,
+        // Raised to 32,350 on 2026-11-25, measured 32,062 (31,960 on `main`):
+        // `{ size, op }` on the shadow keys and `variable-shadow-opacity`.
+        maxGzipBytes: 32_350,
         excludedModules: [
             'src/state-variants.generated.ts',
             'src/template-sz.ts',
@@ -1048,7 +1119,9 @@ export const SIZE_BUDGETS = [
         // (see `./engine`).
         // 32,400 on 2026-11-21, measured 32,105 (31,829 at the branch base):
         // the numeric lowering (see `./engine`).
-        maxGzipBytes: 32_400,
+        // 32,750 on 2026-11-25, measured 32,471 (32,366 on `main`): the shadow
+        // size object (see `./engine`).
+        maxGzipBytes: 32_750,
         excludedModules: [
             'src/state-variants.generated.ts',
             'src/template-sz.ts',
@@ -1068,7 +1141,9 @@ export const SIZE_BUDGETS = [
         // (see `./engine`).
         // 34,050 on 2026-11-21, measured 33,769 (33,497 at the branch base):
         // the numeric lowering (see `./engine`).
-        maxGzipBytes: 34_050,
+        // 34,400 on 2026-11-25, measured 34,139 (34,034 on `main`): the shadow
+        // size object (see `./engine`).
+        maxGzipBytes: 34_400,
         excludedModules: ['src/state-variants.generated.ts'],
     },
     // The plugin and the CLI run in Node at the start of every build, dev
@@ -1285,7 +1360,13 @@ export const SIZE_BUDGETS = [
         // Raised to 63,100 on 2026-11-24, measured 63,018: the slash-opacity
         // reader is the `./color-modifier` chunk `dynamic()` shares, a file of its
         // own, and the two reports carry a note.
-        maxGzipBytes: 63_100,
+        // Raised to 63,800 on 2026-11-25, measured 63,513 (63,019 on `main`):
+        // the shadow size object on the TypeScript lane and its two reports'
+        // words (see `./engine`).
+        // Raised to 64,200 on 2026-11-26, measured 63,903: the slash reports
+        // name the member and the colour key, and a shadow bracket is read by
+        // its parts outside a colour function.
+        maxGzipBytes: 64_200,
     },
     {
         name: '@csszyx/compiler `./migrate`, loaded by Node',
@@ -1301,7 +1382,9 @@ export const SIZE_BUDGETS = [
         // the numeric lowering (see `./engine`).
         // Raised to 29,250 on 2026-11-24, measured 29,207: the two slash-opacity
         // reports carry a note, which the migrate entry's words ship.
-        maxGzipBytes: 29_250,
+        // Raised to 29,600 on 2026-11-25, measured 29,316 (29,206 on `main`):
+        // the shadow size object's words (see `./engine`).
+        maxGzipBytes: 29_600,
     },
     {
         name: '@csszyx/compiler `./report`, loaded by Node',
@@ -1311,7 +1394,9 @@ export const SIZE_BUDGETS = [
         // Measured 31,045. 32,000 on 2026-11-12, measured 31,733: the
         // `mangle-mark-missed` registry entry. 32,350 on 2026-11-22, measured
         // 32,072 (31,883 before): the `dynamic-unsupported` registry entry.
-        maxGzipBytes: 32_350,
+        // 32,650 on 2026-11-26, measured 32,364: the `slash-opacity-string`
+        // forms and the `member` argument in the registry.
+        maxGzipBytes: 32_650,
     },
     // The MCP server's bin, which is also its `.` export: an editor starts
     // it for every session.

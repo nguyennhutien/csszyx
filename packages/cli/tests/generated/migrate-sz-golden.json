@@ -66,21 +66,24 @@
         "animation-delay": [
             {
                 "class": "animation-delay-2",
-                "sz": {
-                    "animationDelay": 2
-                }
+                "sz": {},
+                "unrecognized": [
+                    "animation-delay-2"
+                ]
             },
             {
                 "class": "animation-delay-red-500",
-                "sz": {
-                    "animationDelay": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "animation-delay-red-500"
+                ]
             },
             {
                 "class": "animation-delay-[3px]",
-                "sz": {
-                    "animationDelay": "3px"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "animation-delay-[3px]"
+                ]
             }
         ],
         "appearance": [
@@ -106,9 +109,10 @@
         "aspect": [
             {
                 "class": "aspect-2",
-                "sz": {
-                    "aspect": 2
-                }
+                "sz": {},
+                "unrecognized": [
+                    "aspect-2"
+                ]
             },
             {
                 "class": "aspect-red-500",
@@ -192,9 +196,10 @@
             },
             {
                 "class": "backdrop-brightness-red-500",
-                "sz": {
-                    "backdropBrightness": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "backdrop-brightness-red-500"
+                ]
             },
             {
                 "class": "backdrop-brightness-[3px]",
@@ -212,9 +217,10 @@
             },
             {
                 "class": "backdrop-contrast-red-500",
-                "sz": {
-                    "backdropContrast": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "backdrop-contrast-red-500"
+                ]
             },
             {
                 "class": "backdrop-contrast-[3px]",
@@ -332,9 +338,10 @@
             },
             {
                 "class": "backdrop-saturate-red-500",
-                "sz": {
-                    "backdropSaturate": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "backdrop-saturate-red-500"
+                ]
             },
             {
                 "class": "backdrop-saturate-[3px]",
@@ -493,9 +500,10 @@
             },
             {
                 "class": "bg-size-red-500",
-                "sz": {
-                    "bgSize": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "bg-size-red-500"
+                ]
             },
             {
                 "class": "bg-size-[3px]",
@@ -976,9 +984,10 @@
             },
             {
                 "class": "brightness-red-500",
-                "sz": {
-                    "brightness": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "brightness-red-500"
+                ]
             },
             {
                 "class": "brightness-[3px]",
@@ -1156,9 +1165,10 @@
             },
             {
                 "class": "content-red-500",
-                "sz": {
-                    "content": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "content-red-500"
+                ]
             },
             {
                 "class": "content-[3px]",
@@ -1176,9 +1186,10 @@
             },
             {
                 "class": "contrast-red-500",
-                "sz": {
-                    "contrast": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "contrast-red-500"
+                ]
             },
             {
                 "class": "contrast-[3px]",
@@ -1256,15 +1267,17 @@
             },
             {
                 "class": "display-red-500",
-                "sz": {
-                    "display": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "display-red-500"
+                ]
             },
             {
                 "class": "display-[3px]",
-                "sz": {
-                    "display": "3px"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "display-[3px]"
+                ]
             }
         ],
         "divide": [
@@ -1557,15 +1570,17 @@
             },
             {
                 "class": "font-smoothing-red-500",
-                "sz": {
-                    "fontSmoothing": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "font-smoothing-red-500"
+                ]
             },
             {
                 "class": "font-smoothing-[3px]",
-                "sz": {
-                    "fontSmoothing": "3px"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "font-smoothing-[3px]"
+                ]
             }
         ],
         "font-stretch": [
@@ -1577,9 +1592,10 @@
             },
             {
                 "class": "font-stretch-red-500",
-                "sz": {
-                    "fontStretch": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "font-stretch-red-500"
+                ]
             },
             {
                 "class": "font-stretch-[3px]",
@@ -1597,15 +1613,17 @@
             },
             {
                 "class": "font-style-red-500",
-                "sz": {
-                    "fontStyle": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "font-style-red-500"
+                ]
             },
             {
                 "class": "font-style-[3px]",
-                "sz": {
-                    "fontStyle": "3px"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "font-style-[3px]"
+                ]
             }
         ],
         "forced-color-adjust": [
@@ -1632,7 +1650,7 @@
             {
                 "class": "from-2",
                 "sz": {
-                    "fromPos": "2"
+                    "from": "2"
                 }
             },
             {
@@ -2136,9 +2154,10 @@
             },
             {
                 "class": "isolation-[3px]",
-                "sz": {
-                    "isolation": "3px"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "isolation-[3px]"
+                ]
             }
         ],
         "items": [
@@ -2291,9 +2310,10 @@
             },
             {
                 "class": "list-red-500",
-                "sz": {
-                    "list": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "list-red-500"
+                ]
             },
             {
                 "class": "list-[3px]",
@@ -2379,7 +2399,7 @@
             {
                 "class": "mask-clip-[3px]",
                 "sz": {
-                    "maskClip": "3px"
+                    "maskClip": "[3px]"
                 }
             }
         ],
@@ -2412,9 +2432,10 @@
             },
             {
                 "class": "mask-position-red-500",
-                "sz": {
-                    "maskPos": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "mask-position-red-500"
+                ]
             },
             {
                 "class": "mask-position-[3px]",
@@ -2452,9 +2473,10 @@
             },
             {
                 "class": "mask-size-red-500",
-                "sz": {
-                    "maskSize": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "mask-size-red-500"
+                ]
             },
             {
                 "class": "mask-size-[3px]",
@@ -3235,9 +3257,10 @@
             },
             {
                 "class": "perspective-origin-red-500",
-                "sz": {
-                    "perspectiveOrigin": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "perspective-origin-red-500"
+                ]
             },
             {
                 "class": "perspective-origin-[3px]",
@@ -3356,15 +3379,17 @@
             },
             {
                 "class": "position-red-500",
-                "sz": {
-                    "position": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "position-red-500"
+                ]
             },
             {
                 "class": "position-[3px]",
-                "sz": {
-                    "position": "3px"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "position-[3px]"
+                ]
             }
         ],
         "pr": [
@@ -4042,9 +4067,10 @@
             },
             {
                 "class": "saturate-red-500",
-                "sz": {
-                    "saturate": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "saturate-red-500"
+                ]
             },
             {
                 "class": "saturate-[3px]",
@@ -4062,9 +4088,10 @@
             },
             {
                 "class": "scale-red-500",
-                "sz": {
-                    "scale": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "scale-red-500"
+                ]
             },
             {
                 "class": "scale-[3px]",
@@ -5065,7 +5092,7 @@
             {
                 "class": "to-2",
                 "sz": {
-                    "toPos": "2"
+                    "to": "2"
                 }
             },
             {
@@ -5117,9 +5144,10 @@
             },
             {
                 "class": "touch-[3px]",
-                "sz": {
-                    "touch": "3px"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "touch-[3px]"
+                ]
             }
         ],
         "tracking": [
@@ -5290,7 +5318,7 @@
             {
                 "class": "via-2",
                 "sz": {
-                    "viaPos": "2"
+                    "via": "2"
                 }
             },
             {
@@ -5315,15 +5343,17 @@
             },
             {
                 "class": "visibility-red-500",
-                "sz": {
-                    "visibility": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "visibility-red-500"
+                ]
             },
             {
                 "class": "visibility-[3px]",
-                "sz": {
-                    "visibility": "3px"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "visibility-[3px]"
+                ]
             }
         ],
         "w": [
@@ -5376,9 +5406,10 @@
             },
             {
                 "class": "will-change-red-500",
-                "sz": {
-                    "willChange": "red-500"
-                }
+                "sz": {},
+                "unrecognized": [
+                    "will-change-red-500"
+                ]
             },
             {
                 "class": "will-change-[3px]",

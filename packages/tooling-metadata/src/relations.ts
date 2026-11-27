@@ -8,7 +8,12 @@
  * (Future conflict/affinity relations belong in this module too.)
  */
 
-import { BOOLEAN_SHORTHANDS, MASK_SIDES, PROPERTY_MAP } from './tooling.generated';
+import {
+    BOOLEAN_SHORTHANDS,
+    MASK_SIDES,
+    PROPERTY_MAP,
+    SHADOW_SIZE_KEYS,
+} from './tooling.generated';
 import { COLOR_VALUE_PROPS, VALUE_SUGGESTIONS } from './value-suggestions';
 
 /**
@@ -80,6 +85,18 @@ const COLOR_FORM: ObjectValueForm = {
             name: 'color',
             detail: 'color token',
             values: VALUE_SUGGESTIONS.color as readonly string[],
+        },
+        { name: 'op', detail: 'opacity', values: VALUE_SUGGESTIONS.opacity as readonly string[] },
+    ],
+};
+
+/** `shadow: { size, op }` → `shadow-sm/50`, which sets the shadow's alpha. */
+const SHADOW_SIZE_FORM: ObjectValueForm = {
+    members: [
+        {
+            name: 'size',
+            detail: 'shadow size',
+            values: ['2xs', 'xs', 'sm', 'md', 'lg', 'xl', '2xl'],
         },
         { name: 'op', detail: 'opacity', values: VALUE_SUGGESTIONS.opacity as readonly string[] },
     ],
@@ -237,6 +254,7 @@ export function objectValueForm(name: string): ObjectValueForm | null {
     if (name === 'maskRadial') return MASK_RADIAL_FORM;
     if (name === 'maskConic') return MASK_CONIC_FORM;
     if (COLOR_OBJECT_PROPS.has(name)) return COLOR_FORM;
+    if ((SHADOW_SIZE_KEYS as readonly string[]).includes(name)) return SHADOW_SIZE_FORM;
     return null;
 }
 

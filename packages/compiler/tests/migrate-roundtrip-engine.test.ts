@@ -7,10 +7,11 @@
  * object on both engine artifacts and comparing against the original catches
  * that shape, where a migrate-only assertion would just pin the wrong answer.
  */
-import { describe, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
+import { escapeUnsafeChars } from '../../core/tests/helpers/sz-fuzz.js';
 import { migrateRustClassName } from '../src/migrate-rust.js';
-import { expectParity } from './engine-parity-harness.js';
+import { captureWarnings, ENGINES, expectParity } from './engine-parity-harness.js';
 
 /**
  * Migrate one class and lower the result on both artifacts.
@@ -101,5 +102,50 @@ describe('migrate → lower reproduces the original class', () => {
 
     it.each(ALIGN_CONTENT_KEYWORDS)('content-%s', keyword => {
         expectRoundTrip(`content-${keyword}`);
+    });
+});
+
+/**
+ * Classes whose bracket, type hint or `!` migrate read onto the wrong key or
+ * spelling: each must lower back to the class written, or one Tailwind reads
+ * as the same utility, with nothing reported on any lane.
+ */
+const BRACKETED_CLASSES = [
+    // class, the class the migrated object writes
+    ['text-[length:13px]', 'text-[13px]'],
+    ['text-[color:red]', 'text-[red]'],
+    ['font-[700]', 'font-[700]'],
+    ['font-[family-name:x]', 'font-[x]'],
+    ['!p-[10px]', 'p-[10px]!'],
+    ['!font-bold', 'font-bold!'],
+    ['bg-[var(--v)]', 'bg-(--v)'],
+    ['p-[var(--my-pad)]', 'p-(--my-pad)'],
+    ['origin-[0]', 'origin-[0]'],
+    ['transition-[width]', 'transition-[width]'],
+    ['bg-[top]', 'bg-[top]'],
+    ['font-[Inter]', 'font-[Inter]'],
+    ['break-words', 'break-words'],
+    ['bg-red-500/50!', 'bg-red-500/50!'],
+    ['bg-linear-to-r!', 'bg-linear-to-r!'],
+] as const;
+
+describe('migrate → lower writes a bracketed class back with no report', () => {
+    it.each(BRACKETED_CLASSES)('%s → %s', (className, lowered) => {
+        const { szObject, unrecognized } = migrateRustClassName(className);
+        expect(unrecognized).toEqual([]);
+        const sz = JSON.stringify(szObject);
+        expectParity(sz, lowered);
+        for (const [name, engine] of ENGINES) {
+            const run = captureWarnings(
+                engine,
+                `export const A = () => <div sz={${escapeUnsafeChars(sz)}} />;`,
+                '/p/src/M.tsx',
+            );
+            expect(run.warnings, `${name} — ${sz}`).toEqual([]);
+        }
+    });
+
+    it.each(['text-[length:var(--x)]', '!p-4!'])('%s stays in className', className => {
+        expect(migrateRustClassName(className).unrecognized).toEqual([className]);
     });
 });

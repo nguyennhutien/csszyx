@@ -36,6 +36,7 @@ export type SzDiagnosticCode =
     | 'ast-budget'
     | 'mangle-vars-hoist-skipped'
     | 'bracketed-value'
+    | 'variable-shadow-opacity'
     | 'redundant-bracket'
     | 'opacity-value'
     | 'underscore-space';
@@ -51,8 +52,8 @@ export interface SzDiagnosticArgs {
     'removed-key': { readonly form: 'runtime-alias' | 'sugar-replaced' | 'sugar' | 'removed' | 'replaced'; readonly key: string; readonly replacement?: string };
     'numeric-key': { readonly key: string };
     'closed-enum-value': { readonly form: 'sibling-group' | 'dead' | 'css-value' | 'font-style' | 'font-smoothing' | 'flag'; readonly key: string; readonly value: string; readonly suggestion?: string; readonly groupKey?: string; readonly groupValue?: string };
-    'slash-opacity-string': { readonly key: string; readonly color: string; readonly opacity: string; readonly op: string; readonly important?: '!' };
-    'color-slash-opacity': { readonly form: 'op-given' | 'op-absent'; readonly key: string; readonly base: string; readonly opacity: string; readonly important?: '!'; readonly op: string };
+    'slash-opacity-string': { readonly form: 'same-key' | 'colour-key'; readonly key: string; readonly member: 'color' | 'size'; readonly owner?: string; readonly color: string; readonly opacity: string; readonly op: string; readonly important?: '!' };
+    'color-slash-opacity': { readonly form: 'op-given' | 'op-absent'; readonly key: string; readonly member: 'color' | 'size'; readonly base: string; readonly opacity: string; readonly important?: '!'; readonly op: string };
     'off-scale-value': { readonly form: 'step' | 'fraction'; readonly key: string; readonly value: string; readonly percent?: string };
     'clamped-factor': { readonly key: string; readonly value: string };
     'per-side-border-style': { readonly key: string; readonly value: string };
@@ -79,6 +80,7 @@ export interface SzDiagnosticArgs {
     'ast-budget': { readonly form: 'transform' | 'prescan' };
     'mangle-vars-hoist-skipped': { readonly name: string; readonly usageCount: number; readonly reason: 'no-lca' | 'non-host-ancestor' | 'max-depth'; readonly maxDepth?: number };
     'bracketed-value': { readonly form: 'unwrap' | 'escape' | 'type-hint'; readonly key: string; readonly value: string; readonly inner: string };
+    'variable-shadow-opacity': { readonly key: string; readonly size: string };
     'redundant-bracket': { readonly key: string; readonly value: string; readonly inner: string };
     'opacity-value': { readonly form: 'range' | 'fraction'; readonly key: string; readonly op: string; readonly percent?: string };
     'underscore-space': { readonly key: string; readonly value?: string; readonly className: string; readonly literal?: string; readonly spaced?: string; readonly escaped?: string };
@@ -250,6 +252,7 @@ export const SZ_DIAGNOSTIC_CODES: readonly SzDiagnosticCode[] = [
     'ast-budget',
     'mangle-vars-hoist-skipped',
     'bracketed-value',
+    'variable-shadow-opacity',
     'redundant-bracket',
     'opacity-value',
     'underscore-space',
@@ -318,6 +321,7 @@ export type SzSettableDiagnosticId =
     | 'ast-budget'
     | 'mangle-vars-hoist-skipped'
     | 'bracketed-value'
+    | 'variable-shadow-opacity'
     | 'redundant-bracket'
     | 'opacity-value'
     | 'underscore-space'
@@ -368,6 +372,7 @@ export const SZ_SETTABLE_DIAGNOSTIC_IDS: readonly SzSettableDiagnosticId[] = [
     'ast-budget',
     'mangle-vars-hoist-skipped',
     'bracketed-value',
+    'variable-shadow-opacity',
     'redundant-bracket',
     'opacity-value',
     'underscore-space',
@@ -412,6 +417,7 @@ export type SzDiagnosticId =
     | 'ast-budget'
     | 'mangle-vars-hoist-skipped'
     | 'bracketed-value'
+    | 'variable-shadow-opacity'
     | 'redundant-bracket'
     | 'opacity-value'
     | 'underscore-space'
@@ -612,6 +618,7 @@ export const SZ_DIAGNOSTIC_DEFAULT_LEVELS: Readonly<
     'fallback-nudge': ['info', 'warn'],
     'merge-classifier-unavailable': ['warn', 'warn'],
     'mangle-vars-hoist-skipped': ['info', 'info'],
+    'variable-shadow-opacity': ['info', 'warn'],
     'redundant-bracket': ['info', 'warn'],
     'merge-covered-key': ['info', 'warn'],
     'merge-covered-class': ['info', 'warn'],

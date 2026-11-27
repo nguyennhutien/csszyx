@@ -1238,6 +1238,11 @@
             "scope": "MAIN"
         },
         {
+            "key": "typescript:S7755",
+            "rule": "unicorn/prefer-at",
+            "scope": "MAIN"
+        },
+        {
             "key": "typescript:S7756",
             "rule": "unicorn/prefer-blob-reading-methods",
             "scope": "MAIN"

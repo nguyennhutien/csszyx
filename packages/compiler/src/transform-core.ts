@@ -6,7 +6,7 @@
  * like hover, focus, etc.
  */
 
-import { isBackgroundGradientString, modifierOp, slashOpacitySplit } from './color-modifier.js';
+import { ARBITRARY_LENGTH_UNITS } from './css-units.js';
 import type {
     SzDiagnosticIssue,
     SzMergeGroup,
@@ -25,6 +25,7 @@ import { NUMERIC_STRING } from './numeric-string.js';
 import { own } from './own.js';
 import type { ParserMode } from './parser-mode.js';
 import { PROPERTY_CATEGORY_MAP, PropertyCategory } from './property-types.js';
+import { isBackgroundGradientString, modifierOp, slashOpacitySplit } from './slash-opacity.js';
 import { SZ_CAP_CSS_WIDE_BRACKET, SZ_CAPABILITIES } from './sz-capabilities.generated.js';
 import {
     szNodeWarningsUnmuted,
@@ -140,7 +141,12 @@ import {
     UNKNOWN_FIELD,
     UNKNOWN_KEY,
     UNSERVED_VARIANT,
+    VARIABLE_SHADOW_OPACITY,
 } from './report.js';
+import { CSS_WIDE_KEYWORDS, isShadowValue } from './shadow-size-keywords.js';
+
+export { CSS_WIDE_KEYWORDS };
+
 import { unservedStateVariantForm } from './state-variants.js';
 
 /** A value in the sz object that is not a nested object. */
@@ -990,7 +996,11 @@ function warnBorderSideStyle(key: string, value: string): void {
         const token = `${key}:${value}`;
         if (_warnedBorderSideStyles.has(token)) return;
         _warnedBorderSideStyles.add(token);
-        szReport({ diagnostic: PER_SIDE_BORDER_STYLE, args: { key, value }, at: szWarnLocation });
+        szReport({
+            diagnostic: PER_SIDE_BORDER_STYLE,
+            args: { key, value },
+            at: szWarnLocation,
+        });
     }
 }
 
@@ -1212,7 +1222,11 @@ function keepsTypeHint(className: string, hint: string): boolean {
  */
 type BracketSpelling =
     | { readonly emit: string; readonly inner: string }
-    | { readonly form: 'unwrap' | 'escape'; readonly inner: string; readonly hint?: string };
+    | {
+          readonly form: 'unwrap' | 'escape';
+          readonly inner: string;
+          readonly hint?: string;
+      };
 
 /** A second spelling of an arbitrary class ({@link BracketSpelling}). */
 type BracketEmit = Extract<BracketSpelling, { readonly emit: string }>;
@@ -1632,32 +1646,6 @@ const FRACTION_SUPPORTED_PROPS = new Set([
     'aspect',
 ]);
 
-const ARBITRARY_LENGTH_UNITS = new Set([
-    'px',
-    'rem',
-    'em',
-    '%',
-    'vh',
-    'vw',
-    'ch',
-    'dvh',
-    'dvw',
-    'svh',
-    'svw',
-    'lvh',
-    'lvw',
-    'cqw',
-    'cqh',
-    'deg',
-    'rad',
-    'turn',
-    'grad',
-    'ms',
-    's',
-    'fr',
-]);
-const LEADING_DECIMAL_UNITS = new Set(['px', 'rem', 'em', '%', 'vh', 'vw', 'ch']);
-
 /**
  * Returns whether a value is a numeric arbitrary value with a supported unit.
  *
@@ -1665,12 +1653,11 @@ const LEADING_DECIMAL_UNITS = new Set(['px', 'rem', 'em', '%', 'vh', 'vw', 'ch']
  * @returns Whether the value needs Tailwind arbitrary-value brackets.
  */
 function isArbitraryLength(value: string): boolean {
-    const match = /^(-?(?:\d+(?:\.\d+)?|\.\d+))([a-z%]+)?$/.exec(value);
+    const match = /^(-?(?:\d+(?:\.\d+)?|\.\d+))([a-z%]+)?$/i.exec(value);
     if (!match) return false;
     const leadingDecimal = match[1].replace(/^-/, '').startsWith('.');
     const unit = match[2];
     if (!unit) return leadingDecimal;
-    if (leadingDecimal) return LEADING_DECIMAL_UNITS.has(unit);
     return ARBITRARY_LENGTH_UNITS.has(unit);
 }
 
@@ -2615,37 +2602,121 @@ const SHADOW_COLOR_HINT_PREFIXES = new Set([
     'drop-shadow',
 ]);
 
-/** The members a colour object reads. Mirrors `COLOR_OBJECT_MEMBERS` in `lower.rs`. */
-const COLOR_OBJECT_MEMBERS: readonly string[] = ['color', 'op'];
+/**
+ * The keys whose `{ size, op }` object writes a shadow with its opacity
+ * (`shadow-sm/50`, which sets the shadow's alpha). Mirrors
+ * `SHADOW_SIZE_KEYS` in `lower.rs`; editor tooling reads this list.
+ * @internal Used by csszyx's own packages; not a stable API.
+ */
+export const SHADOW_SIZE_KEYS: readonly string[] = /* @__PURE__ */ Object.freeze([
+    'shadow',
+    'insetShadow',
+    'textShadow',
+    'dropShadow',
+]);
 
-/** Builds a color utility from the `{ color, op }` object syntax. */
-function buildColorObjectClass(
+/** The member a value object writes its class from. */
+type ValueMember = 'color' | 'size';
+
+/**
+ * The member a value object writes its class from: `color` on any key with a
+ * utility prefix (`{ color, op }`), `size` on a shadow key (`{ size, op }`).
+ * Mirrors `value_member` in `lower.rs`.
+ *
+ * @param key - The sz key holding the object.
+ * @param value - The object.
+ * @returns The member, or undefined for an object that is sz nesting.
+ */
+function valueMember(key: string, value: Record<string, unknown>): ValueMember | undefined {
+    if (own(PROPERTY_MAP, key) === undefined) return undefined;
+    if (typeof value.color === 'string') return 'color';
+    return SHADOW_SIZE_KEYS.includes(key) && typeof value.size === 'string' ? 'size' : undefined;
+}
+
+/**
+ * The class of a value object: its `color` or `size`, then the opacity `op`
+ * names and `!`. One builder for both, so a size takes `op` exactly as a
+ * colour does. Mirrors `format_value_object` in `lower.rs`.
+ *
+ * @param key - The sz key, present in PROPERTY_MAP.
+ * @param member - The member the class is written from.
+ * @param object - The object, that member a string.
+ * @param object.color - The colour, for a colour object.
+ * @param object.size - The shadow size, for a size object.
+ * @param object.op - The opacity, when given.
+ * @param prefix - Variant prefix to prepend.
+ * @returns The class, or `''` when the size writes no single class.
+ */
+function buildValueObjectClass(
     key: string,
-    color: { color: string; op?: number | string },
+    member: ValueMember,
+    object: { color?: string; size?: string; op?: number | string },
     prefix: string,
 ): string {
-    // The caller admits only keys present in PROPERTY_MAP.
-    const utilityPrefix = PROPERTY_MAP[key];
-    // `color` is written as given, a slash opacity included; `op` adds its
-    // own. The important modifier ends the class. Mirrors
-    // `format_color_opacity_object`.
-    const important = color.color.endsWith('!') ? '!' : '';
-    const rawColor = important ? color.color.slice(0, -1) : color.color;
-    warnColorObjectSlashOpacity(key, color.color, color.op);
-    const colorValue =
-        SHADOW_COLOR_HINT_PREFIXES.has(utilityPrefix) &&
-        rawColor.startsWith('--') &&
-        !rawColor.includes('(')
-            ? `(color:${rawColor})`
-            : formatColorObjectBase(rawColor);
+    const written = (member === 'size' ? object.size : object.color) as string;
+    // The important modifier ends the class.
+    const important = written.endsWith('!') ? '!' : '';
+    const raw = important ? written.slice(0, -1) : written;
+    let head: string;
+    warnColorObjectSlashOpacity(key, member, written, object.op);
+    if (member === 'size') {
+        // The class the key writes for the size as a string, which reports
+        // the size as that string would be; a slash in it is reported above,
+        // with the `op` the object gives.
+        const slashed =
+            process.env.NODE_ENV !== 'production' && slashOpacitySplit(raw) !== undefined;
+        const lower = (): string[] => nestedClasses({ [key]: raw }, prefix);
+        const classes = slashed ? withSzWarningsMuted(lower).result : lower();
+        if (classes.length !== 1) return '';
+        head = classes[0] as string;
+    } else {
+        head = `${prefix}${PROPERTY_MAP[key]}-${colorObjectValue(PROPERTY_MAP[key] as string, raw)}`;
+    }
     // A null `op` is no `op`, as any null value.
     const opacity =
-        color.op === undefined || color.op === null ? undefined : opacityModifier(key, color.op);
-    if (opacity === undefined) {
-        return `${prefix}${utilityPrefix}-${colorValue}${important}`;
+        object.op === undefined || object.op === null ? undefined : opacityModifier(key, object.op);
+    if (opacity === undefined) return `${head}${important}`;
+    if (member === 'size') warnVariableShadowOpacity(key, written, raw);
+    else warnCustomOpacityToken(raw, `${head}/${opacity}`);
+    return `${head}/${opacity}${important}`;
+}
+
+/**
+ * A colour as the utility after its prefix spells it.
+ *
+ * @param utilityPrefix - The key's utility prefix.
+ * @param raw - The colour without `!`.
+ * @returns The colour part of the class.
+ */
+function colorObjectValue(utilityPrefix: string, raw: string): string {
+    return SHADOW_COLOR_HINT_PREFIXES.has(utilityPrefix) &&
+        raw.startsWith('--') &&
+        !raw.includes('(')
+        ? `(color:${raw})`
+        : formatColorObjectBase(raw);
+}
+
+/**
+ * Note a `{ size, op }` whose size is a custom property
+ * (`variable-shadow-opacity`): `shadow-(--s)/50` sets the shadow's alpha,
+ * which the variable's shadow uses only if it reads it.
+ *
+ * @param key - The shadow key.
+ * @param written - The size as written.
+ * @param raw - The size without `!`.
+ */
+function warnVariableShadowOpacity(key: string, written: string, raw: string): void {
+    if (
+        process.env.NODE_ENV !== 'production' &&
+        (raw.startsWith('--') || raw.startsWith('var(')) &&
+        szNodeWarningsUnmuted()
+    ) {
+        szReport({
+            diagnostic: VARIABLE_SHADOW_OPACITY,
+            args: { key, size: written },
+            at: szWarnLocation,
+        });
     }
-    warnCustomOpacityToken(rawColor, `${prefix}${utilityPrefix}-${colorValue}/${opacity}`);
-    return `${prefix}${utilityPrefix}-${colorValue}/${opacity}${important}`;
 }
 
 /**
@@ -2678,17 +2749,26 @@ function warnSlashOpacityString(key: string, value: string): void {
     const unmarked = important ? value.slice(0, -1) : value;
     const split =
         process.env.NODE_ENV !== 'production' &&
-        own(PROPERTY_CATEGORY_MAP, key) === PropertyCategory.COLOR
+        (own(PROPERTY_CATEGORY_MAP, key) === PropertyCategory.COLOR ||
+            SHADOW_SIZE_KEYS.includes(key))
             ? slashOpacitySplit(unmarked)
             : undefined;
     if (process.env.NODE_ENV !== 'production' && split !== undefined && szNodeWarningsUnmuted()) {
         const [color, opacity] = split;
         if (_warnedSlashOpacities.has(`${key}:${color}/${opacity}`)) return;
         _warnedSlashOpacities.add(`${key}:${color}/${opacity}`);
+        const member = slashMember(key, color);
+        // A colour on a shadow key belongs to its colour key: `shadow` is the
+        // size and its alpha. Mirrors `push_slash_opacity_diagnostics`.
+        const colourKey = member === 'color' && SHADOW_SIZE_KEYS.includes(key);
         szReport({
             diagnostic: SLASH_OPACITY_STRING,
             args: {
+                ...(colourKey
+                    ? { form: 'colour-key' as const, owner: `${key}Color` }
+                    : { form: 'same-key' as const }),
                 key,
+                member,
                 color,
                 opacity,
                 op: opLiteral(opacity),
@@ -2697,6 +2777,21 @@ function warnSlashOpacityString(key: string, value: string): void {
             at: szWarnLocation,
         });
     }
+}
+
+/**
+ * The member of the object that replaces `value/op` on `key`: `size` for a
+ * shadow on a shadow key (`isShadowValue`: a size keyword, a variable, a bracket
+ * that is not a colour, which Tailwind reads as the shadow itself), `color` for
+ * anything else. Mirrors
+ * `slash_member` in `lower.rs`.
+ *
+ * @param key - The sz key.
+ * @param value - The value before the slash.
+ * @returns The member.
+ */
+function slashMember(key: string, value: string): ValueMember {
+    return SHADOW_SIZE_KEYS.includes(key) && isShadowValue(value) ? 'size' : 'color';
 }
 
 /**
@@ -2717,12 +2812,14 @@ function writtenOp(op: unknown): string {
  * spelling (`color-slash-opacity`), on every key a colour object serves.
  * `color` is written as given.
  *
- * @param key - The key the colour object is on.
- * @param color - `color` as written.
+ * @param key - The key the value object is on.
+ * @param member - The member the value is in: `color`, or a shadow's `size`.
+ * @param color - The value as written.
  * @param op - `op` as written, when given.
  */
 function warnColorObjectSlashOpacity(
     key: string,
+    member: ValueMember,
     color: string,
     op: number | string | undefined,
 ): void {
@@ -2739,6 +2836,7 @@ function warnColorObjectSlashOpacity(
             args: {
                 form: shown ? 'op-given' : 'op-absent',
                 key,
+                member,
                 base: split[0],
                 opacity: split[1],
                 op: shown || opLiteral(split[1]),
@@ -2777,7 +2875,9 @@ function resolvedThemeTokenValue(token: string): string | null {
     try {
         const globals = globalThis as {
             document?: { documentElement?: unknown };
-            getComputedStyle?: (element: unknown) => { getPropertyValue(name: string): string };
+            getComputedStyle?: (element: unknown) => {
+                getPropertyValue(name: string): string;
+            };
         };
         const root = globals.document?.documentElement;
         if (root === undefined || typeof globals.getComputedStyle !== 'function') {
@@ -4049,21 +4149,6 @@ function buildGenericStringClass(
 }
 
 /**
- * The CSS-wide keywords. Every property takes them, but Tailwind serves only a
- * few as a named utility (`text-inherit`); for every other key the keyword
- * needs the arbitrary form (`p-[inherit]`), and the bare one is a class with
- * no CSS.
- * @internal Used by csszyx's own packages; not a stable API.
- */
-export const CSS_WIDE_KEYWORDS: ReadonlySet<string> = new Set([
-    'inherit',
-    'initial',
-    'unset',
-    'revert',
-    'revert-layer',
-]);
-
-/**
  * The `<prefix>-<keyword>` utilities Tailwind 4 serves by name for a CSS-wide
  * keyword. Measured against the design system of Tailwind 4.3: every other
  * prefix serves the keyword only bracketed, or not at all. The engine reads
@@ -4426,9 +4511,11 @@ function collectObjectProperty(
         }
         return true;
     }
-    // A colour object only when `color` is a string, as `is_color_object` reads it.
-    if (own(PROPERTY_MAP, rawKey) !== undefined && typeof value.color === 'string') {
-        classes.push(colorObjectClass(rawKey, value, prefix));
+    // A value object only when its member is a string, as `value_member` reads it.
+    const member = valueMember(rawKey, value);
+    if (member !== undefined) {
+        const className = valueObjectClass(rawKey, member, value, prefix);
+        if (className) classes.push(className);
         return true;
     }
     if (own(PROPERTY_MAP, rawKey) !== undefined) warnPropertyObjectValue(rawKey, value);
@@ -4438,25 +4525,30 @@ function collectObjectProperty(
 }
 
 /**
- * The class a colour object writes, naming each member it does not read:
- * nothing is emitted for one.
+ * The class a value object writes, naming each member it does not read:
+ * nothing is emitted for one. A value object reads its member and `op`, as
+ * `collect_unknown_color_object_members` reads it.
  *
  * @param key - The sz key holding the object.
- * @param value - The colour object, its `color` a string.
+ * @param member - The member the class is written from.
+ * @param value - The value object, that member a string.
  * @param prefix - Variant prefix to prepend.
- * @returns The class.
+ * @returns The class, or `''`.
  */
-function colorObjectClass(key: string, value: Record<string, unknown>, prefix: string): string {
+function valueObjectClass(
+    key: string,
+    member: ValueMember,
+    value: Record<string, unknown>,
+    prefix: string,
+): string {
     // Development only, the walk with it: a production bundle drops the whole
-    // block, so a colour object costs no key walk there.
+    // block, so a value object costs no key walk there.
     if (process.env.NODE_ENV !== 'production') {
-        for (const member of Object.keys(value)) {
-            if (member !== 'color' && member !== 'op') {
-                warnUnknownField(key, member, COLOR_OBJECT_MEMBERS);
-            }
+        for (const name of Object.keys(value)) {
+            if (name !== member && name !== 'op') warnUnknownField(key, name, [member, 'op']);
         }
     }
-    return buildColorObjectClass(key, value as { color: string; op?: number | string }, prefix);
+    return buildValueObjectClass(key, member, value, prefix);
 }
 
 /** Keys already nudged about an object in variant position (once each). */
@@ -4489,7 +4581,11 @@ function warnOwnedKeyVariantObject(key: string): void {
         !_warnedOwnedKeyVariants.has(key)
     ) {
         _warnedOwnedKeyVariants.add(key);
-        szReport({ diagnostic: NON_VARIANT_OBJECT, args: { key }, at: szWarnLocation });
+        szReport({
+            diagnostic: NON_VARIANT_OBJECT,
+            args: { key },
+            at: szWarnLocation,
+        });
     }
 }
 

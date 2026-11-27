@@ -252,16 +252,16 @@ describe('generateDeclarations', () => {
 
     // ── Opacity ───────────────────────────────────────────────────────────────
 
-    it('generates opacity: 0.5 for opacity-50', () => {
-        expect(generateDeclarations('opacity-50')).toBe('opacity: 0.5');
+    it('generates opacity: 50% for opacity-50', () => {
+        expect(generateDeclarations('opacity-50')).toBe('opacity: 50%');
     });
 
-    it('generates opacity: 0 for opacity-0', () => {
-        expect(generateDeclarations('opacity-0')).toBe('opacity: 0');
+    it('generates opacity: 0% for opacity-0', () => {
+        expect(generateDeclarations('opacity-0')).toBe('opacity: 0%');
     });
 
-    it('generates opacity: 1 for opacity-100', () => {
-        expect(generateDeclarations('opacity-100')).toBe('opacity: 1');
+    it('generates opacity: 100% for opacity-100', () => {
+        expect(generateDeclarations('opacity-100')).toBe('opacity: 100%');
     });
 
     // ── Z-index ───────────────────────────────────────────────────────────────

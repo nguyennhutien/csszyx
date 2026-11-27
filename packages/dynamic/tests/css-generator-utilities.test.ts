@@ -150,19 +150,19 @@ describe('generateCSSRule — nested variants', () => {
     it('appends a pseudo-class suffix to the selector', () => {
         const rule = generateCSSRule('hover:opacity-50');
         expect(rule).toContain(':hover {');
-        expect(rule).toContain('opacity: 0.5');
+        expect(rule).toContain('opacity: 50%');
     });
 
     it('prefixes a dark-mode descendant selector', () => {
         const rule = generateCSSRule('dark:opacity-50');
         expect(rule).toMatch(/^\.dark /);
-        expect(rule).toContain('opacity: 0.5');
+        expect(rule).toContain('opacity: 50%');
     });
 });
 
 describe('generateCSSRule', () => {
     it('wraps declarations in a selector for a known utility', () => {
-        expect(generateCSSRule('opacity-50')).toBe('.opacity-50 { opacity: 0.5 }');
+        expect(generateCSSRule('opacity-50')).toBe('.opacity-50 { opacity: 50% }');
     });
 
     it('escapes special characters in the class selector', () => {

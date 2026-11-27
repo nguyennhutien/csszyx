@@ -595,6 +595,14 @@ export const MASK_SIDES = [
     "x",
     "y"
 ] as const;
+/** The keys whose `{ size, op }` object writes a shadow with its opacity,
+ * in the compiler's order. */
+export const SHADOW_SIZE_KEYS = [
+    "shadow",
+    "insetShadow",
+    "textShadow",
+    "dropShadow"
+] as const;
 /** Removed keys whose replacement is a SHAPE, not another key name — rendered
  * as "was removed: <note>", never through the did-you-mean template. */
 export const MIGRATION_NOTES = {

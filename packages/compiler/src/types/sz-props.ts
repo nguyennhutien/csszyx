@@ -315,8 +315,31 @@ export type BorderRadiusValue =
 /** The shadow keywords every shadow key takes. */
 type ShadowKeyword = 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'inner' | 'none' | true | (string & {});
 
+/**
+ * A shadow size with its alpha: `{ size: 'sm', op: 50 }` writes
+ * `shadow-sm/50`, which sets the shadow's alpha to 50% (the theme's shadows
+ * use 5% to 25%); the shadow's colour is its own key, `shadowColor`.
+ * `size` names a size, never the bare `true` of the shorthand.
+ */
+export interface ShadowSizeObject<Size> {
+    size: Exclude<Size, true>;
+    op?: number | (string & {});
+}
+
+/** The drop-shadow sizes, and the project's `--drop-shadow-*` tokens. */
+type DropShadowSize =
+    | 'sm'
+    | 'md'
+    | 'lg'
+    | 'xl'
+    | '2xl'
+    | 'none'
+    | true
+    | CT_DropShadows
+    | (string & {});
+
 /** Shadow keywords, and the project's `--shadow-*` tokens. */
-export type ShadowValue = ShadowKeyword | CT_Shadows;
+export type ShadowValue = ShadowKeyword | CT_Shadows | ShadowSizeObject<ShadowKeyword | CT_Shadows>;
 
 // ============================================================================
 // Layout Properties
@@ -1270,12 +1293,15 @@ export interface EffectsProps {
     shadowColor?: ColorPropValue;
 
     /** Text shadow; the project's tokens are `--text-shadow-*`. */
-    textShadow?: ShadowKeyword | CT_TextShadows;
+    textShadow?: ShadowKeyword | CT_TextShadows | ShadowSizeObject<ShadowKeyword | CT_TextShadows>;
     /** Text shadow color */
     textShadowColor?: ColorPropValue;
 
     /** Inset shadow; the project's tokens are `--inset-shadow-*`. */
-    insetShadow?: ShadowKeyword | CT_InsetShadows;
+    insetShadow?:
+        | ShadowKeyword
+        | CT_InsetShadows
+        | ShadowSizeObject<ShadowKeyword | CT_InsetShadows>;
     /** Inset shadow color */
     insetShadowColor?: ColorPropValue;
 
@@ -1370,7 +1396,7 @@ export interface FilterProps {
     contrast?: 0 | 50 | 75 | 100 | 125 | 150 | 200 | number | (string & {});
 
     /** @see https://tailwindcss.com/docs/drop-shadow */
-    dropShadow?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'none' | true | CT_DropShadows | (string & {});
+    dropShadow?: DropShadowSize | ShadowSizeObject<DropShadowSize>;
 
     /** @see https://tailwindcss.com/docs/grayscale */
     grayscale?: BinaryFilterValue;

@@ -956,10 +956,12 @@ impl KeyValueFindings {
     /// `n` is the properties of the group: one pass, plus one per level of
     /// brackets a value is reported through, each shorter by a pair, so a
     /// group with none costs the single pass.
-    fn collect_group<'a>(&mut self, objects: impl Iterator<Item = &'a super::StaticSzObject>) {
+    ///
+    /// A slice rather than an iterator: every caller shares one copy of this
+    /// recursive function, which an iterator type per caller multiplied.
+    fn collect_group(&mut self, objects: &[&super::StaticSzObject]) {
         self.clear();
-        let objects: Vec<&super::StaticSzObject> = objects.collect();
-        for object in &objects {
+        for object in objects {
             self.collect(object);
         }
         let swaps = self.bracket_swaps();
@@ -971,8 +973,26 @@ impl KeyValueFindings {
             .iter()
             .map(|object| swap_bracketed(object, &swaps))
             .collect();
-        self.collect_group(swapped.iter());
+        self.collect_group(&swapped.iter().collect::<Vec<_>>());
         self.underscore_values = written;
+    }
+
+    /// [`Self::collect_group`] over the objects as their findings read them:
+    /// a shadow's `{ size, op }` is reported as its size on the key would be.
+    /// Its underscore fact is the size's too: `_` reads alike in `shadow-[…]`
+    /// and in the `shadow-[…]/50` the object writes. An object that holds no
+    /// size is read as written, uncopied.
+    fn collect_viewed(&mut self, objects: &[&super::StaticSzObject]) {
+        let viewed: Vec<Option<super::StaticSzObject>> = objects
+            .iter()
+            .map(|object| super::lower::sizes_as_values(object))
+            .collect();
+        let read: Vec<&super::StaticSzObject> = objects
+            .iter()
+            .zip(&viewed)
+            .map(|(object, view)| view.as_ref().unwrap_or(object))
+            .collect();
+        self.collect_group(&read);
     }
 
     /// Each bracketed value to report as the value it stands for: one that
@@ -989,7 +1009,7 @@ impl KeyValueFindings {
                     properties: vec![property.clone()],
                 };
                 let mut trial = Self::default();
-                trial.collect_group(std::iter::once(&single));
+                trial.collect_group(&[&single]);
                 trial.has_findings()
             };
             if reported {
@@ -1071,7 +1091,7 @@ fn push_group_key_value_diagnostics<'a>(
     repeat_free: bool,
     found: &mut KeyValueFindings,
 ) {
-    found.collect_group(objects);
+    found.collect_viewed(&objects.collect::<Vec<_>>());
     if !repeat_free {
         let seen = &mut std::collections::HashSet::new();
         retain_first_occurrence(&mut found.unknown, 0, seen, |(_, at)| *at);
@@ -1127,11 +1147,16 @@ fn push_group_key_value_diagnostics<'a>(
     push_dead_enum_diagnostics(&found.dead_enums, out);
     push_slash_opacity_diagnostics(&found.slash_opacities, out);
     push_color_slash_opacity_diagnostics(&found.color_slash_opacities, out);
-    for (key, op, percent, offset) in &found.invalid_opacities {
-        let issue = percent.as_ref().map_or_else(
-            || issue::opacity_value_range(key, op, None),
-            |percent| issue::opacity_value_fraction(key, op, Some(percent)),
-        );
+    for (key, text, finding, offset) in &found.invalid_opacities {
+        let issue = match finding {
+            super::lower::OpacityFinding::Range => issue::opacity_value_range(key, text, None),
+            super::lower::OpacityFinding::Fraction(percent) => {
+                issue::opacity_value_fraction(key, text, Some(percent))
+            }
+            super::lower::OpacityFinding::VariableShadow => {
+                issue::variable_shadow_opacity(key, text)
+            }
+        };
         out.push_issue(issue, *offset);
     }
     for found in &found.bracketed_values {
@@ -1480,11 +1505,30 @@ fn push_slash_opacity_diagnostics(
     found: &[super::lower::SlashOpacityString],
     out: &mut Diagnostics,
 ) {
-    for (key, color, opacity, important, offset) in found {
+    for (key, member, color, opacity, important, offset) in found {
         let op = super::lower::op_literal(opacity);
         let important = important.then_some("!");
+        // A colour on a shadow key belongs to its colour key: `shadow` is
+        // the size and its alpha.
+        let shadow_colour =
+            *member == "color" && super::lower::SHADOW_SIZE_KEYS.contains(&key.as_str());
+        let owner = format!("{key}Color");
         out.push_issue(
-            issue::slash_opacity_string(key, color, opacity, &op, important),
+            if shadow_colour {
+                issue::slash_opacity_string_colour_key(
+                    key,
+                    member,
+                    Some(&owner),
+                    color,
+                    opacity,
+                    &op,
+                    important,
+                )
+            } else {
+                issue::slash_opacity_string_same_key(
+                    key, member, None, color, opacity, &op, important,
+                )
+            },
             *offset,
         );
     }
@@ -1496,7 +1540,7 @@ fn push_color_slash_opacity_diagnostics(
     found: &[super::lower::ColorSlashOpacity],
     out: &mut Diagnostics,
 ) {
-    for (key, color, op, offset) in found {
+    for (key, member, color, op, offset) in found {
         let (unmarked, important) = color
             .strip_suffix('!')
             .map_or((color.as_str(), ""), |color| (color, "!"));
@@ -1506,9 +1550,18 @@ fn push_color_slash_opacity_diagnostics(
         let issue = op.as_deref().map_or_else(
             || {
                 let op = super::lower::op_literal(opacity);
-                issue::color_slash_opacity_op_absent(key, base, opacity, important_mark, &op)
+                issue::color_slash_opacity_op_absent(
+                    key,
+                    member,
+                    base,
+                    opacity,
+                    important_mark,
+                    &op,
+                )
             },
-            |op| issue::color_slash_opacity_op_given(key, base, opacity, important_mark, op),
+            |op| {
+                issue::color_slash_opacity_op_given(key, member, base, opacity, important_mark, op)
+            },
         );
         out.push_issue(issue, *offset);
     }
@@ -2833,7 +2886,9 @@ mod tests {
                 "  fill: '#f00/[0.3]', color: 'rgb(255_0_0/50%)', stroke: '1/2',",
                 "  outlineColor: 'red-500/[50%]', focus: { bg: 'linear-to-r/oklch', color: 'red-500/40' },",
                 // A key that takes no colour, and a value the bracket lane claims.
-                "  p: 'red-500/50', caret: '[#f00]/[50%]' }} />;",
+                "  p: 'red-500/50', caret: '[#f00]/[50%]',",
+                // A colour on a shadow key: its help names the colour key.
+                "  shadow: 'red-500/50' }} />;",
             ]
             .join("\n"),
         };
@@ -2841,12 +2896,13 @@ mod tests {
         assert_eq!(
             lines(&result),
             [
-                r#"slash-opacity-string {"key":"bg","color":"red-500","opacity":"50","op":"50","important":"!"}"#,
-                r#"slash-opacity-string {"key":"from","color":"blue-500","opacity":"20","op":"20"}"#,
-                r#"slash-opacity-string {"key":"bg","color":"red-500","opacity":"5","op":"5"}"#,
-                r##"slash-opacity-string {"key":"fill","color":"#f00","opacity":"[0.3]","op":"30"}"##,
-                r#"slash-opacity-string {"key":"outlineColor","color":"red-500","opacity":"[50%]","op":"'50%'"}"#,
-                r#"slash-opacity-string {"key":"color","color":"red-500","opacity":"40","op":"40"}"#,
+                r#"slash-opacity-string {"form":"same-key","key":"bg","member":"color","color":"red-500","opacity":"50","op":"50","important":"!"}"#,
+                r#"slash-opacity-string {"form":"same-key","key":"from","member":"color","color":"blue-500","opacity":"20","op":"20"}"#,
+                r#"slash-opacity-string {"form":"same-key","key":"bg","member":"color","color":"red-500","opacity":"5","op":"5"}"#,
+                r##"slash-opacity-string {"form":"same-key","key":"fill","member":"color","color":"#f00","opacity":"[0.3]","op":"30"}"##,
+                r#"slash-opacity-string {"form":"same-key","key":"outlineColor","member":"color","color":"red-500","opacity":"[50%]","op":"'50%'"}"#,
+                r#"slash-opacity-string {"form":"same-key","key":"color","member":"color","color":"red-500","opacity":"40","op":"40"}"#,
+                r#"slash-opacity-string {"form":"colour-key","key":"shadow","member":"color","owner":"shadowColor","color":"red-500","opacity":"50","op":"50"}"#,
                 r##"bracketed-value {"form":"escape","key":"caret","value":"[#f00]/[50%]","inner":"#f00]/[50%"}"##,
                 // A fact for the build's oracle, not a finding.
                 r#"underscore-space {"key":"color","value":"rgb(255_0_0/50%)","className":"text-[rgb(255_0_0/50%)]"}"#,
@@ -2859,6 +2915,40 @@ mod tests {
         ] {
             assert!(result.code.contains(class), "{class}\n{}", result.code);
         }
+    }
+
+    #[test]
+    fn a_shadow_size_is_reported_as_the_same_value_on_its_key() {
+        // The runtime lowers `size` through the key's string lane and reports
+        // it there; the engine reports it as `key: size` would be, at the
+        // size, once, and nothing for a size that is fine or for a colour.
+        let file = TransformFile {
+            filename: "/repo/src/App.tsx".to_string(),
+            source: [
+                "export const A = () => <div sz={{ shadow: { size: '[a', op: 50 },",
+                "  hover: { textShadow: { size: '[1/2]', op: 50 } },",
+                "  dropShadow: { size: 'sm/50', op: 20 },",
+                "  insetShadow: { size: 'sm', op: 25 }, bg: { color: '[a', op: 5 },",
+                "  ring: { size: '[a]' }, textShadow: { size: '(--t)', op: 50 } }} />;",
+            ]
+            .join("\n"),
+        };
+        let result = transform_static_classes(&file, 0, std::time::Instant::now());
+        assert_eq!(
+            lines(&result),
+            [
+                r#"property-object {"key":"ring","nestedKeys":["size"]}"#,
+                r#"color-slash-opacity {"form":"op-given","key":"dropShadow","member":"size","base":"sm","opacity":"50","op":"20"}"#,
+                r#"bracketed-value {"form":"escape","key":"shadow","value":"[a","inner":"[a"}"#,
+                r#"bracketed-value {"form":"unwrap","key":"textShadow","value":"[1/2]","inner":"1/2"}"#,
+                r#"bracketed-value {"form":"unwrap","key":"textShadow","value":"(--t)","inner":"--t"}"#,
+            ]
+        );
+        assert!(
+            result.code.contains("inset-shadow-sm/25"),
+            "{}",
+            result.code
+        );
     }
 
     #[test]
@@ -5707,7 +5797,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     fn every_diagnostic_carries_its_code_at_its_offset() {
         use super::super::generated::diagnostic_codes::{DiagnosticCode, DIAGNOSTIC_CODES};
-        let cases: [(DiagnosticCode, String, TransformOptions); 36] = [
+        let cases: [(DiagnosticCode, String, TransformOptions); 37] = [
             (
                 DiagnosticCode::UnknownKey,
                 "<div sz={{ xyzzy: 4 }} />".into(),
@@ -5884,6 +5974,11 @@ mod tests {
                 TransformOptions::default(),
             ),
             (
+                DiagnosticCode::VariableShadowOpacity,
+                "<div sz={{ shadow: { size: '--s', op: 50 } }} />".into(),
+                TransformOptions::default(),
+            ),
+            (
                 DiagnosticCode::RedundantBracket,
                 "<div sz={{ w: '[100px]' }} />".into(),
                 TransformOptions::default(),
@@ -6046,34 +6141,34 @@ mod tests {
             (
                 "const A = () => <div sz={{ bg: { color: 'red-500/50' } }} />;",
                 r#"className="bg-red-500/50""#,
-                r#"color-slash-opacity {"form":"op-absent","key":"bg","base":"red-500","opacity":"50","op":"50"}"#,
+                r#"color-slash-opacity {"form":"op-absent","key":"bg","member":"color","base":"red-500","opacity":"50","op":"50"}"#,
             ),
             (
                 "const A = () => <div sz={{ bg: { color: 'red-500/50!' } }} />;",
                 r#"className="bg-red-500/50!""#,
-                r#"color-slash-opacity {"form":"op-absent","key":"bg","base":"red-500","opacity":"50","important":"!","op":"50"}"#,
+                r#"color-slash-opacity {"form":"op-absent","key":"bg","member":"color","base":"red-500","opacity":"50","important":"!","op":"50"}"#,
             ),
             (
                 "const A = () => <div sz={{ bg: { color: 'red-500/50', op: 20 } }} />;",
                 r#"className="bg-red-500/50/20""#,
-                r#"color-slash-opacity {"form":"op-given","key":"bg","base":"red-500","opacity":"50","op":"20"}"#,
+                r#"color-slash-opacity {"form":"op-given","key":"bg","member":"color","base":"red-500","opacity":"50","op":"20"}"#,
             ),
             (
                 "const A = () => <div sz={{ md: { hover: { borderColor: { color: '#f00/75' } } } }} />;",
                 r#"className="md:hover:border-[#f00/75]""#,
-                r##"color-slash-opacity {"form":"op-absent","key":"borderColor","base":"#f00","opacity":"75","op":"75"}"##,
+                r##"color-slash-opacity {"form":"op-absent","key":"borderColor","member":"color","base":"#f00","opacity":"75","op":"75"}"##,
             ),
             // Every key a colour object serves; the help's `op` is the one the
             // opacity names.
             (
                 "const A = () => <div sz={{ ring: { color: 'red-500/(--o)' } }} />;",
                 r#"className="ring-red-500/(--o)""#,
-                r#"color-slash-opacity {"form":"op-absent","key":"ring","base":"red-500","opacity":"(--o)","op":"'--o'"}"#,
+                r#"color-slash-opacity {"form":"op-absent","key":"ring","member":"color","base":"red-500","opacity":"(--o)","op":"'--o'"}"#,
             ),
             (
                 "const A = () => <div sz={{ textShadow: { color: 'red-500/[0.5]', op: 5 } }} />;",
                 r#"className="text-shadow-red-500/[0.5]/5""#,
-                r#"color-slash-opacity {"form":"op-given","key":"textShadow","base":"red-500","opacity":"[0.5]","op":"5"}"#,
+                r#"color-slash-opacity {"form":"op-given","key":"textShadow","member":"color","base":"red-500","opacity":"[0.5]","op":"5"}"#,
             ),
         ];
         for (source, class_attr, message) in cases {

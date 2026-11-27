@@ -1554,7 +1554,7 @@ not see because Tailwind still writes the rule.
 
 ```text
 [csszyx] slash-opacity-string: src/Card.tsx:3:16
-  `bg: '#f00/50'` puts the opacity in a string; a colour takes its opacity in the object form.
+  `bg: '#f00/50'` puts the opacity in a string; the object form takes it in `op`.
   help: write `{ color: '#f00', op: 50 }`.
 ```
 
@@ -1575,15 +1575,34 @@ A slash inside a colour function is its own (`rgb(255_0_0/50%)`), a fraction
 is a size (`1/2`), and a gradient's slash names its interpolation
 (`bg: 'linear-to-r/oklch'`); none is reported.
 
+A shadow's own opacity has an object form too, since 0.18.1: `shadow`,
+`insetShadow`, `textShadow` and `dropShadow` take `{ size, op }`, so
+`{ shadow: { size: 'sm', op: 50 } }` writes `shadow-sm/50`, which sets the
+shadow's alpha to 50%, where the theme's shadows use 5% to 25%. The shadow's
+colour is a lane of its own, `shadowColor: { color, op }`. The string
+`shadow: 'sm/50'` still writes its class and is now reported as
+`slash-opacity-string` with `{ size, op }` in the help, and so is a colour slash
+on a shadow key (`shadow: 'red-500/50'`, help `shadowColor: { color, op }`),
+which 0.18.0 did not report. A slash in the object's `size` is reported as
+`color-slash-opacity`, as a slash in a colour object's `color` is, with or
+without an `op`; with one (`{ size: 'sm/50', op: 20 }`) the alpha is set
+twice. `{ size: '--s', op: 50 }` writes
+`shadow-(--s)/50` and adds the note `variable-shadow-opacity` (also for
+`var(--s)`): the opacity
+reaches a shadow held in a variable only if its value reads
+`--tw-shadow-alpha`. `csszyx migrate` writes `shadow-sm/50` as the object.
+
 **The edit.** Write the opacity in `op`:
 
 ```tsx
 // before
 <div sz={{ bg: "#f00/50" }} />
 <div sz={{ bg: { color: "red-500/50", op: 20 } }} />
+<div sz={{ shadow: "sm/50" }} />
 // after
 <div sz={{ bg: { color: "#f00", op: 50 } }} />
 <div sz={{ bg: { color: "red-500", op: 20 } }} />
+<div sz={{ shadow: { size: "sm", op: 50 } }} />
 ```
 
 **Tooling.** `csszyx check` lists every site under the two kinds and exits 1.
@@ -2026,6 +2045,19 @@ Two classes migrate now reads by their type hint: `bg-[length:auto_100px]`
 becomes `{ bgSize: 'auto 100px' }` and `bg-[position:10px_20px]` becomes
 `{ bgPos: '10px 20px' }`, also in the `bg-(length:--x)` form. 0.17 read both as
 the colour key `bg`. The 4.1 spellings `bg-size-[…]` still read as `bgSize`.
+
+Since 0.18.1, migrate converts a class only to an `sz` value that compiles back
+to it, or to a class Tailwind reads as the same utility. `text-[length:13px]`
+becomes `{ text: '13px' }` instead of the colour `length:13px`, `font-[700]`
+becomes `{ weight: 700 }` instead of the family `700`, `bg-[var(--v)]` becomes
+`{ bg: '--v' }`, and a value whose plain spelling compiles to another class
+keeps its brackets: `origin-[0]` becomes `{ origin: '[0]' }`. `!p-4` converts
+like `p-4!`, and `bg-red-500/50!` keeps its `!` as
+`{ color: 'red-500!', op: 50 }` instead of losing it. A class whose `!` no `sz`
+value writes back, such as `grow!` or `text-sm/6!`, stays in `className`. Classes Tailwind does not serve, such as `font-700` and
+`from-12.5%`, now stay in `className` instead of becoming a class that does.
+`break-words` becomes `{ break: 'words' }`, which compiles to `break-words` on
+every Tailwind v4; `wrap-break-word` is 4.1 only.
 
 **You are affected** when you run `csszyx migrate` over classes like these.
 

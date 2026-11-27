@@ -275,7 +275,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
     },
     {
         "id": "slash-opacity-string",
-        "summary": "A colour key given its opacity in a string; the object form is the one spelling of it.",
+        "summary": "A colour or shadow key given its opacity in a string; the object form is the one spelling of it.",
         "surfaces": {
             "engine": {},
             "runtime": {
@@ -284,9 +284,31 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "position": "site",
+        "forms": [
+            "same-key",
+            "colour-key"
+        ],
         "args": {
+            "form": {
+                "type": [
+                    "enum",
+                    "same-key",
+                    "colour-key"
+                ]
+            },
             "key": {
                 "type": "string"
+            },
+            "member": {
+                "type": [
+                    "enum",
+                    "color",
+                    "size"
+                ]
+            },
+            "owner": {
+                "type": "string",
+                "optional": true
             },
             "color": {
                 "type": "string"
@@ -305,13 +327,16 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
                 "optional": true
             }
         },
-        "text": "`{key}: '{color}/{opacity}{important}'` puts the opacity in a string; a colour takes its opacity in the object form.",
-        "help": "write `{ color: '{color}{important}', op: {op} }`.",
+        "text": "`{key}: '{color}/{opacity}{important}'` puts the opacity in a string; the object form takes it in `op`.",
+        "help": {
+            "same-key": "write `{ {member}: '{color}{important}', op: {op} }`.",
+            "colour-key": "write `{owner}: { color: '{color}{important}', op: {op} }`; `{key}` takes a shadow's size and its alpha."
+        },
         "note": "the class is still emitted as written; a theme colour serves it, and a hex, a colour function or a variable before the slash writes a value no browser takes."
     },
     {
         "id": "color-slash-opacity",
-        "summary": "A colour object with a slash opacity in `color`; the object takes it in `op`.",
+        "summary": "A colour or shadow size object with a slash opacity in its value; the object takes it in `op`.",
         "surfaces": {
             "engine": {},
             "runtime": {
@@ -335,6 +360,13 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "key": {
                 "type": "string"
             },
+            "member": {
+                "type": [
+                    "enum",
+                    "color",
+                    "size"
+                ]
+            },
             "base": {
                 "type": "string"
             },
@@ -353,12 +385,12 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "text": {
-            "op-given": "`{key}: { color: '{base}/{opacity}{important}', op: {op} }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.",
-            "op-absent": "`{key}: { color: '{base}/{opacity}{important}' }` puts the opacity in `color`; a colour object takes it in `op`."
+            "op-given": "`{key}: { {member}: '{base}/{opacity}{important}', op: {op} }` sets opacity twice; the object takes its opacity in `op`, not in `{member}`.",
+            "op-absent": "`{key}: { {member}: '{base}/{opacity}{important}' }` puts the opacity in `{member}`; the object takes it in `op`."
         },
         "help": {
-            "op-given": "write `{ color: '{base}{important}', op: {op} }`.",
-            "op-absent": "write `{ color: '{base}{important}', op: {op} }`."
+            "op-given": "write `{ {member}: '{base}{important}', op: {op} }`.",
+            "op-absent": "write `{ {member}: '{base}{important}', op: {op} }`."
         },
         "note": "the class is still emitted as written; a theme colour serves it, and a hex, a colour function or a variable before the slash writes a value no browser takes."
     },
@@ -470,7 +502,7 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             }
         },
         "text": "`{key}` sets a property and is not a variant, so its object `{ {nestedKeys} }` emits `{key}:*` classes that produce no CSS.",
-        "help": "move the nested keys up a level; for colour opacity, write `{ color: '…', op: … }`."
+        "help": "move the nested keys up a level; for an opacity, write `{ color: '…', op: … }`, or `{ size: '…', op: … }` on a shadow key."
     },
     {
         "id": "non-variant-object",
@@ -1180,6 +1212,32 @@ export const SZ_DIAGNOSTIC_REGISTRY: readonly SzDiagnosticSpec[] = [
             "escape": "write the declaration in `css: { … }`, or the class in `className`, with every bracket in a pair; the brackets inside are part of the value.",
             "type-hint": "write the declaration in `css: { … }`, or the class in `className`; `{key}: '{inner}'` writes another type."
         }
+    },
+    {
+        "id": "variable-shadow-opacity",
+        "summary": "A shadow size held in a variable, which `op` may not reach.",
+        "surfaces": {
+            "engine": {},
+            "runtime": {
+                "production": false,
+                "host": "browser"
+            }
+        },
+        "defaults": {
+            "recommended": "info",
+            "atomic": "warn"
+        },
+        "position": "site",
+        "args": {
+            "key": {
+                "type": "string"
+            },
+            "size": {
+                "type": "string"
+            }
+        },
+        "text": "`{key}: { size: '{size}', op }` sets the shadow's alpha, which `{size}` uses only if it reads `--tw-shadow-alpha`.",
+        "help": "use a theme size or a `[…]` shadow."
     },
     {
         "id": "redundant-bracket",

@@ -8,13 +8,13 @@
 
 use super::class_rules::{
     self, is_fraction, is_valid_spacing_value, prefix_takes_fractions, signed_string, wrapped,
-    Shape, SHADOW_SIZE_PROPS,
+    Shape,
 };
 use super::value::{js_number, js_number_to_string, Extra, ParsedClass, SzObject, SzValue};
 use super::verdict::{lowered_class, lowers_back_to, Judge};
 use crate::transform::generated::migrate_tables as tables;
 use crate::transform::generated::reverse_tables::reverse_property_key;
-use crate::transform::lower::{modifier_op, ModifierOp};
+use crate::transform::lower::{modifier_op, ModifierOp, SHADOW_SIZE_KEYS};
 
 /// Parse a single Tailwind utility, without variants, into an sz prop and
 /// value. `None` when the class is not one migrate recognises.
@@ -25,11 +25,12 @@ pub fn parse_class(class: &str) -> Option<ParsedClass> {
 /// [`parse_class`], with the project's Tailwind answering where a table would.
 pub fn parse_class_judged(class: &str, judge: Judge<'_>) -> Option<ParsedClass> {
     let judge = judge.reading(class);
-    let important = class.ends_with('!');
-    let input = if important {
-        &class[..class.len() - 1]
-    } else {
-        class
+    // Tailwind v4 reads `!` at either end (`!p-4` is the v3 spelling it still
+    // serves); one on each end is no class.
+    let (input, important) = match (class.strip_prefix('!'), class.strip_suffix('!')) {
+        (Some(_), Some(_)) => return None,
+        (Some(rest), None) | (None, Some(rest)) => (rest, true),
+        (None, None) => (class, false),
     };
     let negative = input.starts_with('-');
     let source = if negative { &input[1..] } else { input };
@@ -38,7 +39,7 @@ pub fn parse_class_judged(class: &str, judge: Judge<'_>) -> Option<ParsedClass> 
         return Some(container);
     }
     if let Some(mask) = parse_mask(input) {
-        return Some(apply_important(mask, important));
+        return apply_important(mask, important);
     }
     // A layer-shaped class the layers do not read stays in `className`: on the
     // prefix path it became `mask: 'linear-…'`, a value the engine drops.
@@ -46,16 +47,16 @@ pub fn parse_class_judged(class: &str, judge: Judge<'_>) -> Option<ParsedClass> 
         return None;
     }
     if let Some(boolean) = try_boolean_match(input) {
-        return Some(apply_important(boolean, important));
+        return apply_important(boolean, important);
     }
     if let Some(gradient) = try_gradient(source, negative, judge) {
-        return Some(apply_important(gradient, important));
+        return apply_important(gradient, important);
     }
     if let Some(utility) = parse_longest_prefix(source, negative, judge) {
-        return Some(apply_important(utility, important));
+        return apply_important(utility, important);
     }
     parse_custom_property_declaration(input)
-        .map(|declaration| apply_important(declaration, important))
+        .and_then(|declaration| apply_important(declaration, important))
 }
 
 /// A mask utility, on the key that owns its CSS variable (ADR 0013).
@@ -380,30 +381,331 @@ fn parse_valued_prefix(
     if tables::spacing_props(prefix) && !is_valid_spacing_value(raw_value) {
         return None;
     }
-    let reading = read_value(prefix, raw_value, negative, judge);
-    let Some(table) = reading.table else {
-        return reading.parsed;
-    };
+    if let Some(unhinted) = read_without_type_hint(prefix, raw_value, negative, judge) {
+        return Some(unhinted);
+    }
     let class = if negative {
         format!("-{source}")
     } else {
         source.to_string()
     };
-    if !judge.served(&class, table) {
-        return None;
-    }
-    if table {
-        return reading.parsed;
-    }
-    reading
-        .parsed
-        .or_else(|| {
+    let reading = read_value(prefix, raw_value, negative, judge);
+    let parsed = match reading.table {
+        Some(table) if !judge.served(&class, table) => None,
+        None | Some(true) => reading.parsed,
+        Some(false) => reading.parsed.or_else(|| {
             is_fraction(raw_value).then(|| {
                 let prop = reverse_property_key(prefix).unwrap_or(prefix);
                 ParsedClass::new(prop, signed_string(raw_value, negative))
             })
+        }),
+    }?;
+    if keeps_a_foreign_hint(&parsed, raw_value) {
+        return None;
+    }
+    written_back(parsed, prefix, raw_value, negative)
+}
+
+/// Whether the reading kept a type hint in its value that names another type
+/// than its key: `text-[length:var(--x)]` as the colour `length:var(--x)`
+/// writes the class back, on a key that is not the font size it sets.
+fn keeps_a_foreign_hint(parsed: &ParsedClass, raw_value: &str) -> bool {
+    let (Some(inner), SzValue::String(value)) = (wrapped(raw_value, '[', ']'), &parsed.value)
+    else {
+        return false;
+    };
+    inner.split_once(':').is_some_and(|(hint, _)| {
+        is_type_hint(hint)
+            && value.starts_with(&format!("{hint}:"))
+            && !hint_names_key(hint, &parsed.prop)
+    })
+}
+
+/// `[hint:value]` read as `[value]`, when the key that reading lands on is
+/// the one the hint names: `text-[length:13px]` is `text: '13px'`, which
+/// writes `text-[13px]`, the font size Tailwind reads either class as.
+///
+/// A hint naming another type than the unhinted class's key
+/// (`text-[length:var(--x)]`, where `text-[var(--x)]` is a colour) is no
+/// reading here; the general one then decides. The value is re-read once,
+/// with no hint left to drop.
+fn read_without_type_hint(
+    prefix: &'static str,
+    raw_value: &str,
+    negative: bool,
+    judge: Judge<'_>,
+) -> Option<ParsedClass> {
+    let inner = wrapped(raw_value, '[', ']')?;
+    let (hint, value) = inner.split_once(':')?;
+    if !is_type_hint(hint) {
+        return None;
+    }
+    let unhinted = format!("[{value}]");
+    let parsed = read_value(prefix, &unhinted, negative, judge).parsed?;
+    if !hint_names_key(hint, &parsed.prop) {
+        return None;
+    }
+    written_back(parsed, prefix, &unhinted, negative)
+}
+
+/// The data types Tailwind reads in front of an arbitrary value.
+const TYPE_HINTS: &[&str] = &[
+    "color",
+    "length",
+    "percentage",
+    "number",
+    "integer",
+    "url",
+    "image",
+    "position",
+    "bg-size",
+    "family-name",
+    "absolute-size",
+    "relative-size",
+    "line-width",
+    "angle",
+    "ratio",
+    "vector",
+];
+
+fn is_type_hint(hint: &str) -> bool {
+    TYPE_HINTS.contains(&hint)
+}
+
+/// Whether `hint` is the type the sz key `prop` holds: the hint the lowering
+/// writes for the key's variables, or `color` for a colour key.
+fn hint_names_key(hint: &str, prop: &str) -> bool {
+    use crate::transform::generated::tables::css_var_type_hint;
+    css_var_type_hint(prop) == Some(hint) || (hint == "color" && takes_colour(prop))
+}
+
+/// The first spelling of `parsed` whose lowering writes the class back, or
+/// `None`, which keeps the class in `className`.
+///
+/// In order: the main lane's own spelling (`var(--v)` is `--v`), the reading
+/// as made, then the bracket lane (`origin-[0]` is `origin: '[0]'`, since
+/// `origin: '0'` writes `origin-0`). What counts as writing it back is
+/// [`same_class`].
+///
+/// Cost: at most three lowerings of one property, each linear in the value.
+/// Input domain: one utility with no variant and no `!`, `raw_value` its part
+/// after the prefix. Native artifact only (migrate ships in the napi binary).
+fn written_back(
+    parsed: ParsedClass,
+    prefix: &str,
+    raw_value: &str,
+    negative: bool,
+) -> Option<ParsedClass> {
+    let sign = if negative { "-" } else { "" };
+    let class = format!("{sign}{prefix}-{raw_value}");
+    let writes_back = |candidate: &ParsedClass| {
+        lowered_class(candidate)
+            .is_some_and(|lowered| same_class(&lowered, &class, prefix, &candidate.prop))
+    };
+    let main_lane = main_lane_spelling(&parsed);
+    let bracketed = bracket_lane_spelling(&parsed, raw_value);
+    main_lane
+        .into_iter()
+        .chain(std::iter::once(parsed))
+        .chain(bracketed)
+        .find(|candidate| writes_back(candidate))
+}
+
+/// `var(--v)` as the main lane writes it, `--v`.
+fn main_lane_spelling(parsed: &ParsedClass) -> Option<ParsedClass> {
+    let SzValue::String(value) = &parsed.value else {
+        return None;
+    };
+    let name = value.strip_prefix("var(")?.strip_suffix(')')?;
+    Some(ParsedClass {
+        value: SzValue::from(name),
+        ..parsed.clone()
+    })
+}
+
+/// The value as written inside its brackets, as the bracket lane takes it.
+fn bracket_lane_spelling(parsed: &ParsedClass, raw_value: &str) -> Option<ParsedClass> {
+    wrapped(raw_value, '[', ']')?;
+    Some(ParsedClass {
+        value: SzValue::from(raw_value),
+        ..parsed.clone()
+    })
+}
+
+/// Whether the lowering's class is the utility `class` spells, for the sz key
+/// `prop` read off `prefix`. Besides equal, Tailwind reads these pairs as one
+/// utility:
+///
+/// - a whole `[var(--v…)]` and the reference `(--v…)`;
+/// - a sign before the prefix and one inside a dimension's bracket
+///   (`-translate-x-[45%]`, `translate-x-[-45%]`);
+/// - a type hint and none, when the hint names the type of `prop`
+///   (`bg-[position:10px_20px]` and `bg-[10px_20px]` on `bgPos`);
+/// - a prefix that names the key and the one the lowering writes for every
+///   v4 (`inset-s-4`, `start-4`; `bg-size-[x]`, `bg-[length:x]`);
+/// - an aspect ratio in brackets and bare (`aspect-[16/9]`, `aspect-16/9`);
+/// - one number in two spellings in brackets, with one unit (`[.33]`,
+///   `[0.33]`; `[-.25cqi]`, `[-0.25cqi]`);
+/// - a quoted string in either quotes (`content-["y"]`, `content-['y']`);
+/// - one opacity in two modifier spellings (`/[0.5]`, `/50`).
+fn same_class(lowered: &str, class: &str, prefix: &str, prop: &str) -> bool {
+    let lowered = var_as_reference(&on_own_prefix(lowered, prefix, prop));
+    let class = var_as_reference(class);
+    let spellings = [
+        Some(class.clone()),
+        sign_inside_bracket(&class),
+        without_hint_of(&class, prop),
+        aspect_ratio_bare(&class),
+    ];
+    spellings
+        .into_iter()
+        .flatten()
+        .any(|spelling| same_utility(&lowered, &spelling))
+}
+
+/// `aspect-[16/9]` as the bare ratio the lowering writes. A bare percentage
+/// is no such pair: Tailwind 4.3 serves `from-[12.5%]` and not `from-12.5%`.
+fn aspect_ratio_bare(class: &str) -> Option<String> {
+    let ratio = class.strip_prefix("aspect-[")?.strip_suffix(']')?;
+    is_fraction(ratio).then(|| format!("aspect-{ratio}"))
+}
+
+/// Equal, or equal but for one bracket's number or quotes, or the same
+/// before the modifier with one opacity after it.
+fn same_utility(left: &str, right: &str) -> bool {
+    if left == right || same_bracket(left, right) {
+        return true;
+    }
+    let (Some(at_left), Some(at_right)) = (find_top_level_slash(left), find_top_level_slash(right))
+    else {
+        return false;
+    };
+    let (left_base, right_base) = (&left[..at_left], &right[..at_right]);
+    (left_base == right_base || same_bracket(left_base, right_base))
+        && same_op(
+            modifier_op(&left[at_left + 1..]),
+            modifier_op(&right[at_right + 1..]),
+        )
+}
+
+/// `P-[a]` and `P-[b]` holding one number, or one string in either quotes.
+fn same_bracket(left: &str, right: &str) -> bool {
+    let (Some((left_head, left_inner)), Some((right_head, right_inner))) =
+        (bracket_parts(left), bracket_parts(right))
+    else {
+        return false;
+    };
+    if left_head != right_head {
+        return false;
+    }
+    if let (Some((a, a_unit)), Some((b, b_unit))) = (dimension(left_inner), dimension(right_inner))
+    {
+        // Two spellings of one number parse to the same bits: `.33`, `0.33`.
+        return a.to_bits() == b.to_bits() && a_unit == b_unit;
+    }
+    unquoted(left_inner).is_some_and(|text| Some(text) == unquoted(right_inner))
+}
+
+/// `-.25cqi` as the number `-0.25` and the unit `cqi`; a bare number has an
+/// empty unit.
+fn dimension(value: &str) -> Option<(f64, &str)> {
+    let unit_at = value
+        .bytes()
+        .rposition(|byte| byte.is_ascii_digit() || byte == b'.')
+        .map_or(0, |at| at + 1);
+    let (number, unit) = value.split_at(unit_at);
+    // `js_number` reads an empty string as 0, which `[%]` is not.
+    if number.is_empty()
+        || !unit
+            .bytes()
+            .all(|byte| byte.is_ascii_alphabetic() || byte == b'%')
+    {
+        return None;
+    }
+    js_number(number).map(|number| (number, unit))
+}
+
+/// `P-[x]` as `P` and `x`.
+fn bracket_parts(class: &str) -> Option<(&str, &str)> {
+    let open = class.find("-[")?;
+    Some((&class[..open], wrapped(&class[open + 1..], '[', ']')?))
+}
+
+/// A string's text inside its double or single quotes.
+fn unquoted(inner: &str) -> Option<&str> {
+    wrapped(inner, '"', '"').or_else(|| wrapped(inner, '\'', '\''))
+}
+
+/// One opacity: `33.3` and `33.3%` are the same `op`.
+fn same_op(left: Option<ModifierOp<'_>>, right: Option<ModifierOp<'_>>) -> bool {
+    let percent = |op: ModifierOp<'_>| match op {
+        ModifierOp::Number(number) => format!("{}%", js_number_to_string(number)),
+        ModifierOp::Text(text) => text.to_string(),
+    };
+    matches!((left, right), (Some(left), Some(right)) if percent(left) == percent(right))
+}
+
+/// The class with a whole `[var(--v…)]` value spelled `(--v…)`, an opacity
+/// modifier kept after it.
+fn var_as_reference(class: &str) -> String {
+    let (base, modifier) =
+        find_top_level_slash(class).map_or((class, ""), |at| (&class[..at], &class[at..]));
+    let Some(open) = base.find("-[var(--") else {
+        return class.to_string();
+    };
+    base[open + 6..].strip_suffix(")]").map_or_else(
+        || class.to_string(),
+        |reference| format!("{}-({reference}){modifier}", &base[..open]),
+    )
+}
+
+/// The lowering's class on the class's own prefix, when that prefix names
+/// the key: `start-4` as `inset-s-4`, and `bg-[length:x]` as `bg-size-[x]`
+/// for a key the lowering writes with its hint.
+fn on_own_prefix(lowered: &str, prefix: &str, prop: &str) -> String {
+    use crate::transform::generated::tables::{css_var_type_hint, property_prefix};
+    if reverse_property_key(prefix) != Some(prop) {
+        return lowered.to_string();
+    }
+    let Some(written) = property_prefix(prop).filter(|written| *written != prefix) else {
+        return lowered.to_string();
+    };
+    let (sign, unsigned) = lowered
+        .strip_prefix('-')
+        .map_or(("", lowered), |rest| ("-", rest));
+    let Some(value) = unsigned
+        .strip_prefix(written)
+        .and_then(|rest| rest.strip_prefix('-'))
+    else {
+        return lowered.to_string();
+    };
+    let unhinted = css_var_type_hint(prop).and_then(|hint| {
+        ['[', '('].into_iter().find_map(|open| {
+            let rest = value
+                .strip_prefix(open)?
+                .strip_prefix(hint)?
+                .strip_prefix(':')?;
+            Some(format!("{open}{rest}"))
         })
-        .filter(|parsed| lowers_back_to(parsed, &class))
+    });
+    format!("{sign}{prefix}-{}", unhinted.as_deref().unwrap_or(value))
+}
+
+/// `-P-[x]` as `P-[-x]`, for an unsigned `x`.
+fn sign_inside_bracket(class: &str) -> Option<String> {
+    let unsigned = class.strip_prefix('-')?;
+    let open = unsigned.find("-[")?;
+    let inner = wrapped(&unsigned[open + 1..], '[', ']')?;
+    (!inner.starts_with('-')).then(|| format!("{}-[-{inner}]", &unsigned[..open]))
+}
+
+/// `P-[hint:x]` as `P-[x]`, when `hint` names the type of `prop`.
+fn without_hint_of(class: &str, prop: &str) -> Option<String> {
+    let open = class.find("-[")?;
+    let inner = wrapped(&class[open + 1..], '[', ']')?;
+    let (hint, value) = inner.split_once(':')?;
+    (is_type_hint(hint) && hint_names_key(hint, prop))
+        .then(|| format!("{}-[{value}]", &class[..open]))
 }
 
 /// A value read by its prefix's rules, and the table's verdict when one of
@@ -479,25 +781,52 @@ fn parse_custom_property_declaration(input: &str) -> Option<ParsedClass> {
     Some(ParsedClass::new(prop, value))
 }
 
-/// `!` on a class becomes `!` on its value; a boolean becomes the bare
-/// marker. A companion prop does not survive, as in the TypeScript.
-fn apply_important(result: ParsedClass, important: bool) -> ParsedClass {
+/// `!` on a class becomes `!` on its value, or on the first member of an
+/// object value that writes the class back with it: a colour object on its
+/// colour (`bg-red-500/50!` is `{ color: 'red-500!', op: 50 }`), a gradient
+/// on its direction. With no such spelling the class stays in `className`
+/// rather than losing its `!`: so does a boolean, whose bare marker writes
+/// `truncate-!`, and a class with a companion prop (`text-sm/6!` as
+/// `{ text: 'sm!' }` wrote `text-sm!` and lost its line height).
+///
+/// Cost: one lowering per spelling tried, one per string or number member.
+fn apply_important(result: ParsedClass, important: bool) -> Option<ParsedClass> {
     if !important {
-        return result;
+        return Some(result);
     }
-    let value = match &result.value {
-        SzValue::String(text) => format!("{text}!"),
-        SzValue::Bool(_) => "!".to_string(),
-        SzValue::Number(number) => format!("{}!", js_number_to_string(*number)),
-        // Only an object reaches here from the parser; the map-only kinds
-        // share the arm so the match stays total.
-        SzValue::Object(_) | SzValue::Array(_) | SzValue::Null => return result,
-    };
-    ParsedClass {
-        prop: result.prop,
-        value: SzValue::from(value),
-        css_property: result.css_property,
-        extra: None,
+    if result.extra.is_some() {
+        return None;
+    }
+    let important = format!("{}!", lowered_class(&result)?);
+    important_spellings(&result.value)
+        .into_iter()
+        .map(|value| ParsedClass {
+            value,
+            ..result.clone()
+        })
+        .find(|candidate| lowered_class(candidate).as_deref() == Some(important.as_str()))
+}
+
+/// `value` with `!` added: on itself, or on one member of an object.
+fn important_spellings(value: &SzValue) -> Vec<SzValue> {
+    match value {
+        SzValue::String(text) => vec![SzValue::from(format!("{text}!"))],
+        SzValue::Number(number) => {
+            vec![SzValue::from(format!("{}!", js_number_to_string(*number)))]
+        }
+        SzValue::Object(object) => object
+            .iter()
+            .flat_map(|(member, inner)| {
+                important_spellings(inner).into_iter().map(move |marked| {
+                    let mut object = object.clone();
+                    object.insert(member.clone(), marked);
+                    SzValue::Object(object)
+                })
+            })
+            .collect(),
+        // A boolean is the bare marker. An array or null comes only from a
+        // resolution map, never from a class; the lowering judges it too.
+        SzValue::Bool(_) | SzValue::Array(_) | SzValue::Null => vec![SzValue::from("!")],
     }
 }
 
@@ -511,7 +840,7 @@ enum Unread {
 
 /// Split off a `/modifier`, read the value by the prefix's rules, then put
 /// the modifier back as the form the key takes: a line-height companion for
-/// `text`, the verbatim class for a shadow size, `{ color, op }` otherwise.
+/// `text`, `{ size, op }` for a shadow size, `{ color, op }` otherwise.
 fn disambiguate_and_parse(
     prefix: &str,
     raw_value: &str,
@@ -541,12 +870,17 @@ fn disambiguate_and_parse(
             }),
         });
     }
-    if SHADOW_SIZE_PROPS.contains(&result.prop.as_str()) {
-        return Ok(ParsedClass::new(&result.prop, raw_value));
-    }
     // No `op` writes this modifier's opacity, so the class stays as written.
     if opacity == SzValue::Null {
         return Err(Unread::NoRule);
+    }
+    // A shadow's own opacity is the size object: `shadow-sm/50` is
+    // `{ size: 'sm', op: 50 }`, which sets the shadow's alpha.
+    if SHADOW_SIZE_KEYS.contains(&result.prop.as_str()) {
+        let mut size = SzObject::new();
+        size.insert("size".to_string(), SzValue::from(text.as_str()));
+        size.insert("op".to_string(), opacity);
+        return Ok(ParsedClass::new(&result.prop, SzValue::Object(size)));
     }
     // A modifier is an opacity only on a key that takes a colour, by the
     // lowering's own list: `m-auto/50` is no colour, and no Tailwind class.
@@ -946,6 +1280,130 @@ mod tests {
     }
 
     #[test]
+    fn a_bracketed_value_migrates_to_a_spelling_that_writes_its_class_back() {
+        // Every reading lowers back to the class it came from, or the class
+        // stays in `className`. `text-[length:13px]` read as the colour
+        // `length:13px` lowered to `text-length:13px`, which is no class, and
+        // `font-[700]` as the family `700` to `font-700`.
+        for (class, expected) in [
+            // The hint names the type the rules read anyway: dropped.
+            ("text-[length:13px]", r#"text="13px""#),
+            // The hint names another type than the unhinted class is read as.
+            ("text-[length:var(--x)]", "null"),
+            ("font-[family-name:x]", r#"fontFamily="[x]""#),
+            // A number in brackets is a weight, as Tailwind reads it.
+            ("font-[700]", "weight=700"),
+            // `var(--v)` alone is the main lane's `--v`.
+            ("bg-[var(--v)]", r#"bg="--v""#),
+            ("shadow-[var(--v)]", r#"shadow="--v""#),
+            // No value without brackets writes the class: the bracket lane.
+            ("text-[color:red]", r#"color="[red]""#),
+            ("origin-[0]", r#"origin="[0]""#),
+            ("transition-[width]", r#"transition="[width]""#),
+            ("z-[5]", r#"z="[5]""#),
+            // Unchanged: these already round-trip.
+            ("text-[13px]", r#"text="13px""#),
+            ("text-[#f00]", r##"color="#f00""##),
+            ("p-[10px]", r#"p="10px""#),
+            ("bg-(--v)", r#"bg="--v""#),
+            ("-translate-x-[45%]", r#"translateX="-45%""#),
+            // A colon that is no type hint is part of the value.
+            ("bg-[url(a:b)]", r#"bg="url(a:b)""#),
+            ("content-[a:b]", r#"content="a:b""#),
+        ] {
+            assert_eq!(prop_value(class), expected, "{class}");
+        }
+    }
+
+    #[test]
+    fn two_spellings_of_one_utility_are_the_same_class() {
+        // Each pair compiles to one declaration under Tailwind 4.3.3.
+        for (lowered, class, prefix, prop) in [
+            ("bg-(--v)", "bg-[var(--v)]", "bg", "bg"),
+            ("-m-(--v,1)", "-m-[var(--v,1)]", "m", "m"),
+            (
+                "translate-x-[-45%]",
+                "-translate-x-[45%]",
+                "translate-x",
+                "translateX",
+            ),
+            ("bg-[10px_20px]", "bg-[position:10px_20px]", "bg", "bgPos"),
+            ("start-4", "inset-s-4", "inset-s", "insetS"),
+            (
+                "bg-[length:auto_100px]",
+                "bg-size-[auto_100px]",
+                "bg-size",
+                "bgSize",
+            ),
+            ("bg-(length:--x)", "bg-size-(--x)", "bg-size", "bgSize"),
+            ("aspect-16/9", "aspect-[16/9]", "aspect", "aspect"),
+            ("opacity-[0.33]", "opacity-[.33]", "opacity", "opacity"),
+            ("text-[-0.25cqi]", "text-[-.25cqi]", "text", "text"),
+            ("content-['y']", "content-[\"y\"]", "content", "content"),
+            ("bg-black/[33.3%]", "bg-black/[0.333]", "bg", "bg"),
+            ("bg-[#f00]/50", "bg-[#f00]/[50%]", "bg", "bg"),
+            ("w-[50%]", "w-[50.0%]", "w", "w"),
+            ("bg-(--v)/50", "bg-[var(--v)]/50", "bg", "bg"),
+            ("bg-(--v,a[0])", "bg-[var(--v,a[0])]", "bg", "bg"),
+        ] {
+            assert!(
+                same_class(lowered, class, prefix, prop),
+                "{lowered} ~ {class}"
+            );
+        }
+        // Each pair is two utilities, or one of them is no class at all.
+        for (lowered, class, prefix, prop) in [
+            ("from-[12.5%]", "from-12.5%", "from", "fromPos"),
+            ("bg-[10px_20px]", "bg-[length:10px_20px]", "bg", "bgPos"),
+            ("text-[var(--x)]", "text-[length:var(--x)]", "text", "color"),
+            ("text-length:13px", "text-[length:13px]", "text", "color"),
+            ("origin-0", "origin-[0]", "origin", "origin"),
+            ("opacity-[0.33em]", "opacity-[.33]", "opacity", "opacity"),
+            ("w-[px]", "w-[em]", "w", "w"),
+            ("bg-black/50", "bg-black/[0.4]", "bg", "bg"),
+            ("bg-red/50", "bg-black/50", "bg", "bg"),
+            ("bg-(--v)", "bg-[var(--v)_1px]", "bg", "bg"),
+            ("start-4", "inset-s-4", "inset-s", "w"),
+            ("w-[0%]", "w-[%]", "w", "w"),
+            ("w-4", "inset-s-4", "inset-s", "insetS"),
+            ("w-[1px]", "w-[1px)]", "w", "w"),
+        ] {
+            assert!(
+                !same_class(lowered, class, prefix, prop),
+                "{lowered} !~ {class}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_leading_important_reads_as_a_trailing_one() {
+        // Tailwind v4 still serves the v3 spelling `!p-4`; migrate read it as
+        // a class it did not know and left it behind.
+        for (class, expected) in [
+            ("!p-[10px]", r#"p="10px!""#),
+            ("!font-bold", r#"weight="bold!""#),
+            ("!flex", r#"display="flex!""#),
+            ("p-[10px]!", r#"p="10px!""#),
+            ("!p-4!", "null"),
+            ("!", "null"),
+            // An object takes it on the member that writes it back.
+            ("bg-red-500/50!", r#"bg={"color":"red-500!","op":50}"#),
+            ("!bg-red-500/50", r#"bg={"color":"red-500!","op":50}"#),
+            (
+                "bg-linear-to-r!",
+                r#"bgImg={"gradient":"linear","dir":"to-r!"}"#,
+            ),
+            // No spelling writes `!` across a size and its line height.
+            ("text-sm/6!", "null"),
+            // `{ grow: '!' }` wrote `grow-!`; `'1px!'` sets `--x` to `1px!`.
+            ("grow!", "null"),
+            ("[--x:1px]!", "null"),
+        ] {
+            assert_eq!(prop_value(class), expected, "{class}");
+        }
+    }
+
+    #[test]
     fn a_negative_keyword_is_not_read_as_a_value() {
         // Tailwind serves `scale-none` and `order-first` as fixed classes and
         // no negative of them, so `-scale-none` styles nothing. Migrated, it
@@ -1052,7 +1510,16 @@ mod tests {
             ("w-1/2", r#"w="1/2""#),
             ("aspect-3/2", r#"aspect="3/2""#),
             ("flex-1/2", r#"flex="1/2""#),
-            ("shadow-lg/50", r#"shadow="lg/50""#),
+            ("shadow-lg/50", r#"shadow={"size":"lg","op":50}"#),
+            (
+                "text-shadow-sm/[25%]",
+                r#"textShadow={"size":"sm","op":"25%"}"#,
+            ),
+            ("shadow-sm/50!", r#"shadow={"size":"sm!","op":50}"#),
+            (
+                "shadow-[0_1px_2px_black]/50",
+                r#"shadow={"size":"0 1px 2px black","op":50}"#,
+            ),
         ] {
             assert_eq!(prop_value(class), expected, "{class}");
         }
@@ -1275,11 +1742,11 @@ mod tests {
 
     #[test]
     fn a_custom_property_keeps_the_meaning_tailwind_gives_it() {
-        // `perspective-origin-(--v)` is `perspective-origin: var(--v)`; the
-        // bare name lowered to `perspective-origin-[--v]`, the word `--v`.
+        // `perspective-origin-(--v)` is `perspective-origin: var(--v)`, and
+        // the main lane's `--v` writes it back.
         assert_eq!(
             prop_value("perspective-origin-(--v)"),
-            r#"perspectiveOrigin="var(--v)""#
+            r#"perspectiveOrigin="--v""#
         );
         // `font-(--v)` is a font weight. Read as a family it lowered to
         // `font-(family-name:--v)` and changed what the element set.

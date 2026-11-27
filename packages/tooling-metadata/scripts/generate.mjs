@@ -11,6 +11,7 @@ import {
     MIGRATION_NOTES,
     NEGATIVE_ALLOWED,
     PROPERTY_MAP,
+    SHADOW_SIZE_KEYS,
     SPECIAL_VARIANTS,
     SUGGESTION_MAP,
 } from '../../compiler/src/transform-core.ts';
@@ -158,6 +159,9 @@ export const SUGGESTION_MAP = ${serialize(SUGGESTION_MAP)} as const;
  * offers exactly these, so a side added to the compiler shows up without a
  * second list to remember. */
 export const MASK_SIDES = ${serialize([...MASK_SIDES])} as const;
+/** The keys whose \`{ size, op }\` object writes a shadow with its opacity,
+ * in the compiler's order. */
+export const SHADOW_SIZE_KEYS = ${serialize([...SHADOW_SIZE_KEYS])} as const;
 /** Removed keys whose replacement is a SHAPE, not another key name — rendered
  * as "was removed: <note>", never through the did-you-mean template. */
 export const MIGRATION_NOTES = ${serialize(MIGRATION_NOTES)} as const;

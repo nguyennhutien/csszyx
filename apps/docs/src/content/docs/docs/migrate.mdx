@@ -218,6 +218,26 @@ Two behaviors to call out explicitly:
   inside it still appear in the `Unrecognized classes` list — nothing slips
   through silently, so the audit map stays complete.
 
+### Every class migrate converts writes itself back
+
+Migrate converts a class only to an `sz` value that compiles back to that
+class, or to one Tailwind reads as the same utility. It tries the plain value
+first and the bracketed one second:
+
+| Class | `sz` | Compiles to |
+|---|---|---|
+| `p-[10px]` | `{ p: '10px' }` | `p-[10px]` |
+| `bg-[var(--v)]` | `{ bg: '--v' }` | `bg-(--v)` |
+| `text-[length:13px]` | `{ text: '13px' }` | `text-[13px]` |
+| `font-[700]` | `{ weight: 700 }` | `font-[700]` |
+| `origin-[0]` | `{ origin: '[0]' }` | `origin-[0]` |
+| `!p-4` | `{ p: '4!' }` | `p-4!` |
+
+`origin: '0'` would compile to `origin-0`, which Tailwind does not serve, so the
+bracket stays. A class that neither value writes back stays in `className` and
+is listed as unrecognized: `text-[length:var(--x)]` is a font size, and
+`text: '--x'` would compile to the colour `text-(--x)`.
+
 ## Audit — Discover Unrecognized Classes
 
 Before migrating, run an audit to see what csszyx cannot automatically convert:

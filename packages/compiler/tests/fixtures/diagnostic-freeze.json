@@ -326,7 +326,7 @@
                         "hover"
                     ]
                 },
-                "text": "[csszyx] property-object: src/freeze.tsx:1:35\n  `p` sets a property and is not a variant, so its object `{ hover }` emits `p:*` classes that produce no CSS.\n  help: move the nested keys up a level; for colour opacity, write `{ color: '…', op: … }`.\n  docs: https://csszyx.com/e/property-object"
+                "text": "[csszyx] property-object: src/freeze.tsx:1:35\n  `p` sets a property and is not a variant, so its object `{ hover }` emits `p:*` classes that produce no CSS.\n  help: move the nested keys up a level; for an opacity, write `{ color: '…', op: … }`, or `{ size: '…', op: … }` on a shadow key.\n  docs: https://csszyx.com/e/property-object"
             }
         ]
     },
@@ -726,12 +726,14 @@
                 "line": 1,
                 "column": 35,
                 "args": {
+                    "form": "same-key",
                     "key": "bg",
+                    "member": "color",
                     "color": "red-500",
                     "opacity": "50",
                     "op": "50"
                 },
-                "text": "[csszyx] slash-opacity-string: src/freeze.tsx:1:35\n  `bg: 'red-500/50'` puts the opacity in a string; a colour takes its opacity in the object form.\n  help: write `{ color: 'red-500', op: 50 }`.\n  note: the class is still emitted as written; a theme colour serves it, and a hex, a colour function or a variable before the slash writes a value no browser takes.\n  docs: https://csszyx.com/e/slash-opacity-string"
+                "text": "[csszyx] slash-opacity-string: src/freeze.tsx:1:35\n  `bg: 'red-500/50'` puts the opacity in a string; the object form takes it in `op`.\n  help: write `{ color: 'red-500', op: 50 }`.\n  note: the class is still emitted as written; a theme colour serves it, and a hex, a colour function or a variable before the slash writes a value no browser takes.\n  docs: https://csszyx.com/e/slash-opacity-string"
             }
         ]
     },
@@ -746,11 +748,12 @@
                 "args": {
                     "form": "op-given",
                     "key": "bg",
+                    "member": "color",
                     "base": "red-500",
                     "opacity": "50",
                     "op": "20"
                 },
-                "text": "[csszyx] color-slash-opacity: src/freeze.tsx:1:35\n  `bg: { color: 'red-500/50', op: 20 }` sets opacity twice; a colour object takes its opacity in `op`, not in `color`.\n  help: write `{ color: 'red-500', op: 20 }`.\n  note: the class is still emitted as written; a theme colour serves it, and a hex, a colour function or a variable before the slash writes a value no browser takes.\n  docs: https://csszyx.com/e/color-slash-opacity"
+                "text": "[csszyx] color-slash-opacity: src/freeze.tsx:1:35\n  `bg: { color: 'red-500/50', op: 20 }` sets opacity twice; the object takes its opacity in `op`, not in `color`.\n  help: write `{ color: 'red-500', op: 20 }`.\n  note: the class is still emitted as written; a theme colour serves it, and a hex, a colour function or a variable before the slash writes a value no browser takes.\n  docs: https://csszyx.com/e/color-slash-opacity"
             }
         ]
     },

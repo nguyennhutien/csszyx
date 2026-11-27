@@ -20,7 +20,7 @@ const propertyObject = (key: string, nested: string) =>
     runtimeMessage(
         'property-object',
         `\`${key}\` sets a property and is not a variant, so its object \`{ ${nested} }\` emits \`${key}:*\` classes that produce no CSS.`,
-        "help: move the nested keys up a level; for colour opacity, write `{ color: '…', op: … }`.",
+        "help: move the nested keys up a level; for an opacity, write `{ color: '…', op: … }`, or `{ size: '…', op: … }` on a shadow key.",
     );
 
 /**

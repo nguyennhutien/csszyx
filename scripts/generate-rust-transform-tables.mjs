@@ -71,6 +71,10 @@ function readTables() {
         const keyTables = readTableSource(
             path.join(repoRoot, 'packages/compiler/src/sz-key-tables.ts'),
         );
+        const units = readTableSource(path.join(repoRoot, 'packages/compiler/src/css-units.ts'));
+        const keywords = readTableSource(
+            path.join(repoRoot, 'packages/compiler/src/shadow-size-keywords.ts'),
+        );
         const closedEnums = readTableSource(
             path.join(repoRoot, 'packages/compiler/src/closed-enum-tables.ts'),
         );
@@ -100,7 +104,7 @@ function readTables() {
             clampedFactorKeys: keyTables.stringSet('CLAMPED_FACTOR_KEYS'),
             booleanOnlyDynamicKeys: core.objectKeys('BOOLEAN_ONLY_DYNAMIC_VOCABULARY'),
             knownSpecialProperties: keyTables.stringSet('KNOWN_SPECIAL_PROPERTIES'),
-            cssWideKeywords: core.stringSet('CSS_WIDE_KEYWORDS'),
+            cssWideKeywords: keywords.stringSet('CSS_WIDE_KEYWORDS'),
             gridTrackKeywords: core.stringSet('GRID_TRACK_KEYWORDS'),
             gridLineNameKeys: core.stringSet('GRID_LINE_NAME_KEYS'),
             cssWideKeywordUtilities: core.stringSet('CSS_WIDE_KEYWORD_UTILITIES'),
@@ -121,6 +125,7 @@ function readTables() {
             splitShorthandKeys: keyTables.stringObject('SPLIT_SHORTHAND_KEYS'),
             cssVarTypeHints: core.stringObject('CSS_VAR_TYPE_HINTS'),
             alignmentKeys: core.stringSet('ALIGNMENT_KEYS'),
+            arbitraryLengthUnits: units.stringSet('ARBITRARY_LENGTH_UNITS'),
             alignmentCssValueHints: core.stringObject('ALIGNMENT_CSS_VALUE_HINT'),
             migrationNotes: keyTables.stringObject('MIGRATION_NOTES'),
             closedEnumClasses: closedEnums.objectOfStringObjects('CLOSED_ENUM_CLASSES'),
@@ -202,6 +207,7 @@ function renderRust({
     splitShorthandKeys,
     cssVarTypeHints,
     alignmentKeys,
+    arbitraryLengthUnits,
     alignmentCssValueHints,
     migrationNotes,
     closedEnumClasses,
@@ -258,6 +264,10 @@ ${renderMatchArms(cssVarTypeHints)}
         _ => None,
     }
 }
+
+/// The units a numeric value carries in brackets, never as a bare class.
+/// Mirrors \`ARBITRARY_LENGTH_UNITS\`.
+pub(crate) const ARBITRARY_LENGTH_UNITS: &[&str] = &[${arbitraryLengthUnits.map(rustString).join(', ')}];
 
 /// Returns true when a key takes csszyx's short alignment values
 /// (\`start\`, \`between\`), not the CSS longhand. Mirrors \`ALIGNMENT_KEYS\`.

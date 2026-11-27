@@ -14551,6 +14551,50 @@
     "runtime": "drop-shadow-none"
   },
   {
+    "sz": "{\"dropShadow\":{\"size\":\"sm\",\"op\":12.5}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "dropShadow",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "size",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "sm"
+                  }
+                },
+                {
+                  "key": "op",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": 12.5
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "runtime": "drop-shadow-sm/12.5"
+  },
+  {
     "sz": "{\"dropShadow\":\"xs\"}",
     "ir": {
       "properties": [
@@ -17190,6 +17234,50 @@
       ]
     },
     "runtime": "inset-shadow-none"
+  },
+  {
+    "sz": "{\"insetShadow\":{\"size\":\"sm\",\"op\":12.5}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "insetShadow",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "size",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "sm"
+                  }
+                },
+                {
+                  "key": "op",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": 12.5
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "runtime": "inset-shadow-sm/12.5"
   },
   {
     "sz": "{\"insetShadowColor\":\"--c\"}",
@@ -27277,6 +27365,50 @@
     "runtime": "shadow-(--s)"
   },
   {
+    "sz": "{\"shadow\":{\"size\":\"2xl\",\"op\":50}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "shadow",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "size",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "2xl"
+                  }
+                },
+                {
+                  "key": "op",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": 50
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "runtime": "shadow-2xl/50"
+  },
+  {
     "sz": "{\"shadow\":\"2xs\"}",
     "ir": {
       "properties": [
@@ -27332,6 +27464,50 @@
       ]
     },
     "runtime": "shadow-sm"
+  },
+  {
+    "sz": "{\"shadow\":{\"size\":\"sm\",\"op\":12.5}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "shadow",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "size",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "sm"
+                  }
+                },
+                {
+                  "key": "op",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": 12.5
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "runtime": "shadow-sm/12.5"
   },
   {
     "sz": "{\"shadow\":\"xl\"}",
@@ -28864,6 +29040,50 @@
       ]
     },
     "runtime": "text-shadow-none"
+  },
+  {
+    "sz": "{\"textShadow\":{\"size\":\"sm\",\"op\":12.5}}",
+    "ir": {
+      "properties": [
+        {
+          "key": "textShadow",
+          "span": {
+            "start": 0,
+            "end": 0
+          },
+          "value": {
+            "kind": "object",
+            "value": {
+              "properties": [
+                {
+                  "key": "size",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "string",
+                    "value": "sm"
+                  }
+                },
+                {
+                  "key": "op",
+                  "span": {
+                    "start": 0,
+                    "end": 0
+                  },
+                  "value": {
+                    "kind": "number",
+                    "value": 12.5
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "runtime": "text-shadow-sm/12.5"
   },
   {
     "sz": "{\"textShadowColor\":\"blue-500\"}",

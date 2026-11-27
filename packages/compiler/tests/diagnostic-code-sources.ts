@@ -42,6 +42,10 @@ export const CODE_SOURCES: ReadonlyArray<
     ['off-scale-value', 'export const A = () => <div sz={{ p: 1.3 }} />;'],
     ['bracketed-value', "export const A = () => <div sz={{ w: '[1/2]' }} />;"],
     ['redundant-bracket', "export const A = () => <div sz={{ w: '[100px]' }} />;"],
+    [
+        'variable-shadow-opacity',
+        "export const A = () => <div sz={{ shadow: { size: '--s', op: 50 } }} />;",
+    ],
     ['opacity-value', "export const A = () => <div sz={{ bg: { color: 'red-500', op: 150 } }} />;"],
     ['clamped-factor', "export const A = () => <div sz={{ opacity: '50' }} />;"],
     [
