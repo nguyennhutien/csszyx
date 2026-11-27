@@ -34,7 +34,7 @@
   },
   "dependencies": {
     "@csszyx/compiler": "workspace:*",
-    "ignore": "7.0.14"
+    "ignore": "7.0.16"
   },
   "devDependencies": {
     "@csszyx/dynamic": "workspace:*"
