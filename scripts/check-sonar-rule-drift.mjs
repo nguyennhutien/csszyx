@@ -92,6 +92,10 @@ const FOREIGN_RULES = new Map([
     // out; on that code the local rule flags the same line with the same
     // sentence, and nothing on the `await` that replaced it.
     ['S7785', 'unicorn/prefer-top-level-await'],
+    // Reported on #504 (`closers[closers.length - 1]`). Decorated too; run over
+    // `packages/*/src` the local rule flagged the line SonarCloud did, with its
+    // sentence, the one open S7755 issue on `main`, and one line more.
+    ['S7755', 'unicorn/prefer-at'],
 ]);
 
 /**
@@ -103,15 +107,19 @@ const FOREIGN_RULES = new Map([
  * #401 (`S6653` `prefer-object-has-own`, `S7785` `unicorn/prefer-top-level-await`).
  * On 2026-10-26 the plugin's table named a local rule for 111 profile rules the
  * drift report counted as having none. Read from the installed plugin, the
- * table follows its version. The decorated table is left out: SonarJS changes
- * those rules, so the original would not report what Sonar does.
+ * table follows its version. The decorated table is not run: SonarJS changes
+ * those rules, so the original need not report what Sonar does. Over
+ * `packages/<name>/src` on 2026-11-27, `max-params` reported 175 lines Sonar
+ * reported none of, so a decorated rule joins {@link FOREIGN_RULES} only once
+ * checked; the drift report lists the ones a local rule could cover.
  *
  * @param readme - The plugin's README.
+ * @param table - Which table: `external` or `decorated`.
  * @returns RSPEC id to the rule as the README names it (`eslint/no-empty`).
  */
-export function externalRulesFromReadme(readme) {
-    const start = readme.indexOf('<!--- start external rules -->');
-    const end = readme.indexOf('<!--- end external rules -->');
+export function externalRulesFromReadme(readme, table = 'external') {
+    const start = readme.indexOf(`<!--- start ${table} rules -->`);
+    const end = readme.indexOf(`<!--- end ${table} rules -->`);
     if (start === -1 || end === -1) return new Map();
     return new Map(
         [...readme.slice(start, end).matchAll(/^\|\s*(S\d+)\s*\|\s*\[([^\]]+)\]/gm)].map(
@@ -142,13 +150,13 @@ export function localRuleName(rule) {
 }
 
 /**
- * {@link externalRulesFromReadme} on the installed plugin, kept to the rules
- * the installed plugins define under that name, with {@link FOREIGN_RULES}
- * on top.
+ * One of the installed plugin's README tables, kept to the rules the
+ * installed plugins define under that name.
  *
+ * @param table - Which table: `external` or `decorated`.
  * @returns RSPEC id to the local rule name.
  */
-async function foreignRules() {
+async function readmeRules(table) {
     const require = createRequire(import.meta.url);
     const readme = readFileSync(require.resolve('eslint-plugin-sonarjs/README.md'), 'utf8');
     const { builtinRules } = await import('eslint/use-at-your-own-risk');
@@ -163,11 +171,39 @@ async function foreignRules() {
         return builtinRules.has(name);
     };
     const found = new Map();
-    for (const [id, rule] of externalRulesFromReadme(readme)) {
+    for (const [id, rule] of externalRulesFromReadme(readme, table)) {
         const local = localRuleName(rule);
         if (local !== null && defined(local)) found.set(id, local);
     }
-    return new Map([...found, ...FOREIGN_RULES]);
+    return found;
+}
+
+/**
+ * The external table's rules, with {@link FOREIGN_RULES} on top.
+ *
+ * @returns RSPEC id to the local rule name.
+ */
+async function foreignRules() {
+    return new Map([...(await readmeRules('external')), ...FOREIGN_RULES]);
+}
+
+/**
+ * Split the profile rules nothing local runs into those a decorated rule's
+ * original could cover and those with no local rule at all.
+ *
+ * @param noLocal - The `noLocal` bucket of {@link bucketRules}.
+ * @param decoratedByRspec - RSPEC id to the original of a decorated rule.
+ * @returns The two lists, in the order given.
+ */
+export function splitDecorated(noLocal, decoratedByRspec) {
+    const decorated = [];
+    const none = [];
+    for (const rule of noLocal) {
+        const local = decoratedByRspec.get(rule.key.split(':')[1]);
+        if (local === undefined) none.push(rule);
+        else decorated.push({ ...rule, local });
+    }
+    return { decorated, none };
 }
 
 /**
@@ -495,6 +531,7 @@ async function main({ language, json, writeProfile }) {
         ),
     ]);
     const buckets = bucketRules(rules, localByRspec, enabled, foreign);
+    const { decorated, none } = splitDecorated(buckets.noLocal, await readmeRules('decorated'));
 
     if (json) {
         console.log(JSON.stringify({ profile: profile.name, total, ...buckets }, null, 2));
@@ -509,25 +546,31 @@ async function main({ language, json, writeProfile }) {
         console.log(`      ${rule.key} ${name}${gate === undefined ? '' : ` (via ${gate})`}`);
     }
     console.log(`  ${buckets.availableOff.length} have a local rule that is off — candidates`);
-    console.log(`  ${buckets.noLocal.length} have no local implementation at all\n`);
+    console.log(`  ${decorated.length} run by SonarJS as a decorated rule a local one could cover`);
+    console.log(`  ${none.length} have no local implementation at all\n`);
     console.log('Candidates (a local rule exists and is not on):');
     for (const rule of buckets.availableOff) {
         const name = rule.local.includes('/') ? rule.local : `sonarjs/${rule.local}`;
         console.log(`  ${rule.key.padEnd(20)} ${name.padEnd(43)} ${rule.name}`);
     }
+    console.log('\nDecorated by SonarJS; the local original may report more than Sonar does:');
+    for (const rule of decorated) {
+        console.log(`  ${rule.key.padEnd(20)} ${rule.local.padEnd(43)} ${rule.name}`);
+    }
     console.log('\nNo local implementation at all (nothing here can report these):');
-    for (const rule of buckets.noLocal) {
+    for (const rule of none) {
         console.log(`  ${rule.key.padEnd(20)} ${rule.name}`);
     }
     console.log(
         '\nBefore switching a candidate on, check whether biome or typescript-eslint\n' +
             'already covers it under another name — this script cannot see that, because\n' +
             'those rules publish no RSPEC id.\n' +
-            'The last list is where a finding arrives with no warning: a rule there is\n' +
-            'reported by SonarCloud and by nothing that runs before the push. When one of\n' +
-            'them fires and the plugin README lists no local rule for it, find the plugin\n' +
-            'that implements it, verify the local rule reports the same defect on a\n' +
-            'deliberate violation, and add the pair to FOREIGN_RULES.',
+            'The last two lists are where a finding arrives with no warning: a rule there\n' +
+            'is reported by SonarCloud and by nothing that runs before the push. For a\n' +
+            'decorated rule, run its local original over packages/*/src and check it flags\n' +
+            'what Sonar does and little more; for one with no local rule, find the plugin\n' +
+            'that implements it and verify that rule on a deliberate violation. Then add the\n' +
+            'pair to FOREIGN_RULES.',
     );
     return 0;
 }

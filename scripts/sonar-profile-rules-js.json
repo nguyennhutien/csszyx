@@ -1203,6 +1203,11 @@
             "scope": "MAIN"
         },
         {
+            "key": "javascript:S7755",
+            "rule": "unicorn/prefer-at",
+            "scope": "MAIN"
+        },
+        {
             "key": "javascript:S7756",
             "rule": "unicorn/prefer-blob-reading-methods",
             "scope": "MAIN"

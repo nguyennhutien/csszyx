@@ -17,6 +17,7 @@ import {
     readSonarProperties,
     rspecId,
     runsOn,
+    splitDecorated,
     unlistedLocalIds,
 } from './check-sonar-rule-drift.mjs';
 
@@ -286,6 +287,24 @@ describe('the rules SonarJS runs from other plugins', () => {
                 ['S6438', 'react/jsx-no-comment-textnodes'],
             ],
         );
+    });
+
+    it('reads the decorated table when asked for it', () => {
+        assert.deepEqual(
+            [...externalRulesFromReadme(readme, 'decorated')],
+            [['S108', 'eslint/no-empty']],
+        );
+    });
+
+    it('sets a profile rule with a decorated local rule apart from those with none', () => {
+        const noLocal = [
+            { key: 'typescript:S108', name: 'empty block', local: null },
+            { key: 'typescript:S999', name: 'no rule anywhere', local: null },
+        ];
+        assert.deepEqual(splitDecorated(noLocal, new Map([['S108', 'no-empty']])), {
+            decorated: [{ key: 'typescript:S108', name: 'empty block', local: 'no-empty' }],
+            none: [{ key: 'typescript:S999', name: 'no rule anywhere', local: null }],
+        });
     });
 
     it('reads nothing from a README without the table', () => {
